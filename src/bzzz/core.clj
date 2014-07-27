@@ -1,6 +1,7 @@
 (ns bzzz.core
   (use ring.adapter.jetty)
   (use overtone.at-at)
+  (use clojure.stacktrace)
   (:require [clojure.data.json :as json])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
@@ -93,7 +94,7 @@
     (if (.isDirectory f)
       (get-search-manager (.getName f)))))
 
-(defn use-search-manager [name f]
+(defn use-searcher-from-search-manager [name f]
   (let [manager (get-search-manager name)
         searcher (.acquire manager)]
     (try
@@ -102,7 +103,7 @@
 
 
 (defn search [name query size]
-  (use-search-manager name (fn [searcher]
+  (use-searcher-from-search-manager name (fn [searcher]
                              (let [parser (QueryParser. *version* "_default_" *analyzer*)
                                    query (.parse parser query)
                                    hits (.search searcher query (int size))
@@ -118,9 +119,15 @@
     (search (:index input) (:query input) (:size input))))
 
 (defn handler [request]
-  {:status 200
-   :headers {"Content-Type" "application/json"}
-   :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword))) } )
+  (try
+    ({:status 200
+      :headers {"Content-Type" "application/json"}
+      :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword)))})
+    (catch Exception e
+      (print-cause-trace e)
+      {:status 500
+       :headers {"Content-Type" "text/plain"}
+       :body (str "exception:" (.getMessage e))})))
 
 (def tp (mk-pool))
 (defn main []

@@ -21,11 +21,16 @@
 
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
 (def ^{:dynamic true} *analyzer* (WhitespaceAnalyzer. *version*))
+(def default-root "/tmp/BZZZ")
+(def default-port 3000)
+(def default-spam-port [3001])
 
-(def root* (atom "/tmp/BZZZ"))
-(def port* (atom 3000))
+(def root* (atom default-root))
+(def port* (atom default-port))
 (def mapping* (atom {}))
+(def z-state* (atom {}))
 (def cron-tp (mk-pool))
+
 (defn substring? [sub st]
  (not= (.indexOf st sub) -1))
 
@@ -33,6 +38,18 @@
   (if (keyword? x)
     (name x)
     (str x)))
+
+(defn current-stamp []
+  (int (/ (System/currentTimeMillis) 1000)))
+
+(defn udp-receive-message-and-update-z-state [m]
+  (locking z-state*
+    (let [decoded (json/read-str (:message m))]
+      (doseq [[name count] decoded]
+        (swap! z-state*
+               (assoc-in [(as-str name) (:peer m)]
+                         {:count count
+                          :stamp (current-stamp)}))))))
 
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
@@ -121,7 +138,6 @@
                                                 (document->map (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit))
                                                                (.score ^ScoreDoc hit))))]
                                { :total (.totalHits hits), :hits m }))))
-
 (defn work [method input]
   (println method input)
   (if (= :post method)
@@ -138,19 +154,33 @@
       {:status 500
        :headers {"Content-Type" "text/plain"}
        :body (str "exception:" (.getMessage e))})))
+(defn port-validator [port]
+  (< 0 port 0x10000))
 
 (def cli-options
   [["-p" "--port PORT" "Port number"
-    :default 3000
+    :id :port
+    :default default-port
     :parse-fn #(Integer/parseInt %)
-    :validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]]
+    :validate [ #(port-validator %)"Must be a number between 0 and 65536"]]
+   ["-s" "--spam-port SPAM-PORT" "the port used for udp spam state, will listen only on the first one"
+    :required true
+    :id :spam-port
+    :validate [(fn [param]
+                 (and
+                  (> (count param) 0)
+                  (= 0 (count (filter (fn [x] (not (port-validator x))) param))))) "must be a comma separated list with numbers between 0 and 65536 (like 1234,1235...etc)"]
+    :parse-fn (fn [param] (into [] (map #(Integer/parseInt %) (clojure.string/split param #","))))]
    ["-d" "--directory DIRECTORY" "directory that will contain all the indexes"
-    :default "/tmp/BZZZZ"]])
-
-
+    :id :directory
+    :default default-root]])
 
 (defn main [& args]
-  (let [{:keys [options]} (parse-opts args cli-options)]
+  (let [{:keys [options errors]} (parse-opts args cli-options)]
+    (when (not (nil? errors))
+      (println errors)
+      (System/exit 1))
+    (println options)
     (reset! root* (:directory options))
     (reset! port* (:port options)))
   (bootstrap-indexes)

@@ -56,12 +56,52 @@ GET
 will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the WhitespaceAnalyzer
 
 
+WIP
+===
+
+working towards first stab at very very simple state-spam, that we can use to query multiple boxes
+
+* every 100ms each box spams its current mapping* content to udp broadcast to every port specified with --spam-ports=1234,12345, and it sends a map like:
+
+```
+{
+   "index-name":123123
+   "index-name2":182378912
+}
+```
+the value is actualy number of documents matching an user-specified query (probably in many cases it will be matchAll)
+
+* when a box receives a packet like that will update a z-state* atom to reflect the peer's ip address, its current mapping* and a timestamp, like:
+
+```
+{
+  "index-name": {
+       "127.0.0.1": {
+             "stamp":23187239,
+             "count":47636
+       },
+       "10.0.0.1": {
+             "stamp":12388789
+             "count":7443
+       },
+  }
+
+```
+
+* so when we receive a multi-query, we will just look for all hosts in the z-state that we have received update in the last second *AND* the number of documetns is the same as our mapping* value (or maybe only the max)
+
+as you can see this is pretty barbaric approach, doesnt guarantee anything, same number of documents doesnt mean anything, also the user will be responsible for managing the documents in sync
+
+
 TODO
 ===
 
 * DELETE
 * simple replication, or maybe use zookeeper and sanity "query" that can decide if there is a need for copy or not
 * add support for multiple queries, and do topN merge
+
+
+
 ## License
 
 Distributed under the Eclipse Public License either version 1.0 or (at

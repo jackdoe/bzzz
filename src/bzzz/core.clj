@@ -28,26 +28,9 @@
 
 (def root "/tmp/LUCY")
 
-(def mapping (atom {}))
-
-(defn get-mapping-in [name key]
-  (get-in @mapping [name] key))
-
-(defn set-mapping-in [name key value]
-  (swap! mapping  assoc-in [name key] value))
-
-(defn get-or-set-mapping-in [name key setter]
-  (if (nil? (get-mapping-in name key))
-    (set-mapping-in name key (setter name))
-  (get-mapping-in name key)))
-
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (NIOFSDirectory. (File. (File. (as-str root)) (as-str name)))
                 (IndexWriterConfig. *version* *analyzer*)))
-
-
-(defn mapping-writer ^IndexWriter [name]
-  (get-or-set-mapping-in name :writer new-index-writer))
 
 (defn new-index-reader ^IndexReader [name]
   (with-open [writer (new-index-writer name)]
@@ -73,9 +56,8 @@
 
 (defn document->map
   [^Document doc score]
-  (let [m (into {:_score score } (for [^Field f (.getFields doc)]
-                     [(keyword (.name f)) (.stringValue f)]))]
-    m))
+  (into {:_score score } (for [^Field f (.getFields doc)]
+                     [(keyword (.name f)) (.stringValue f)])))
 
 (defn store
   [name maps]

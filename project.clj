@@ -8,6 +8,7 @@
                  [org.apache.lucene/lucene-queryparser "4.9.0"]
                  [org.apache.lucene/lucene-analyzers-common "4.9.0"]
                  [org.clojure/data.json "0.2.5"]
+                 [overtone/at-at "1.2.0"]
                  [ring/ring-core "1.3.0"]
                  [ring/ring-jetty-adapter "1.3.0"]]
   :main bzzz.core/main

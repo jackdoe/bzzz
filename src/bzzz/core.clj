@@ -1,5 +1,6 @@
 (ns bzzz.core
   (use ring.adapter.jetty)
+  (use overtone.at-at)
   (:require [clojure.data.json :as json])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
@@ -10,7 +11,7 @@
            (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.search BooleanClause BooleanClause$Occur
                                      BooleanQuery IndexSearcher Query ScoreDoc
-                                     Scorer TermQuery)
+                                     Scorer TermQuery SearcherManager)
            (org.apache.lucene.util Version AttributeSource)
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory)))
 
@@ -28,8 +29,13 @@
 
 (def root "/tmp/LUCY")
 
+(def mapping (atom {}))
+
+(defn new-index-directory ^Directory [name]
+  (NIOFSDirectory. (File. (File. (as-str root)) (as-str name))))
+
 (defn new-index-writer ^IndexWriter [name]
-  (IndexWriter. (NIOFSDirectory. (File. (File. (as-str root)) (as-str name)))
+  (IndexWriter. (new-index-directory name)
                 (IndexWriterConfig. *version* *analyzer*)))
 
 (defn new-index-reader ^IndexReader [name]
@@ -69,18 +75,41 @@
     (.close writer)
     true))
 
-(defn search
-  [name query size]
-  (with-open [reader (new-index-reader name)]
-    (let [searcher (IndexSearcher. reader)
-          parser (QueryParser. *version* "_default_" *analyzer*)
-          query (.parse parser query)
-          hits (.search searcher query (int size))
-          m (into [] (for [hit (.scoreDocs hits)]
+(defn get-search-manager ^SearcherManager [name]
+  (locking mapping
+    (when (nil? (@mapping name))
+      (swap! mapping assoc name (SearcherManager. (new-index-directory name)
+                                                   nil)))
+    (@mapping name)))
+
+(defn refresh-search-managers []
+  (locking mapping
+    (doseq [[name manager] @mapping]
+      (println "refreshing: " name " " manager)
+      (.maybeRefresh manager))))
+
+(defn bootstrap-indexes []
+  (doseq [f (.listFiles (File. (as-str root)))]
+    (if (.isDirectory f)
+      (get-search-manager (.getName f)))))
+
+(defn use-search-manager [name f]
+  (let [manager (get-search-manager name)
+        searcher (.acquire manager)]
+    (try
+      (f searcher)
+      (finally (.release manager searcher)))))
+
+
+(defn search [name query size]
+  (use-search-manager name (fn [searcher]
+                             (let [parser (QueryParser. *version* "_default_" *analyzer*)
+                                   query (.parse parser query)
+                                   hits (.search searcher query (int size))
+                                   m (into [] (for [hit (.scoreDocs hits)]
                                                 (document->map (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit))
-                                                               (.score ^ScoreDoc hit))))
-          ]
-      { :total (.totalHits hits), :hits m })))
+                                                               (.score ^ScoreDoc hit))))]
+                               { :total (.totalHits hits), :hits m }))))
 
 (defn work [method input]
   (println method input)
@@ -93,5 +122,8 @@
    :headers {"Content-Type" "application/json"}
    :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword))) } )
 
+(def tp (mk-pool))
 (defn main []
+  (bootstrap-indexes)
+  (every 5000 #(refresh-search-managers) tp :desc "search refresher")
   (run-jetty handler {:port 3000}))

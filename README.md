@@ -9,7 +9,7 @@ looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj fo
 
 
 ```
-$ lein run
+$ lein run -- --port 3000 --directory /tmp/bzbzbz # by default 3000 and /tmp/BZZZ
 
 $ curl -XPOST http://localhost:3000/ -d '{"index":"bzbz","documents":[{"name_store_index":"johny doe"}, {"name_store_index":"jack doe"}]}'
 $ curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'

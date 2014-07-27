@@ -2,6 +2,7 @@
   (use ring.adapter.jetty)
   (use overtone.at-at)
   (use clojure.stacktrace)
+  (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
@@ -14,12 +15,17 @@
                                      BooleanQuery IndexSearcher Query ScoreDoc
                                      Scorer TermQuery SearcherManager)
            (org.apache.lucene.util Version AttributeSource)
-           (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory)))
+           (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory))
+  (:gen-class))
 
 
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
 (def ^{:dynamic true} *analyzer* (WhitespaceAnalyzer. *version*))
 
+(def root* (atom "/tmp/BZZZ"))
+(def port* (atom 3000))
+(def mapping* (atom {}))
+(def cron-tp (mk-pool))
 (defn substring? [sub st]
  (not= (.indexOf st sub) -1))
 
@@ -28,15 +34,11 @@
     (name x)
     (str x)))
 
-(def root "/tmp/LUCY")
-
-(def mapping (atom {}))
-
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
 
 (defn new-index-directory ^Directory [name]
-  (NIOFSDirectory. (File. (File. (as-str root)) (as-str (acceptable-index-name name)))))
+  (NIOFSDirectory. (File. (File. (as-str @root*)) (as-str (acceptable-index-name name)))))
 
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory name)
@@ -86,20 +88,20 @@
     true))
 
 (defn get-search-manager ^SearcherManager [name]
-  (locking mapping
-    (when (nil? (@mapping name))
-      (swap! mapping assoc name (SearcherManager. (new-index-directory name)
+  (locking mapping*
+    (when (nil? (@mapping* name))
+      (swap! mapping* assoc name (SearcherManager. (new-index-directory name)
                                                    nil)))
-    (@mapping name)))
+    (@mapping* name)))
 
 (defn refresh-search-managers []
-  (locking mapping
-    (doseq [[name manager] @mapping]
+  (locking mapping*
+    (doseq [[name manager] @mapping*]
       (println "refreshing: " name " " manager)
       (.maybeRefresh manager))))
 
 (defn bootstrap-indexes []
-  (doseq [f (.listFiles (File. (as-str root)))]
+  (doseq [f (.listFiles (File. (as-str @root*)))]
     (if (.isDirectory f)
       (get-search-manager (.getName f)))))
 
@@ -109,7 +111,6 @@
     (try
       (f searcher)
       (finally (.release manager searcher)))))
-
 
 (defn search [name query size]
   (use-searcher-from-search-manager name (fn [searcher]
@@ -138,8 +139,21 @@
        :headers {"Content-Type" "text/plain"}
        :body (str "exception:" (.getMessage e))})))
 
-(def tp (mk-pool))
-(defn main []
+(def cli-options
+  [["-p" "--port PORT" "Port number"
+    :default 3000
+    :parse-fn #(Integer/parseInt %)
+    :validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]]
+   ["-d" "--directory DIRECTORY" "directory that will contain all the indexes"
+    :default "/tmp/BZZZZ"]])
+
+
+
+(defn main [& args]
+  (let [{:keys [options]} (parse-opts args cli-options)]
+    (reset! root* (:directory options))
+    (reset! port* (:port options)))
   (bootstrap-indexes)
-  (every 5000 #(refresh-search-managers) tp :desc "search refresher")
-  (run-jetty handler {:port 3000}))
+  (every 5000 #(refresh-search-managers) cron-tp :desc "search refresher")
+  (println "starting bzzzz on port" @port* "with index root directory" @root*)
+  (run-jetty handler {:port @port*}))

@@ -31,7 +31,7 @@ POST
 ```
 {
   "index":"index_name"
-  "documents": [ { "name_store_index": "jack" } ]
+  "documents": [ { "name_store_index": "jack","id":"1230812903" } ]
 }
 
 ```
@@ -40,6 +40,7 @@ POST
 * if the field name contains _index it will be Field.Index.ANALYZED with WhitespaceAnalyzer
 * every POST requests can create/append to existing index, and it will optimize it to 1 segment
 * if the document contains the key "id" it will try to update new Term("id",document.get("id"))
+* keep in mind that "id" is nothing special, it will is just used to overwrite existing documents, and for deletion (still it will be doing delete-by-query)
 
 GET
 ====
@@ -54,6 +55,13 @@ GET
 
 will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the WhitespaceAnalyzer
 
+
+TODO
+===
+
+* DELETE
+* simple replication, or maybe use zookeeper and sanity "query" that can decide if there is a need for copy or not
+* add support for multiple queries, and do topN merge
 ## License
 
 Distributed under the Eclipse Public License either version 1.0 or (at

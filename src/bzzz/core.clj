@@ -2,6 +2,8 @@
   (use ring.adapter.jetty)
   (use overtone.at-at)
   (use clojure.stacktrace)
+  (:require [bzzz.spam :as spam])
+  (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
   (:import (java.io StringReader File)
@@ -27,6 +29,7 @@
 
 (def root* (atom default-root))
 (def port* (atom default-port))
+(def spam-port* (atom default-spam-port))
 (def mapping* (atom {}))
 (def z-state* (atom {}))
 (def cron-tp (mk-pool))
@@ -44,12 +47,19 @@
 
 (defn udp-receive-message-and-update-z-state [m]
   (locking z-state*
-    (let [decoded (json/read-str (:message m))]
-      (doseq [[name count] decoded]
-        (swap! z-state*
-               (assoc-in [(as-str name) (:peer m)]
-                         {:count count
-                          :stamp (current-stamp)}))))))
+    (try
+      (let [decoded (json/read-str (:message m))]
+        (doseq [[name count] decoded]
+          (swap! z-state*
+                 (assoc-in [(as-str name) (:peer m)]
+                           {:count count
+                            :stamp (current-stamp)}))))
+
+      (catch Exception e
+        (print-cause-trace e)))))
+
+
+
 
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
@@ -181,9 +191,11 @@
       (println errors)
       (System/exit 1))
     (println options)
+    (reset! spam-port* (:spam-port options))
     (reset! root* (:directory options))
     (reset! port* (:port options)))
   (bootstrap-indexes)
   (every 5000 #(refresh-search-managers) cron-tp :desc "search refresher")
-  (println "starting bzzzz on port" @port* "with index root directory" @root*)
+  (println "starting bzzzz on port" @port* "with index root directory" @root* "and spam ports:" @spam-port*)
+  (async/go #(spam/start "255.255.255.255" (first @spam-port*)))
   (run-jetty handler {:port @port*}))

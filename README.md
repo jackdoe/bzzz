@@ -3,7 +3,7 @@
 i have no idea what i'm doing
 ===
 
-clojure + lucene + jetty + ring
+clojure + lucene (4.9 at the moment) + jetty + ring
 
 looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
 

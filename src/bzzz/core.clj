@@ -32,8 +32,11 @@
 
 (def mapping (atom {}))
 
+(defn acceptable-index-name [name]
+  (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
+
 (defn new-index-directory ^Directory [name]
-  (NIOFSDirectory. (File. (File. (as-str root)) (as-str name))))
+  (NIOFSDirectory. (File. (File. (as-str root)) (as-str (acceptable-index-name name)))))
 
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory name)
@@ -47,10 +50,14 @@
   (let [ str-key (as-str key) ]
     (.add ^Document document
         (Field. str-key (as-str value)
-                (if (substring? "_store" str-key)
+                (if (or
+                     (substring? "_store" str-key)
+                     (= str-key "id"))
                   Field$Store/YES
                   Field$Store/NO)
-                (if (substring? "_index" str-key)
+                (if (or
+                     (substring? "_index" str-key)
+                     (= str-key "id"))
                   Field$Index/ANALYZED
                   Field$Index/NOT_ANALYZED)))))
 
@@ -70,7 +77,9 @@
   [name maps]
   (let [writer (new-index-writer name)]
     (doseq [m maps]
-      (.addDocument writer (map->document m)))
+      (if (:id m)
+        (.updateDocument writer (Term. "id" (as-str (:id m))) (map->document m))
+        (.addDocument writer (map->document m))))
     (.commit writer)
     (.forceMerge writer 1)
     (.close writer)
@@ -120,9 +129,9 @@
 
 (defn handler [request]
   (try
-    ({:status 200
-      :headers {"Content-Type" "application/json"}
-      :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword)))})
+    {:status 200
+     :headers {"Content-Type" "application/json"}
+     :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword)))}
     (catch Exception e
       (print-cause-trace e)
       {:status 500

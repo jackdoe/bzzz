@@ -10,8 +10,9 @@
                  [org.clojure/data.json "0.2.5"]
                  [org.clojure/tools.cli "0.3.1"]
                  [overtone/at-at "1.2.0"]
+                 [clj-http "1.0.0"]
                  [aleph "0.3.3"]
-                 [org.clojure/core.async "0.1.303.0-886421-alpha"]
+                 [org.clojure/core.async "0.1.338.0-5c5012-alpha"]
                  [ring/ring-core "1.3.0"]
                  [ring/ring-jetty-adapter "1.3.0"]]
   :main bzzz.core/main

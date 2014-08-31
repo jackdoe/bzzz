@@ -2,10 +2,10 @@
   (use ring.adapter.jetty)
   (use overtone.at-at)
   (use clojure.stacktrace)
-  (:require [bzzz.spam :as spam])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
+  (:require [clj-http.client :as http-client])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.analysis.core WhitespaceAnalyzer)
@@ -23,15 +23,13 @@
 
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
 (def ^{:dynamic true} *analyzer* (WhitespaceAnalyzer. *version*))
+
 (def default-root "/tmp/BZZZ")
 (def default-port 3000)
-(def default-spam-port [3001])
 
 (def root* (atom default-root))
 (def port* (atom default-port))
-(def spam-port* (atom default-spam-port))
 (def mapping* (atom {}))
-(def z-state* (atom {}))
 (def cron-tp (mk-pool))
 
 (defn substring? [sub st]
@@ -41,25 +39,6 @@
   (if (keyword? x)
     (name x)
     (str x)))
-
-(defn current-stamp []
-  (int (/ (System/currentTimeMillis) 1000)))
-
-(defn udp-receive-message-and-update-z-state [m]
-  (locking z-state*
-    (try
-      (let [decoded (json/read-str (:message m))]
-        (doseq [[name count] decoded]
-          (swap! z-state*
-                 (assoc-in [(as-str name) (:peer m)]
-                           {:count count
-                            :stamp (current-stamp)}))))
-
-      (catch Exception e
-        (print-cause-trace e)))))
-
-
-
 
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
@@ -148,11 +127,34 @@
                                                 (document->map (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit))
                                                                (.score ^ScoreDoc hit))))]
                                { :total (.totalHits hits), :hits m }))))
+
+(defn search-remote [host name query size]
+  (:body (http-client/get host {:accept :json
+                                :as :json
+                                :body-encoding "UTF-8"
+                                :body (json/write-str {:index name :query query :size size })
+                                :socket-timeout 1000
+                                :conn-timeout 1000})))
+
+(defn search-many [hosts name query size]
+  (let [c (async/chan)]
+    (doseq [host hosts]
+      (async/go (async/>! c (search-remote host name query size))))
+    (let [ collected (into [] (for [host hosts] (async/<!! c)))]
+      (reduce (fn [sum next]
+                (-> sum
+                 (update-in [:total] + (:total next))
+                 (update-in [:hits] concat (:hits next))))
+              { :total 0, :hits [] }
+              collected))))
+
 (defn work [method input]
   (println method input)
-  (if (= :post method)
-    (store (:index input) (:documents input))
-    (search (:index input) (:query input) (:size input))))
+  (condp = method
+   :post (store (:index input) (:documents input))
+   :get (search (:index input) (:query input) (:size input))
+   :options (search-many (:hosts input) (:index input) (:query input) (:size input))
+   (throw (Throwable. "unexpected method" method))))
 
 (defn handler [request]
   (try
@@ -164,6 +166,7 @@
       {:status 500
        :headers {"Content-Type" "text/plain"}
        :body (str "exception:" (.getMessage e))})))
+
 (defn port-validator [port]
   (< 0 port 0x10000))
 
@@ -173,14 +176,6 @@
     :default default-port
     :parse-fn #(Integer/parseInt %)
     :validate [ #(port-validator %)"Must be a number between 0 and 65536"]]
-   ["-s" "--spam-port SPAM-PORT" "the port used for udp spam state, will listen only on the first one"
-    :required true
-    :id :spam-port
-    :validate [(fn [param]
-                 (and
-                  (> (count param) 0)
-                  (= 0 (count (filter (fn [x] (not (port-validator x))) param))))) "must be a comma separated list with numbers between 0 and 65536 (like 1234,1235...etc)"]
-    :parse-fn (fn [param] (into [] (map #(Integer/parseInt %) (clojure.string/split param #","))))]
    ["-d" "--directory DIRECTORY" "directory that will contain all the indexes"
     :id :directory
     :default default-root]])
@@ -191,11 +186,9 @@
       (println errors)
       (System/exit 1))
     (println options)
-    (reset! spam-port* (:spam-port options))
     (reset! root* (:directory options))
     (reset! port* (:port options)))
   (bootstrap-indexes)
   (every 5000 #(refresh-search-managers) cron-tp :desc "search refresher")
-  (println "starting bzzzz on port" @port* "with index root directory" @root* "and spam ports:" @spam-port*)
-  (async/go #(spam/start "255.255.255.255" (first @spam-port*)))
+  (println "starting bzzzz on port" @port* "with index root directory" @root*)
   (run-jetty handler {:port @port*}))

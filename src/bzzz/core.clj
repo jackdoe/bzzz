@@ -128,32 +128,41 @@
                                                                (.score ^ScoreDoc hit))))]
                                { :total (.totalHits hits), :hits m }))))
 
-(defn search-remote [host name query size]
-  (:body (http-client/get host {:accept :json
-                                :as :json
-                                :body-encoding "UTF-8"
-                                :body (json/write-str {:index name :query query :size size })
-                                :socket-timeout 1000
-                                :conn-timeout 1000})))
+
+;; [ "a", ["b","c",["d","e"]]]
+(defn search-remote [hosts name query size]
+  (let [part (if (or (vector? hosts) (list? hosts)) hosts [hosts])
+        args {:accept :json
+              :as :json
+              :body-encoding "UTF-8"
+              :body (json/write-str {:index name :query query :size size :hosts part })
+              :socket-timeout 1000
+              :conn-timeout 1000}]
+    (locking mapping*
+      (println "searching <" query "> on index <" name "> with limit <" size "> in part <" part ">"))
+    (if (> (count part) 1)
+      (:body (http-client/put (first part) args))
+      (:body (http-client/get (first part) args)))))
 
 (defn search-many [hosts name query size]
   (let [c (async/chan)]
-    (doseq [host hosts]
-      (async/go (async/>! c (search-remote host name query size))))
-    (let [ collected (into [] (for [host hosts] (async/<!! c)))]
+    (doseq [part hosts]
+      (async/go (async/>! c (search-remote part name query size))))
+    (let [ collected (into [] (for [part hosts] (async/<!! c)))]
       (reduce (fn [sum next]
                 (-> sum
-                 (update-in [:total] + (:total next))
-                 (update-in [:hits] concat (:hits next))))
+                    (update-in [:total] + (:total next))
+                    (update-in [:hits] concat (:hits next))))
               { :total 0, :hits [] }
               collected))))
 
 (defn work [method input]
-  (println method input)
+  (locking mapping*
+    (println method input))
   (condp = method
    :post (store (:index input) (:documents input))
    :get (search (:index input) (:query input) (:size input))
-   :options (search-many (:hosts input) (:index input) (:query input) (:size input))
+   :put (search-many (:hosts input) (:index input) (:query input) (:size input))
    (throw (Throwable. "unexpected method" method))))
 
 (defn handler [request]

@@ -13,7 +13,7 @@ $ lein run -- --port 3000 --directory /tmp/bzbzbz # by default 3000 and /tmp/BZZ
 
 $ curl -XPOST http://localhost:3000/ -d '{"index":"bzbz","documents":[{"name_store_index":"johny doe"}, {"name_store_index":"jack doe"}]}'
 $ curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
-$ curl -XOPTIONS http://localhost:3000/ -d '{"hosts":["http://localhost:3000/","http://localhost:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
+$ curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000","http://localhost:3000"],"http://localhost:3000/","http://localhost:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 ```
 
 how it works
@@ -22,7 +22,7 @@ how it works
 * starts a web server on port 3000
 * POST requests are stored (expects json array of hashes [ {"key":"value"} ])
 * GET requests are searches
-* OPTIONS requests are doing remote searches
+* PUT requests are doing remote searches
 * uses one `atom` hash that contains { "index_name": SearcherManager }
 * the SearcherManagers are refreshed every 5 seconds (so the writes will be searchable after max 5 seconds)
 
@@ -56,7 +56,7 @@ GET
 
 will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the WhitespaceAnalyzer
 
-OPTIONS
+PUT
 ===
 ```
 {
@@ -65,10 +65,26 @@ OPTIONS
   "size":5,
   "hosts":["http://localhost:3000","http://localhost:3000"]
 }
+curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000/","http://localhost:3000"],"http://localhost:3000","http://127.0.0.1:3000"], "split":2, "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
+
+
+original request:
+:put {:hosts [[http://localhost:3000/ http://localhost:3000] http://localhost:3000 http://127.0.0.1:3000], :split 2, :index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10}
+searching < name_store_index:johny AND name_store_index:doe > on index < bzbz > with limit < 10 > in part < [http://127.0.0.1:3000] >
+searching < name_store_index:johny AND name_store_index:doe > on index < bzbz > with limit < 10 > in part < [http://localhost:3000] >
+
+spawning thread (that also does multi-search):
+searching < name_store_index:johny AND name_store_index:doe > on index < bzbz > with limit < 10 > in part < [http://localhost:3000/ http://localhost:3000] >
+the internal-multi-search-request for the list in the hosts list in the initial request:
+:put {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://localhost:3000/ http://localhost:3000]}
+searching < name_store_index:johny AND name_store_index:doe > on index < bzbz > with limit < 10 > in part < [http://localhost:3000/] >
+:get {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://127.0.0.1:3000]}
+:get {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://localhost:3000]}
+searching < name_store_index:johny AND name_store_index:doe > on index < bzbz > with limit < 10 > in part < [http://localhost:3000] >
+:get {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://localhost:3000/]}
+:get {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://localhost:3000]}
+
 ```
-
-will do async search in those 2 hosts and merge the results
-
 
 TODO
 ===

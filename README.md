@@ -63,7 +63,7 @@ PUT
   "index":"index_name"
   "query":"name_store_index:jack",
   "size":5,
-  "hosts":["http://localhost:3000","http://localhost:3000"]
+  "hosts":[["http://localhost:3000/","http://localhost:3000"],"http://localhost:3000","http://127.0.0.1:3000"]
 }
 curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000/","http://localhost:3000"],"http://localhost:3000","http://127.0.0.1:3000"], "split":2, "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 
@@ -84,6 +84,52 @@ searching < name_store_index:johny AND name_store_index:doe > on index < bzbz > 
 :get {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://localhost:3000/]}
 :get {:index bzbz, :query name_store_index:johny AND name_store_index:doe, :size 10, :hosts [http://localhost:3000]}
 
+```
+
+SPAM
+---
+
+```
+[
+   ["http://localhost:3000/","http://localhost:3000"],
+   "http://localhost:3000",
+   "http://127.0.0.1:3000"
+]
+```
+
+it basically spawns 3 threads
+* 1 for ["http://localhost:3000/","http://localhost:3000"]
+* 1 for "http://localhost:3000"
+* 1 for "http://localhost:3000"
+
+and of course `["http://localhost:3000/","http://localhost:3000"]` sends `PUT { ... "hosts": ["http://localhost:3000/","http://localhost:3000"]}` which also spawns 2 threads (one per host).
+
+another example would be:
+
+```
+[
+   ["a","b",["c","d","e",["f,"g"]]],
+   "h",
+   "i"
+]
+
+or 
+curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000/","http://localhost:3000",["http://localhost:3000","http://127.0.0.1:3000","http://localhost:3000","http://127.0.0.1:3000"]],"http://localhost:3000","http://127.0.0.1:3000"], "split":2, "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
+
+[
+  [ 
+    "http://localhost:3000/",
+    "http://localhost:3000",
+    [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ]
+  ],
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+]
 ```
 
 TODO

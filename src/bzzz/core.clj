@@ -6,6 +6,7 @@
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
   (:require [clj-http.client :as http-client])
+  (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.analysis.core WhitespaceAnalyzer)
@@ -26,7 +27,6 @@
 
 (def default-root "/tmp/BZZZ")
 (def default-port 3000)
-
 (def root* (atom default-root))
 (def port* (atom default-port))
 (def mapping* (atom {}))
@@ -103,7 +103,7 @@
 (defn refresh-search-managers []
   (locking mapping*
     (doseq [[name manager] @mapping*]
-      (println "refreshing: " name " " manager)
+      (log/info 1 "refreshing: " name " " manager)
       (.maybeRefresh manager))))
 
 (defn bootstrap-indexes []
@@ -138,8 +138,7 @@
               :body (json/write-str {:index name :query query :size size :hosts part })
               :socket-timeout 1000
               :conn-timeout 1000}]
-    (locking mapping*
-      (println "searching <" query "> on index <" name "> with limit <" size "> in part <" part ">"))
+    (log/info "searching <" query "> on index <" name "> with limit <" size "> in part <" part ">")
     (if (> (count part) 1)
       (:body (http-client/put (first part) args))
       (:body (http-client/get (first part) args)))))
@@ -156,9 +155,9 @@
               { :total 0, :hits [] }
               collected))))
 
+
 (defn work [method input]
-  (locking mapping*
-    (println method input))
+  (log/info "received request" method input)
   (condp = method
    :post (store (:index input) (:documents input))
    :get (search (:index input) (:query input) (:size input))
@@ -184,7 +183,7 @@
     :id :port
     :default default-port
     :parse-fn #(Integer/parseInt %)
-    :validate [ #(port-validator %)"Must be a number between 0 and 65536"]]
+    :validate [ #(port-validator %) "Must be a number between 0 and 65536"]]
    ["-d" "--directory DIRECTORY" "directory that will contain all the indexes"
     :id :directory
     :default default-root]])
@@ -192,12 +191,12 @@
 (defn main [& args]
   (let [{:keys [options errors]} (parse-opts args cli-options)]
     (when (not (nil? errors))
-      (println errors)
+      (log/fatal errors)
       (System/exit 1))
-    (println options)
+    (log/info options)
     (reset! root* (:directory options))
     (reset! port* (:port options)))
   (bootstrap-indexes)
   (every 5000 #(refresh-search-managers) cron-tp :desc "search refresher")
-  (println "starting bzzzz on port" @port* "with index root directory" @root*)
+  (log/info "starting bzzzz on port" @port* "with index root directory" @root*)
   (run-jetty handler {:port @port*}))

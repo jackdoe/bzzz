@@ -14,6 +14,7 @@ $ lein run -- --port 3000 --directory /tmp/bzbzbz # by default 3000 and /tmp/BZZ
 $ curl -XPOST http://localhost:3000/ -d '{"index":"bzbz","documents":[{"name_store_index":"johny doe"}, {"name_store_index":"jack doe"}]}'
 $ curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 $ curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000","http://localhost:3000"],"http://localhost:3000/","http://localhost:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
+$ curl -XDELETE http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe"}'
 ```
 
 how it works
@@ -23,6 +24,7 @@ how it works
 * POST requests are stored (expects json array of hashes [ {"key":"value"} ])
 * GET requests are searches
 * PUT requests are doing remote searches
+* DELETE requests delete by query
 * uses one `atom` hash that contains { "index_name": SearcherManager }
 * the SearcherManagers are refreshed every 5 seconds (so the writes will be searchable after max 5 seconds)
 
@@ -55,6 +57,18 @@ GET
 ```
 
 will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the WhitespaceAnalyzer
+
+
+DELETE
+===
+```
+{
+  "index":"index_name"
+  "query":"name_store_index:jack",
+}
+```
+will delete all documents matching the query, if field name is not specified it defaults to "id"
+
 
 PUT
 ===

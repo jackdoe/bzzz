@@ -2,6 +2,7 @@
   (use ring.adapter.jetty)
   (use overtone.at-at)
   (use clojure.stacktrace)
+  (use [clojure.repl :only (pst)])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
@@ -21,10 +22,10 @@
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory))
   (:gen-class))
 
-
+(set! *warn-on-reflection* true)
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
 (def ^{:dynamic true} *analyzer* (WhitespaceAnalyzer. *version*))
-
+(def id-field "id")
 (def default-root "/tmp/BZZZ")
 (def default-port 3000)
 (def root* (atom default-root))
@@ -32,13 +33,22 @@
 (def mapping* (atom {}))
 (def cron-tp (mk-pool))
 
-(defn substring? [sub st]
+(defn substring? [^String sub ^String st]
  (not= (.indexOf st sub) -1))
 
 (defn as-str ^String [x]
   (if (keyword? x)
     (name x)
     (str x)))
+(defmacro with-err-str
+  "Evaluates exprs in a context in which *err* is bound to a fresh
+  StringWriter.  Returns the string created by any nested printing
+  calls."
+  [& body]
+  `(let [s# (new java.io.StringWriter)]
+     (binding [*err* s#]
+       ~@body
+       (str s#))))
 
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
@@ -60,12 +70,12 @@
         (Field. str-key (as-str value)
                 (if (or
                      (substring? "_store" str-key)
-                     (= str-key "id"))
+                     (= str-key id-field))
                   Field$Store/YES
                   Field$Store/NO)
                 (if (or
                      (substring? "_index" str-key)
-                     (= str-key "id"))
+                     (= str-key id-field))
                   Field$Index/ANALYZED
                   Field$Index/NOT_ANALYZED)))))
 
@@ -81,18 +91,6 @@
   (into {:_score score } (for [^Field f (.getFields doc)]
                      [(keyword (.name f)) (.stringValue f)])))
 
-(defn store
-  [name maps]
-  (let [writer (new-index-writer name)]
-    (doseq [m maps]
-      (if (:id m)
-        (.updateDocument writer (Term. "id" (as-str (:id m))) (map->document m))
-        (.addDocument writer (map->document m))))
-    (.commit writer)
-    (.forceMerge writer 1)
-    (.close writer)
-    true))
-
 (defn get-search-manager ^SearcherManager [name]
   (locking mapping*
     (when (nil? (@mapping* name))
@@ -102,24 +100,52 @@
 
 (defn refresh-search-managers []
   (locking mapping*
-    (doseq [[name manager] @mapping*]
+    (doseq [[name ^SearcherManager manager] @mapping*]
       (log/info 1 "refreshing: " name " " manager)
       (.maybeRefresh manager))))
 
 (defn bootstrap-indexes []
   (doseq [f (.listFiles (File. (as-str @root*)))]
-    (if (.isDirectory f)
-      (get-search-manager (.getName f)))))
+    (if (.isDirectory ^File f)
+      (get-search-manager (.getName ^File f)))))
 
-(defn use-searcher-from-search-manager [name f]
+(defn use-searcher-from-search-manager [name callback]
   (let [manager (get-search-manager name)
         searcher (.acquire manager)]
     (try
-      (f searcher)
+      (callback searcher)
       (finally (.release manager searcher)))))
 
+(defn use-index-writer [name callback]
+  (let [writer (new-index-writer name)]
+    (try
+      (callback ^IndexWriter writer)
+      (finally
+        (.commit writer)
+        (.forceMerge writer 1)
+        (.close writer)))))
+
+(defn store
+  [name maps]
+  (use-index-writer name (fn [^IndexWriter writer]
+                           (doseq [m maps]
+                             (if (:id m)
+                               (.updateDocument writer ^Term (Term. ^String id-field (as-str (:id m))) (map->document m))
+                               (.addDocument writer (map->document m))))
+                           { name true })))
+
+(defn delete-from-query
+  [name query]
+  (use-index-writer name (fn [^IndexWriter writer]
+                           (let [parser (QueryParser. *version* id-field *analyzer*)]
+                             ;; method is deleteDocuments(Query...)
+                             (.deleteDocuments writer
+                                               (into-array Query [^Query (.parse parser query)])))))
+    { name true })
+
+
 (defn search [name query size]
-  (use-searcher-from-search-manager name (fn [searcher]
+  (use-searcher-from-search-manager name (fn [^IndexSearcher searcher]
                              (let [parser (QueryParser. *version* "_default_" *analyzer*)
                                    query (.parse parser query)
                                    hits (.search searcher query (int size))
@@ -160,6 +186,7 @@
   (log/info "received request" method input)
   (condp = method
    :post (store (:index input) (:documents input))
+   :delete (delete-from-query (:index input) (:query input))
    :get (search (:index input) (:query input) (:size input))
    :put (search-many (:hosts input) (:index input) (:query input) (:size input))
    (throw (Throwable. "unexpected method" method))))
@@ -173,7 +200,7 @@
       (print-cause-trace e)
       {:status 500
        :headers {"Content-Type" "text/plain"}
-       :body (str "exception:" (.getMessage e))})))
+       :body (with-err-str (pst e 36))})))
 
 (defn port-validator [port]
   (< 0 port 0x10000))

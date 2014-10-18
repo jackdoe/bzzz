@@ -17,7 +17,9 @@
            (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.search BooleanClause BooleanClause$Occur
                                      BooleanQuery IndexSearcher Query ScoreDoc
-                                     Scorer TermQuery SearcherManager)
+                                     Scorer TermQuery SearcherManager
+                                     Explanation ComplexExplanation
+                                     Collector TopScoreDocCollector TopDocsCollector)
            (org.apache.lucene.util Version AttributeSource)
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory))
   (:gen-class :main true))
@@ -33,13 +35,15 @@
 (def mapping* (atom {}))
 (def cron-tp (mk-pool))
 
+(defn mapply [f & args] (apply f (apply concat (butlast args) (last args))))
 (defn substring? [^String sub ^String st]
- (not= (.indexOf st sub) -1))
+  (not= (.indexOf st sub) -1))
 
 (defn as-str ^String [x]
   (if (keyword? x)
     (name x)
     (str x)))
+
 (defmacro with-err-str
   "Evaluates exprs in a context in which *err* is bound to a fresh
   StringWriter.  Returns the string created by any nested printing
@@ -67,17 +71,17 @@
 (defn- add-field [document key value]
   (let [ str-key (as-str key) ]
     (.add ^Document document
-        (Field. str-key (as-str value)
-                (if (or
-                     (substring? "_store" str-key)
-                     (= str-key id-field))
-                  Field$Store/YES
-                  Field$Store/NO)
-                (if (or
-                     (substring? "_index" str-key)
-                     (= str-key id-field))
-                  Field$Index/ANALYZED
-                  Field$Index/NOT_ANALYZED)))))
+          (Field. str-key (as-str value)
+                  (if (or
+                       (substring? "_store" str-key)
+                       (= str-key id-field))
+                    Field$Store/YES
+                    Field$Store/NO)
+                  (if (or
+                       (substring? "_index" str-key)
+                       (= str-key id-field))
+                    Field$Index/ANALYZED
+                    Field$Index/NOT_ANALYZED)))))
 
 (defn map->document
   [hmap]
@@ -87,21 +91,24 @@
     document))
 
 (defn document->map
-  [^Document doc score]
-  (into {:_score score } (for [^Field f (.getFields doc)]
-                     [(keyword (.name f)) (.stringValue f)])))
+  [^Document doc score ^Explanation explanation]
+  (conj
+   (into {:_score score }
+         (for [^Field f (.getFields doc)]
+           [(keyword (.name f)) (.stringValue f)]))
+   (when explanation { :_explain (.toString explanation) })))
 
-(defn get-search-manager ^SearcherManager [name]
+(defn get-search-manager ^SearcherManager [index]
   (locking mapping*
-    (when (nil? (@mapping* name))
-      (swap! mapping* assoc name (SearcherManager. (new-index-directory name)
-                                                   nil)))
-    (@mapping* name)))
+    (when (nil? (@mapping* index))
+      (swap! mapping* assoc index (SearcherManager. (new-index-directory index)
+                                                    nil)))
+    (@mapping* index)))
 
 (defn refresh-search-managers []
   (locking mapping*
-    (doseq [[name ^SearcherManager manager] @mapping*]
-      (log/info 1 "refreshing: " name " " manager)
+    (doseq [[index ^SearcherManager manager] @mapping*]
+      (log/info 1 "refreshing: " index " " manager)
       (.maybeRefresh manager))))
 
 (defn bootstrap-indexes []
@@ -109,15 +116,15 @@
     (if (.isDirectory ^File f)
       (get-search-manager (.getName ^File f)))))
 
-(defn use-searcher-from-search-manager [name callback]
-  (let [manager (get-search-manager name)
+(defn use-searcher [index callback]
+  (let [manager (get-search-manager index)
         searcher (.acquire manager)]
     (try
       (callback searcher)
       (finally (.release manager searcher)))))
 
-(defn use-index-writer [name callback]
-  (let [writer (new-index-writer name)]
+(defn use-writer [index callback]
+  (let [writer (new-index-writer index)]
     (try
       (callback ^IndexWriter writer)
       (finally
@@ -126,53 +133,64 @@
         (.close writer)))))
 
 (defn store
-  [name maps]
-  (use-index-writer name (fn [^IndexWriter writer]
-                           (doseq [m maps]
-                             (if (:id m)
-                               (.updateDocument writer ^Term (Term. ^String id-field (as-str (:id m))) (map->document m))
-                               (.addDocument writer (map->document m))))
-                           { name true })))
+  [index maps]
+  (use-writer index (fn [^IndexWriter writer]
+                      (doseq [m maps]
+                        (if (:id m)
+                          (.updateDocument writer ^Term (Term. ^String id-field (as-str (:id m))) (map->document m))
+                          (.addDocument writer (map->document m))))
+                      { index true })))
 
 (defn delete-from-query
-  [name query]
-  (use-index-writer name (fn [^IndexWriter writer]
-                           (let [parser (QueryParser. *version* id-field *analyzer*)]
-                             ;; method is deleteDocuments(Query...)
-                             (.deleteDocuments writer
-                                               (into-array Query [^Query (.parse parser query)])))))
-    { name true })
+  [index query]
+  (use-writer index (fn [^IndexWriter writer]
+                      (let [parser (QueryParser. *version* id-field *analyzer*)]
+                        ;; method is deleteDocuments(Query...)
+                        (.deleteDocuments writer
+                                          (into-array Query [^Query (.parse parser query)])))))
+  { index true })
 
 
-(defn search [name query size]
-  (use-searcher-from-search-manager name (fn [^IndexSearcher searcher]
-                             (let [parser (QueryParser. *version* "_default_" *analyzer*)
-                                   query (.parse parser query)
-                                   hits (.search searcher query (int size))
-                                   m (into [] (for [hit (.scoreDocs hits)]
-                                                (document->map (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit))
-                                                               (.score ^ScoreDoc hit))))]
-                               { :total (.totalHits hits), :hits m }))))
-
+(defn search
+  [& {:keys [index query default-field default-operator page size explain]
+      :or {default-field "_default_", default-operator "and", page 0, size 20, explain false}}]
+  (use-searcher index
+                (fn [^IndexSearcher searcher]
+                  (let [parser (doto
+                                   (QueryParser. *version* (as-str default-field) *analyzer*)
+                                 (.setDefaultOperator (case default-operator
+                                                        "and" QueryParser/AND_OPERATOR
+                                                        "or"  QueryParser/OR_OPERATOR)))
+                        query (.parse parser query)
+                        pq-size (+ (* page size) size)
+                        collector ^TopDocsCollector (TopScoreDocCollector/create pq-size true)]
+                    (.search searcher query collector)
+                    {:total (.getTotalHits collector)
+                     :hits (into []
+                                 (for [^ScoreDoc hit (-> (.topDocs collector (* page size)) (.scoreDocs))]
+                                   (document->map (.doc searcher (.doc hit))
+                                                  (.score hit)
+                                                  (when explain
+                                                    (.explain searcher query (.doc hit))))))}))))
 
 ;; [ "a", ["b","c",["d","e"]]]
-(defn search-remote [hosts name query size]
+(defn search-remote [hosts input]
   (let [part (if (or (vector? hosts) (list? hosts)) hosts [hosts])
         args {:accept :json
               :as :json
               :body-encoding "UTF-8"
-              :body (json/write-str {:index name :query query :size size :hosts part })
+              :body (json/write-str input)
               :socket-timeout 1000
               :conn-timeout 1000}]
-    (log/info "searching <" query "> on index <" name "> with limit <" size "> in part <" part ">")
+    (log/info "<" input "> in part <" part ">")
     (if (> (count part) 1)
       (:body (http-client/put (first part) args))
       (:body (http-client/get (first part) args)))))
 
-(defn search-many [hosts name query size]
+(defn search-many [hosts input]
   (let [c (async/chan)]
     (doseq [part hosts]
-      (async/go (async/>! c (search-remote part name query size))))
+      (async/go (async/>! c (search-remote part input))))
     (let [ collected (into [] (for [part hosts] (async/<!! c)))]
       (reduce (fn [sum next]
                 (-> sum
@@ -181,15 +199,14 @@
               { :total 0, :hits [] }
               collected))))
 
-
 (defn work [method input]
   (log/info "received request" method input)
   (condp = method
-   :post (store (:index input) (:documents input))
-   :delete (delete-from-query (:index input) (:query input))
-   :get (search (:index input) (:query input) (:size input))
-   :put (search-many (:hosts input) (:index input) (:query input) (:size input))
-   (throw (Throwable. "unexpected method" method))))
+    :post (store (:index input) (:documents input))
+    :delete (delete-from-query (:index input) (:query input))
+    :get (mapply search input)
+    :put (search-many (:hosts input) (dissoc input :hosts))
+    (throw (Throwable. "unexpected method" method))))
 
 (defn handler [request]
   (try

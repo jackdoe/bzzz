@@ -20,7 +20,7 @@
                                      Scorer TermQuery SearcherManager)
            (org.apache.lucene.util Version AttributeSource)
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory))
-  (:gen-class))
+  (:gen-class :main true))
 
 (set! *warn-on-reflection* true)
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
@@ -215,7 +215,7 @@
     :id :directory
     :default default-root]])
 
-(defn main [& args]
+(defn -main [& args]
   (let [{:keys [options errors]} (parse-opts args cli-options)]
     (when (not (nil? errors))
       (log/fatal errors)

@@ -1,7 +1,5 @@
 # bzzz
-
-i have no idea what i'm doing
-===
+(aka i-have-no-idea-what-i-am-doing)
 
 clojure + lucene (4.9 at the moment) + jetty + ring
 
@@ -28,6 +26,14 @@ how it works
 * uses one `atom` hash that contains { "index_name": SearcherManager }
 * the SearcherManagers are refreshed every 5 seconds (so the writes will be searchable after max 5 seconds)
 
+compile and start standalone
+===
+
+```
+$ lein uberjar
+$ java -jar target/bzzz-0.1.0-SNAPSHOT-standalone.jar
+```
+
 POST
 ====
 
@@ -44,6 +50,7 @@ POST
 * every POST requests can create/append to existing index, and it will optimize it to 1 segment
 * if the document contains the key "id" it will try to update new Term("id",document.get("id"))
 * keep in mind that "id" is nothing special, it will is just used to overwrite existing documents, and for deletion (still it will be doing delete-by-query)
+* every store does commit() and forceMerge(1)
 
 GET
 ====
@@ -68,7 +75,7 @@ DELETE
 }
 ```
 will delete all documents matching the query, if field name is not specified it defaults to "id"
-
+every delete does commit() and forceMerge(1)
 
 PUT
 ===

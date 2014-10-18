@@ -1,6 +1,6 @@
 (defproject bzzz "0.1.0-SNAPSHOT"
   :description "clojure + lucene + ring + jetty"
-  :url "http://github.com/jackdoe/i-have-no-idea-what-i-am-doing"
+  :url "http://github.com/jackdoe/bzzz"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.6.0"]
@@ -18,5 +18,6 @@
                  [org.clojure/core.async "0.1.338.0-5c5012-alpha"]
                  [ring/ring-core "1.3.0"]
                  [ring/ring-jetty-adapter "1.3.0"]]
-  :main bzzz.core/main
+  :main bzzz.core
+  :aot [bzzz.core]
   )

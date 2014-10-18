@@ -73,6 +73,7 @@
     (let [ret (search :index test-index-name
                       :default-field "name_store_index"
                       :query "doe")]
-      (is (= 0 (:total ret))))))
+      (is (= 0 (:total ret)))))
 
-
+  (testing "teardown"
+    (shutdown)))

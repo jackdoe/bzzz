@@ -108,7 +108,7 @@
 (defn refresh-search-managers []
   (locking mapping*
     (doseq [[index ^SearcherManager manager] @mapping*]
-      (log/info 1 "refreshing: " index " " manager)
+      (log/info "refreshing: " index " " manager)
       (.maybeRefresh manager))))
 
 (defn bootstrap-indexes []
@@ -232,6 +232,15 @@
     :id :directory
     :default default-root]])
 
+(defn shutdown []
+  (locking mapping*
+    (log/info "executing shutdown hook, current mapping: " @mapping*)
+    (doseq [[index ^SearcherManager manager] @mapping*]
+      (log/info "\tclosing: " index " " manager)
+      (.close manager))
+    (reset! mapping* {})
+    (log/info "mapping after cleanup: " @mapping*)))
+
 (defn -main [& args]
   (let [{:keys [options errors]} (parse-opts args cli-options)]
     (when (not (nil? errors))
@@ -241,6 +250,7 @@
     (reset! root* (:directory options))
     (reset! port* (:port options)))
   (bootstrap-indexes)
+  (.addShutdownHook (Runtime/getRuntime) (Thread. #(shutdown)))
   (every 5000 #(refresh-search-managers) cron-tp :desc "search refresher")
   (log/info "starting bzzzz on port" @port* "with index root directory" @root*)
   (run-jetty handler {:port @port*}))

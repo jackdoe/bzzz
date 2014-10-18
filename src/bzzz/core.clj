@@ -147,9 +147,11 @@
                       (let [parser (QueryParser. *version* id-field *analyzer*)]
                         ;; method is deleteDocuments(Query...)
                         (.deleteDocuments writer
-                                          (into-array Query [^Query (.parse parser query)])))))
-  { index true })
+                                          (into-array Query [^Query (.parse parser query)])))
+                      { index true })))
 
+(defn delete-all [index]
+  (use-writer index (fn [^IndexWriter writer] (.deleteAll writer))))
 
 (defn search
   [& {:keys [index query default-field default-operator page size explain]
@@ -219,9 +221,7 @@
        :headers {"Content-Type" "text/plain"}
        :body (with-err-str (pst e 36))})))
 
-(defn port-validator [port]
-  (< 0 port 0x10000))
-
+(defn port-validator [port] (< 0 port 0x10000))
 (def cli-options
   [["-p" "--port PORT" "Port number"
     :id :port

@@ -13,6 +13,7 @@ $ curl -XPOST http://localhost:3000/ -d '{"index":"bzbz","documents":[{"name_sto
 $ curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 $ curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000","http://localhost:3000"],"http://localhost:3000/","http://localhost:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 $ curl -XDELETE http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe"}'
+# curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":{"bool":{"must":[{"term":{"field":"name_store_index","value":"johny"}}]}},"size":10}'
 ```
 
 how it works
@@ -57,17 +58,36 @@ GET
 
 ```
 {
-  "index":"index_name"
-  "query":"name_store_index:jack",
-  "size":5
-  "page":0
-  "default-operator":"or",
+  "index":"index_name",
+  "query":{"query-parser":{"query":"name_store_index:jack@jack","analyzer":{"name_store_index":{"use":"standard"}}}},
+  "size":5,
+  "page":0,
   "explain":false
 }
 ```
+will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the Standard analyzer.
 
-will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the WhitespaceAnalyzer
 
+
+```
+{
+  "index":"bzbz",
+  "query": {
+               "bool": {
+                   "must":[
+                       {
+                           "term":{
+                              "field":"name_store_index",
+                              "value":"johny"
+                           }
+                       }
+                   ]
+               }
+           },
+  "size":10
+}
+```
+There is also minimal support for BooleanQuery and TermQuery, like the example above.
 
 DELETE
 ===

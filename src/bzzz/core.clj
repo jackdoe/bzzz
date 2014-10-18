@@ -10,7 +10,9 @@
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
-           (org.apache.lucene.analysis.core WhitespaceAnalyzer)
+           (org.apache.lucene.analysis.standard StandardAnalyzer)
+           (org.apache.lucene.analysis.miscellaneous PerFieldAnalyzerWrapper)
+           (org.apache.lucene.analysis.core WhitespaceAnalyzer KeywordAnalyzer)
            (org.apache.lucene.document Document Field Field$Index Field$Store)
            (org.apache.lucene.index IndexWriter IndexReader Term
                                     IndexWriterConfig DirectoryReader FieldInfo)
@@ -19,14 +21,15 @@
                                      BooleanQuery IndexSearcher Query ScoreDoc
                                      Scorer TermQuery SearcherManager
                                      Explanation ComplexExplanation
+                                     MatchAllDocsQuery
                                      Collector TopScoreDocCollector TopDocsCollector)
            (org.apache.lucene.util Version AttributeSource)
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory))
   (:gen-class :main true))
 
+(declare parse-query)
 (set! *warn-on-reflection* true)
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
-(def ^{:dynamic true} *analyzer* (WhitespaceAnalyzer. *version*))
 (def id-field "id")
 (def default-root "/tmp/BZZZ")
 (def default-port 3000)
@@ -34,20 +37,31 @@
 (def port* (atom default-port))
 (def mapping* (atom {}))
 (def cron-tp (mk-pool))
-
-(defn mapply [f & args] (apply f (apply concat (butlast args) (last args))))
-(defn substring? [^String sub ^String st]
-  (not= (.indexOf st sub) -1))
-
 (defn as-str ^String [x]
   (if (keyword? x)
     (name x)
     (str x)))
 
+(defn obj-to-lucene-analyzer [obj]
+  (let [name (:use obj)]
+    (case (as-str name)
+      "whitespace" (WhitespaceAnalyzer. *version*)
+      "keyword" (KeywordAnalyzer.)
+      "standard" (StandardAnalyzer. *version*))))
+
+(defn parse-analyzer [input]
+  (PerFieldAnalyzerWrapper. (WhitespaceAnalyzer. *version*)
+                            (into { id-field (KeywordAnalyzer.) }
+                                  (for [[key value] input]
+                                    { (as-str key) (obj-to-lucene-analyzer value) }))))
+
+(def analyzer* (atom (parse-analyzer {}))) ;; FIXME: move to top
+
+(defn mapply [f & args] (apply f (apply concat (butlast args) (last args))))
+(defn substring? [^String sub ^String st]
+  (not= (.indexOf st sub) -1))
+
 (defmacro with-err-str
-  "Evaluates exprs in a context in which *err* is bound to a fresh
-  StringWriter.  Returns the string created by any nested printing
-  calls."
   [& body]
   `(let [s# (new java.io.StringWriter)]
      (binding [*err* s#]
@@ -62,11 +76,29 @@
 
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory name)
-                (IndexWriterConfig. *version* *analyzer*)))
+                (IndexWriterConfig. *version* @analyzer*)))
 
 (defn new-index-reader ^IndexReader [name]
   (with-open [writer (new-index-writer name)]
     (DirectoryReader/open ^IndexWriter writer false)))
+
+(defn index? [name]
+  (if (or (substring? "_index" name)
+          (= name id-field))
+    true
+    false))
+
+(defn analyzed? [name]
+  (if (or (substring? "_not_analyzed" name)
+          (= name id-field))
+    false
+    true))
+
+(defn norms? [name]
+  (if (or (substring? "_no_norms" name)
+          (= name id-field))
+    false
+    true))
 
 (defn- add-field [document key value]
   (let [ str-key (as-str key) ]
@@ -77,17 +109,19 @@
                        (= str-key id-field))
                     Field$Store/YES
                     Field$Store/NO)
-                  (if (or
-                       (substring? "_index" str-key)
-                       (= str-key id-field))
-                    Field$Index/ANALYZED
-                    Field$Index/NOT_ANALYZED)))))
+                  (if (index? str-key)
+                    (case [(analyzed? str-key) (norms? str-key)]
+                      [true true] Field$Index/ANALYZED
+                      [true false] Field$Index/ANALYZED_NO_NORMS
+                      [false true] Field$Index/NOT_ANALYZED
+                      [false false] Field$Index/NOT_ANALYZED_NO_NORMS)
+                    Field$Index/NO)))))
 
 (defn map->document
   [hmap]
   (let [document (Document.)]
     (doseq [[key value] hmap]
-      (add-field document key value))
+      (add-field document (as-str key) value))
     document))
 
 (defn document->map
@@ -132,38 +166,88 @@
         (.forceMerge writer 1)
         (.close writer)))))
 
+(defn parse-lucene-query-parser
+  ^Query
+  [& {:keys [query default-field default-operator analyzer]
+      :or {default-field "_default_", default-operator "and" analyzer nil}}]
+  (let [parser (doto
+                   (QueryParser. *version* (as-str default-field) (if (nil? analyzer)
+                                                                    @analyzer*
+                                                                    (parse-analyzer analyzer)))
+                 (.setDefaultOperator (case (as-str default-operator)
+                                        "and" QueryParser/AND_OPERATOR
+                                        "or"  QueryParser/OR_OPERATOR)))]
+    (.parse parser query)))
+
+(defn parse-bool-query
+  ^Query
+  [& {:keys [must should minimum-should-match boost]
+      :or {minimum-should-match 0 should [] must [] boost 1}}]
+  (let [top ^BooleanQuery (BooleanQuery. true)]
+    (doseq [q must]
+      (.add top (parse-query q) BooleanClause$Occur/MUST))
+    (doseq [q should]
+      (.add top (parse-query q) BooleanClause$Occur/SHOULD))
+    (.setMinimumNumberShouldMatch top minimum-should-match)
+    (.setBoost top boost)
+    top))
+
+(defn parse-term-query
+  ^Query
+  [& {:keys [field value boost]
+      :or {boost 1}}]
+  (let [q (TermQuery. (Term. ^String field ^String value))]
+    (.setBoost q boost)
+    q))
+
+(defn parse-query-fixed ^Query [key val]
+  (case (as-str key)
+    "query-parser" (mapply parse-lucene-query-parser val)
+    "term" (mapply parse-term-query val)
+    "match-all" (MatchAllDocsQuery.)
+    "bool" (mapply parse-bool-query val)))
+
+;; query => { bool => {}}
+(defn parse-query ^Query [input]
+  (if (string? input)
+    (parse-lucene-query-parser :query input)
+    (if (= (count input) 1)
+      (let [[key val] (first input)]
+        (parse-query-fixed key val))
+      (let [top (BooleanQuery. false)]
+        (doseq [[key val] input]
+          (.add top (parse-query-fixed key val) BooleanClause$Occur/MUST))
+        top))))
+
 (defn store
-  [index maps]
+  [index maps analyzer]
+  (if analyzer
+    (reset! analyzer* (parse-analyzer analyzer)))
   (use-writer index (fn [^IndexWriter writer]
                       (doseq [m maps]
                         (if (:id m)
-                          (.updateDocument writer ^Term (Term. ^String id-field (as-str (:id m))) (map->document m))
+                          (.updateDocument writer ^Term (Term. ^String id-field
+                                                               (as-str (:id m))) (map->document m))
                           (.addDocument writer (map->document m))))
                       { index true })))
 
 (defn delete-from-query
-  [index query]
+  [index input]
   (use-writer index (fn [^IndexWriter writer]
-                      (let [parser (QueryParser. *version* id-field *analyzer*)]
-                        ;; method is deleteDocuments(Query...)
-                        (.deleteDocuments writer
-                                          (into-array Query [^Query (.parse parser query)])))
-                      { index true })))
+                      ;; method is deleteDocuments(Query...)
+                      (let [query (parse-query input)]
+                        (.deleteDocuments writer (into-array Query [query]))
+                        { index (.toString query) }))))
 
 (defn delete-all [index]
   (use-writer index (fn [^IndexWriter writer] (.deleteAll writer))))
 
 (defn search
-  [& {:keys [index query default-field default-operator page size explain]
-      :or {default-field "_default_", default-operator "and", page 0, size 20, explain false}}]
+  [& {:keys [index query page size explain]
+      :or {page 0, size 20, explain false}}]
   (use-searcher index
                 (fn [^IndexSearcher searcher]
-                  (let [parser (doto
-                                   (QueryParser. *version* (as-str default-field) *analyzer*)
-                                 (.setDefaultOperator (case default-operator
-                                                        "and" QueryParser/AND_OPERATOR
-                                                        "or"  QueryParser/OR_OPERATOR)))
-                        query (.parse parser query)
+                  (let [query (parse-query query)
                         pq-size (+ (* page size) size)
                         collector ^TopDocsCollector (TopScoreDocCollector/create pq-size true)]
                     (.search searcher query collector)
@@ -204,7 +288,7 @@
 (defn work [method input]
   (log/info "received request" method input)
   (condp = method
-    :post (store (:index input) (:documents input))
+    :post (store (:index input) (:documents input) (:analyzer input))
     :delete (delete-from-query (:index input) (:query input))
     :get (mapply search input)
     :put (search-many (:hosts input) (dissoc input :hosts))

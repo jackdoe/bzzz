@@ -1,6 +1,7 @@
 (ns bzzz.core-test
   (:use clojure.test
-        bzzz.core))
+        bzzz.core
+        bzzz.index))
 
 (def test-index-name "lein-test-testing-index")
 (deftest test-app

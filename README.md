@@ -79,6 +79,7 @@ compile and start standalone
 ===
 
 ```
+$ lein test
 $ lein uberjar
 $ java -jar target/bzzz-0.1.0-SNAPSHOT-standalone.jar
 ```

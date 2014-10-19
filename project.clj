@@ -17,7 +17,6 @@
                  [clj-http "1.0.0"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [ring/ring-core "1.3.1"]
-                 [ring/ring-jetty-adapter "1.3.1"]
-                 [org.apache.commons/commons-daemon "1.0.9"]]
+                 [ring/ring-jetty-adapter "1.3.1"]]
   :main bzzz.core
   :aot [bzzz.core])

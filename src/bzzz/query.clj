@@ -13,12 +13,10 @@
 (declare parse-query)
 (defn parse-lucene-query-parser
   ^Query
-  [& {:keys [query default-field default-operator analyzer]
-      :or {default-field "_default_", default-operator "and" analyzer nil}}]
+  [analyzer & {:keys [query default-field default-operator]
+               :or {default-field "_default_", default-operator "and"}}]
   (let [parser (doto
-                   (QueryParser. *version* (as-str default-field) (if (nil? analyzer)
-                                                                    @analyzer*
-                                                                    (parse-analyzer analyzer)))
+                   (QueryParser. *version* (as-str default-field) analyzer)
                  (.setDefaultOperator (case (as-str default-operator)
                                         "and" QueryParser/AND_OPERATOR
                                         "or"  QueryParser/OR_OPERATOR)))]
@@ -26,39 +24,44 @@
 
 (defn parse-bool-query
   ^Query
-  [& {:keys [must should minimum-should-match boost]
-      :or {minimum-should-match 0 should [] must [] boost 1}}]
+  [analyzer & {:keys [must should minimum-should-match boost]
+               :or {minimum-should-match 0 should [] must [] boost 1}}]
   (let [top ^BooleanQuery (BooleanQuery. true)]
     (doseq [q must]
-      (.add top (parse-query q) BooleanClause$Occur/MUST))
+      (.add top (parse-query q analyzer) BooleanClause$Occur/MUST))
     (doseq [q should]
-      (.add top (parse-query q) BooleanClause$Occur/SHOULD))
+      (.add top (parse-query q analyzer) BooleanClause$Occur/SHOULD))
     (.setMinimumNumberShouldMatch top minimum-should-match)
     (.setBoost top boost)
     top))
 
 (defn parse-term-query
   ^Query
-  [& {:keys [field value boost]
-      :or {boost 1}}]
+  [analyzer & {:keys [field value boost]
+               :or {boost 1}}]
   (let [q (TermQuery. (Term. ^String field ^String value))]
     (.setBoost q boost)
     q))
 
-(defn parse-query-fixed ^Query [key val]
+(defn parse-query-fixed ^Query [key val analyzer]
   (case (as-str key)
-    "query-parser" (mapply parse-lucene-query-parser val)
-    "term" (mapply parse-term-query val)
+    "query-parser" (mapply parse-lucene-query-parser analyzer val)
+    "term" (mapply parse-term-query analyzer val)
     "match-all" (MatchAllDocsQuery.)
-    "bool" (mapply parse-bool-query val)))
+    "bool" (mapply parse-bool-query analyzer val)))
 
-(defn parse-query ^Query [input]
+(defn extract-analyzer [a]
+  (if (nil? a)
+    @analyzer*
+    (parse-analyzer a)))
+
+(defn parse-query ^Query [input analyzer]
   (if (string? input)
-    (parse-lucene-query-parser :query input)
+    (mapply parse-lucene-query-parser analyzer {:query input})
     (if (= (count input) 1)
       (let [[key val] (first input)]
-        (parse-query-fixed key val))
+        (parse-query-fixed key val analyzer))
       (let [top (BooleanQuery. false)]
         (doseq [[key val] input]
-          (.add top (parse-query-fixed key val) BooleanClause$Occur/MUST))
+          (.add top (parse-query-fixed key val analyzer) BooleanClause$Occur/MUST))
         top))))

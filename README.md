@@ -119,16 +119,16 @@ GET
 
 ```
 {
+    "analyzer": {
+        "name_store_index": {
+            "use": "standard"
+        }
+    },
     "explain": false,
     "index": "index_name",
     "page": 0,
     "query": {
         "query-parser": {
-            "analyzer": {
-                "name_store_index": {
-                    "use": "standard"
-                }
-            },
             "query": "name_store_index:jack@jack"
         }
     },
@@ -136,7 +136,6 @@ GET
 }
 ```
 will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the Standard analyzer.
-
 
 
 ```

@@ -57,10 +57,10 @@
 
   (testing "search-or-standard-and-highlight"
     (let [ret (search :index test-index-name
+                      :analyzer {:name_store_index {:use "standard"} }
                       :highlight {:field "name_store_index"}
                       :query { :query-parser {:query "john@doe"
                                               :default-operator "or"
-                                              :analyzer {:name_store_index {:use "standard"} }
                                               :default-field "name_store_index"}})]
       (is (= 2 (:total ret)))
       (is (= "<b>john</b> <b>doe</b>" (:_highlight (first (:hits ret)))))

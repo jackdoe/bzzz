@@ -135,7 +135,7 @@
   [index input]
   (use-writer index (fn [^IndexWriter writer]
                       ;; method is deleteDocuments(Query...)
-                      (let [query (parse-query input)]
+                      (let [query (parse-query input (extract-analyzer nil))]
                         (.deleteDocuments writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [query]))
                         { index (.toString query) }))))
 
@@ -143,7 +143,7 @@
   (use-writer index (fn [^IndexWriter writer] (.deleteAll writer))))
 
 (defn- make-highlighter
-  [^Query query ^IndexSearcher searcher config]
+  [^Query query ^IndexSearcher searcher config analyzer]
   (if config
     (let [indexReader (.getIndexReader searcher)
           scorer (QueryScorer. (.rewrite query indexReader))
@@ -157,7 +157,7 @@
           highlighter (Highlighter. (SimpleHTMLFormatter. pre post) scorer)]
       (fn [m]
           (let [str ((keyword field) m)
-                token-stream (.tokenStream ^Analyzer @analyzer*
+                token-stream (.tokenStream ^Analyzer analyzer
                                            (name field)
                                            (StringReader. str))]
             (.getBestFragments ^Highlighter highlighter
@@ -168,15 +168,16 @@
     (constantly nil)))
 
 (defn search
-  [& {:keys [index query page size explain refresh highlight]
-      :or {page 0, size 20, explain false refresh false}}]
+  [& {:keys [index query page size explain refresh highlight analyzer]
+      :or {page 0, size 20, explain false refresh false analyzer nil}}]
   (if refresh
     (refresh-search-managers))
   (use-searcher index
                 (fn [^IndexSearcher searcher]
                   (let [ms-start (time-ms)
-                        query (parse-query query)
-                        highlighter (make-highlighter query searcher highlight)
+                        analyzer (extract-analyzer analyzer)
+                        query (parse-query query analyzer)
+                        highlighter (make-highlighter query searcher highlight analyzer)
                         pq-size (+ (* page size) size)
                         collector ^TopDocsCollector (TopScoreDocCollector/create pq-size true)]
                     (.search searcher query collector)

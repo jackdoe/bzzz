@@ -4,6 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :plugins [[lein-marginalia "0.8.0"]]
+  :jvm-opts ["-Xmx4g"]
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.apache.lucene/lucene-core "4.9.1"]
                  [org.apache.lucene/lucene-highlighter "4.9.1"]

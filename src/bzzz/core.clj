@@ -1,8 +1,7 @@
 (ns bzzz.core
   (use ring.adapter.jetty)
-  (use overtone.at-at)
-  (use clojure.stacktrace)
   (use [clojure.repl :only (pst)])
+  (use [overtone.at-at :only (every mk-pool)])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
@@ -300,7 +299,7 @@
      :headers {"Content-Type" "application/json"}
      :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword)))}
     (catch Exception e
-      (print-cause-trace e)
+      (println (with-err-str (pst e 36)))
       {:status 500
        :headers {"Content-Type" "text/plain"}
        :body (with-err-str (pst e 36))})))

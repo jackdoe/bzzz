@@ -5,15 +5,63 @@ clojure + lucene (4.9 at the moment) + jetty + ring
 
 looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
 
-
 ```
 $ lein trampoline run -- --port 3000 --directory /tmp/bzbzbz # by default 3000 and /tmp/BZZZ
 
-$ curl -XPOST http://localhost:3000/ -d '{"index":"bzbz","documents":[{"name_store_index":"johny doe"}, {"name_store_index":"jack doe"}]}'
-$ curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
-$ curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000","http://localhost:3000"],"http://localhost:3000/","http://localhost:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
-$ curl -XDELETE http://localhost:3000/ -d '{"index":"bzbz","query":"name_store_index:johny AND name_store_index:doe"}'
-# curl -XGET http://localhost:3000/ -d '{"index":"bzbz","query":{"bool":{"must":[{"term":{"field":"name_store_index","value":"johny"}}]}},"size":10}'
+$ curl -XPOST http://localhost:3000/ -d '
+{
+    "documents": [
+        {
+            "name_store_index": "johny doe"
+        },
+        {
+            "name_store_index": "jack doe"
+        }
+    ],
+    "index": "bzbz"
+}'
+$ curl -XGET http://localhost:3000/ -d '
+{
+    "index": "bzbz",
+    "query": "name_store_index:johny AND name_store_index:doe",
+    "size": 10
+}'
+$ curl -XPUT http://localhost:3000/ -d '{
+    "hosts": [
+        [
+            "http://localhost:3000",
+            "http://localhost:3000"
+        ],
+        "http://localhost:3000/",
+        "http://localhost:3000"
+    ],
+    "index": "bzbz",
+    "query": "name_store_index:johny AND name_store_index:doe",
+    "size": 10
+}
+'
+$ curl -XDELETE http://localhost:3000/ -d '{
+    "index": "bzbz",
+    "query": "name_store_index:johny AND name_store_index:doe"
+}
+'
+# curl -XGET http://localhost:3000/ -d '{
+    "index": "bzbz",
+    "query": {
+        "bool": {
+            "must": [
+                {
+                    "term": {
+                        "field": "name_store_index",
+                        "value": "johny"
+                    }
+                }
+            ]
+        }
+    },
+    "size": 10
+}
+'
 ```
 
 how it works
@@ -40,29 +88,48 @@ POST
 
 ```
 {
-  "index":"index_name"
-  "documents": [ { "name_store_index": "jack","id":"1230812903" } ]
+    "analyzer": {
+        "name_store_index": {
+            "use": "whitespace"
+        }
+    },
+    "documents": [
+        {
+            "id": "1230812903",
+            "name_store_index": "jack"
+        }
+    ],
+    "index": "index_name"
 }
-
 ```
 
 * if the field name contains _store it will be Field.Store.YES typed
-* if the field name contains _index it will be Field.Index.ANALYZED with WhitespaceAnalyzer
+* if the field name contains _index it will be Field.Index.ANALYZED
+* if the field name contains _no_norms it will be Field.Index.(ANALYZED|NOT_ANALYZED)_NO_NORMS
 * every POST requests can create/append to existing index, and it will optimize it to 1 segment
 * if the document contains the key "id" it will try to update new Term("id",document.get("id"))
 * keep in mind that "id" is nothing special, it will is just used to overwrite existing documents, and for deletion (still it will be doing delete-by-query)
 * every store does commit() and forceMerge(1)
-
+* per field analyzers are supported for every index request (by default it is id: keyword, everything else whitespace). there is no state for the per-field-analyzers, the "query-parser" query supports per-request based per-field-analyzers
 GET
 ====
 
 ```
 {
-  "index":"index_name",
-  "query":{"query-parser":{"query":"name_store_index:jack@jack","analyzer":{"name_store_index":{"use":"standard"}}}},
-  "size":5,
-  "page":0,
-  "explain":false
+    "explain": false,
+    "index": "index_name",
+    "page": 0,
+    "query": {
+        "query-parser": {
+            "analyzer": {
+                "name_store_index": {
+                    "use": "standard"
+                }
+            },
+            "query": "name_store_index:jack@jack"
+        }
+    },
+    "size": 5
 }
 ```
 will run the Lucene's QueryParser generated query from the "query" key against the "index_name" index using the Standard analyzer.
@@ -104,10 +171,17 @@ PUT
 ===
 ```
 {
-  "index":"index_name"
-  "query":"name_store_index:jack",
-  "size":5,
-  "hosts":[["http://localhost:3000/","http://localhost:3000"],"http://localhost:3000","http://127.0.0.1:3000"]
+    "hosts": [
+        [
+            "http://localhost:3000/",
+            "http://localhost:3000"
+        ],
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ],
+    "index": "index_name",
+    "query": "name_store_index:jack",
+    "size": 5
 }
 curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000/","http://localhost:3000"],"http://localhost:3000","http://127.0.0.1:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 
@@ -135,9 +209,12 @@ SPAM
 
 ```
 [
-   ["http://localhost:3000/","http://localhost:3000"],
-   "http://localhost:3000",
-   "http://127.0.0.1:3000"
+    [
+        "http://localhost:3000/",
+        "http://localhost:3000"
+    ],
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
 ]
 ```
 
@@ -161,27 +238,20 @@ or
 curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000/","http://localhost:3000",["http://localhost:3000","http://127.0.0.1:3000","http://localhost:3000","http://127.0.0.1:3000"]],"http://localhost:3000","http://127.0.0.1:3000"], "index":"bzbz","query":"name_store_index:johny AND name_store_index:doe","size":10}'
 
 [
-  [ 
-    "http://localhost:3000/",
-    "http://localhost:3000",
     [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://localhost:3000",
-      "http://127.0.0.1:3000"
-    ]
-  ],
-  "http://localhost:3000",
-  "http://127.0.0.1:3000"
+        "http://localhost:3000/",
+        "http://localhost:3000",
+        [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
+        ]
+    ],
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
 ]
 ```
-
-TODO
-===
-
-* DELETE
-* simple replication, or maybe use zookeeper and sanity "query" that can decide if there is a need for copy or not
-
 
 ## License
 

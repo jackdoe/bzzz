@@ -68,12 +68,12 @@ how it works
 ===
 
 * starts a web server on port 3000
-* POST requests are stored (expects json array of hashes [ {"key":"value"} ])
+* POST requests are stored (expects json array of hashes `[ {"key":"value"} ]`)
 * GET requests are searches
 * PUT requests are doing remote searches
 * DELETE requests delete by query
-* uses one `atom` hash that contains { "index_name": SearcherManager }
-* the SearcherManagers are refreshed every 5 seconds (so the writes will be searchable after max 5 seconds)
+* uses one `atom` hash that contains `{ "index_name": SearcherManager }`
+* the `SearcherManagers` are refreshed every 5 seconds (so the writes/deletes will be searchable after max 5 seconds)
 
 compile and start standalone
 ===

@@ -15,12 +15,12 @@ class Store
     JSON.parse(Curl.http(:DELETE, @host, {index: @index, query: query}.to_json).body_str)
   end
 
-  def Store.find(query, size: 10, page: 0, refresh: false)
+  def Store.find(query, options = {})
     JSON.parse(Curl.http(:GET, @host, {index: @index,
                                        query: query,
-                                       page: page,
-                                       size: size,
-                                       refresh: refresh}.to_json).body_str)
+                                       page: options[:page] || 0,
+                                       size: options[:size] || 10,
+                                       refresh: options[:refresh] || false}.to_json).body_str)
   end
 
   def Store.stat

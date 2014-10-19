@@ -137,8 +137,10 @@
   (use-writer index (fn [^IndexWriter writer] (.deleteAll writer))))
 
 (defn search
-  [& {:keys [index query page size explain]
-      :or {page 0, size 20, explain false}}]
+  [& {:keys [index query page size explain refresh]
+      :or {page 0, size 20, explain false refresh false}}]
+  (if refresh
+    (refresh-search-managers))
   (use-searcher index
                 (fn [^IndexSearcher searcher]
                   (let [ms-start (time-ms)

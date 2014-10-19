@@ -6,6 +6,7 @@
   (use [overtone.at-at :only (every mk-pool)])
   (:require [bzzz.const :as const])
   (:require [bzzz.index :as index])
+  (:require [bzzz.analyzer :as analyzer])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
@@ -14,7 +15,6 @@
   (:gen-class :main true))
 
 (set! *warn-on-reflection* true)
-(def cron-tp (mk-pool))
 (def port* (atom const/default-port))
 
 ;; [ "a", ["b","c",["d","e"]]]
@@ -32,36 +32,52 @@
       (:body (http-client/get (first part) args)))))
 
 (defn search-many [hosts input]
-  (let [c (async/chan)]
+  (let [c (async/chan)
+        ms-start (time-ms)]
     (doseq [part hosts]
       (async/go (async/>! c (search-remote part input))))
     (let [ collected (into [] (for [part hosts] (async/<!! c)))]
       (reduce (fn [sum next]
                 (-> sum
+                    (assoc-in [:took] (time-took ms-start))
                     (update-in [:total] + (:total next))
                     (update-in [:hits] concat (:hits next))))
-              { :total 0, :hits [] }
+              { :total 0, :hits [], :took -1 }
               collected))))
 
-(defn work [method input]
+
+(defn stat []
+    {:index (index/index-stat)
+     :analyzer (analyzer/analyzer-stat)})
+
+(defn work [method uri input]
   (log/info "received request" method input)
   (condp = method
-    :post (index/store (:index input) (:documents input) (:analyzer input))
-    :delete (index/delete-from-query (:index input) (:query input))
-    :get (mapply index/search input)
-    :put (search-many (:hosts input) (dissoc input :hosts))
+    :post (index/store (:index input)
+                       (:documents input)
+                       (:analyzer input))
+    :delete (index/delete-from-query (:index input)
+                                     (:query input))
+    :get (if (= "/_stat" uri)
+           (stat)
+           (mapply index/search input))
+    :put (search-many (:hosts input)
+                      (dissoc input :hosts))
     (throw (Throwable. "unexpected method" method))))
 
 (defn handler [request]
   (try
     {:status 200
      :headers {"Content-Type" "application/json"}
-     :body (json/write-str (work (:request-method request) (json/read-str (slurp (:body request)) :key-fn keyword)))}
-    (catch Exception e
-      (println (with-err-str (pst e 36)))
-      {:status 500
-       :headers {"Content-Type" "text/plain"}
-       :body (with-err-str (pst e 36))})))
+     :body (json/write-str (work (:request-method request)
+                                 (:uri request)
+                                 (json/read-str (slurp-or-default (:body request) "{}") :key-fn keyword)))}
+    (catch Throwable e
+      (let [ex (with-err-str (pst e 36))]
+        (println request "->" ex)
+        {:status 500
+         :headers {"Content-Type" "text/plain"}
+         :body ex}))))
 
 (defn port-validator [port]
   (< 0 port 0x10000))
@@ -86,6 +102,6 @@
     (reset! port* (:port options)))
   (index/bootstrap-indexes)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index/shutdown)))
-  (every 5000 #(index/refresh-search-managers) cron-tp :desc "search refresher")
+  (every 5000 #(index/refresh-search-managers) (mk-pool) :desc "search refresher")
   (log/info "starting bzzzz on port" @port* "with index root directory" @index/root*)
   (run-jetty handler {:port @port*}))

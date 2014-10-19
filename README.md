@@ -256,6 +256,30 @@ curl -XPUT http://localhost:3000/ -d '{"hosts":[["http://localhost:3000/","http:
 ]
 ```
 
+STAT
+===
+`/_stat` is a hackish endpoint that will trigger core/stat so, `http://localhost:3000/_stat` will return something like:
+
+```
+{
+    "analyzer": "PerFieldAnalyzerWrapper({\"id\" #<KeywordAnalyzer org.apache.lucene.analysis.core.KeywordAnalyzer@6e306ef7>}, default=org.apache.lucene.analysis.core.WhitespaceAnalyzer@53d27789)",
+    "index": {
+        "bzbz": {
+            "docs": 2,
+            "has-deletions": false
+        },
+        "lein-test-testing-index": {
+            "docs": 0,
+            "has-deletions": false
+        },
+        "testing-index": {
+            "docs": 0,
+            "has-deletions": false
+        }
+    }
+}
+
+```
 ## License
 
 Distributed under the Eclipse Public License either version 1.0 or (at

@@ -14,6 +14,7 @@
 
 (def root* (atom default-root))
 (def mapping* (atom {}))
+
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
 
@@ -140,7 +141,8 @@
       :or {page 0, size 20, explain false}}]
   (use-searcher index
                 (fn [^IndexSearcher searcher]
-                  (let [query (parse-query query)
+                  (let [ms-start (time-ms)
+                        query (parse-query query)
                         pq-size (+ (* page size) size)
                         collector ^TopDocsCollector (TopScoreDocCollector/create pq-size true)]
                     (.search searcher query collector)
@@ -150,7 +152,9 @@
                                    (document->map (.doc searcher (.doc hit))
                                                   (.score hit)
                                                   (when explain
-                                                    (.explain searcher query (.doc hit))))))}))))
+                                                    (.explain searcher query (.doc hit))))))
+
+                     :took (time-took ms-start)}))))
 
 (defn shutdown []
   (locking mapping*
@@ -160,3 +164,11 @@
       (.close manager))
     (reset! mapping* {})
     (log/info "mapping after cleanup: " @mapping*)))
+
+(defn index-stat []
+  (into {} (for [[name searcher] @mapping*]
+             [name (use-searcher name
+                                 (fn [^IndexSearcher searcher]
+                                   (let [reader (.getIndexReader searcher)]
+                                     {:docs (.numDocs reader)
+                                      :has-deletions (.hasDeletions reader)})))])))

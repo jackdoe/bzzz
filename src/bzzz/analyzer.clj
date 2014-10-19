@@ -8,7 +8,6 @@
            (org.apache.lucene.analysis.core WhitespaceAnalyzer KeywordAnalyzer)
            (org.apache.lucene.util Version)))
 
-
 (defn obj-to-lucene-analyzer [obj]
   (let [name (:use obj)]
     (case (as-str name)
@@ -22,3 +21,6 @@
                                   (for [[key value] input]
                                     { (as-str key) (obj-to-lucene-analyzer value) }))))
 (def analyzer* (atom (parse-analyzer {}))) ;; FIXME - move to top
+
+(defn analyzer-stat []
+  (.toString @analyzer*))

@@ -5,7 +5,9 @@
     (name x)
     (str x)))
 
-(defn mapply [f & args] (apply f (apply concat (butlast args) (last args))))
+(defn mapply [f & args]
+  (apply f (apply concat (butlast args) (last args))))
+
 (defn substring? [^String sub ^String st]
   (not= (.indexOf st sub) -1))
 
@@ -15,3 +17,15 @@
      (binding [*err* s#]
        ~@body
        (str s#))))
+
+(defn slurp-or-default [io default]
+  (let [s (slurp io)]
+    (if (= (count s) 0)
+      default
+      s)))
+
+(defn time-ms []
+  (System/currentTimeMillis))
+
+(defn time-took [start]
+  (- (time-ms) start))

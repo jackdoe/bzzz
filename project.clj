@@ -6,6 +6,7 @@
   :plugins [[lein-marginalia "0.8.0"]]
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.apache.lucene/lucene-core "4.9.1"]
+                 [org.apache.lucene/lucene-highlighter "4.9.1"]
                  [org.apache.lucene/lucene-queryparser "4.9.1"]
                  [org.apache.lucene/lucene-analyzers-common "4.9.1"]
                  [org.clojure/data.json "0.2.5"]

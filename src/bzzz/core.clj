@@ -51,7 +51,7 @@
      :analyzer (analyzer/analyzer-stat)})
 
 (defn work [method uri input]
-  (log/info "received request" method input)
+  (log/debug "received request" method input)
   (condp = method
     :post (index/store (:index input)
                        (:documents input)

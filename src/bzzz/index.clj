@@ -5,7 +5,10 @@
   (use bzzz.query)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader File)
+           (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.document Document Field Field$Index Field$Store)
+           (org.apache.lucene.search.highlight Highlighter QueryScorer
+                                               SimpleHTMLFormatter)
            (org.apache.lucene.index IndexWriter IndexReader Term
                                     IndexWriterConfig DirectoryReader FieldInfo)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher
@@ -72,12 +75,15 @@
     document))
 
 (defn document->map
-  [^Document doc score ^Explanation explanation]
-  (conj
-   (into {:_score score }
-         (for [^Field f (.getFields doc)]
-           [(keyword (.name f)) (.stringValue f)]))
-   (when explanation { :_explain (.toString explanation) })))
+  [^Document doc score highlighter ^Explanation explanation]
+  (let [m (into {:_score score }
+                (for [^Field f (.getFields doc)]
+                  [(keyword (.name f)) (.stringValue f)]))
+        fragments (highlighter m)]
+    (conj
+     m
+     (when explanation (assoc m :_explain (.toString explanation)))
+     (when fragments   (assoc m :_highlight fragments)))))
 
 (defn get-search-manager ^SearcherManager [index]
   (locking mapping*
@@ -136,8 +142,33 @@
 (defn delete-all [index]
   (use-writer index (fn [^IndexWriter writer] (.deleteAll writer))))
 
+(defn- make-highlighter
+  [^Query query ^IndexSearcher searcher config]
+  (if config
+    (let [indexReader (.getIndexReader searcher)
+          scorer (QueryScorer. (.rewrite query indexReader))
+          config (merge {:field :_content
+                         :max-fragments 5
+                         :separator "..."
+                         :pre "<b>"
+                         :post "</b>"}
+                        config)
+          {:keys [field max-fragments separator fragments-key pre post]} config
+          highlighter (Highlighter. (SimpleHTMLFormatter. pre post) scorer)]
+      (fn [m]
+          (let [str ((keyword field) m)
+                token-stream (.tokenStream ^Analyzer @analyzer*
+                                           (name field)
+                                           (StringReader. str))]
+            (.getBestFragments ^Highlighter highlighter
+                               ^TokenStream token-stream
+                               ^String str
+                               (int max-fragments)
+                               ^String separator))))
+    (constantly nil)))
+
 (defn search
-  [& {:keys [index query page size explain refresh]
+  [& {:keys [index query page size explain refresh highlight]
       :or {page 0, size 20, explain false refresh false}}]
   (if refresh
     (refresh-search-managers))
@@ -145,6 +176,7 @@
                 (fn [^IndexSearcher searcher]
                   (let [ms-start (time-ms)
                         query (parse-query query)
+                        highlighter (make-highlighter query searcher highlight)
                         pq-size (+ (* page size) size)
                         collector ^TopDocsCollector (TopScoreDocCollector/create pq-size true)]
                     (.search searcher query collector)
@@ -153,9 +185,9 @@
                                  (for [^ScoreDoc hit (-> (.topDocs collector (* page size)) (.scoreDocs))]
                                    (document->map (.doc searcher (.doc hit))
                                                   (.score hit)
+                                                  highlighter
                                                   (when explain
                                                     (.explain searcher query (.doc hit))))))
-
                      :took (time-took ms-start)}))))
 
 (defn shutdown []

@@ -235,7 +235,7 @@
   (use-writer index (fn [^IndexWriter writer]
                       ;; method is deleteDocuments(Query...)
                       (let [query (parse-query input)]
-                        (.deleteDocuments writer (into-array Query [query]))
+                        (.deleteDocuments writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [query]))
                         { index (.toString query) }))))
 
 (defn delete-all [index]

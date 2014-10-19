@@ -111,6 +111,8 @@ POST
 * keep in mind that "id" is nothing special, it will is just used to overwrite existing documents, and for deletion (still it will be doing delete-by-query)
 * every store does commit() and forceMerge(1)
 * per field analyzers are supported for every index request (by default it is id: keyword, everything else whitespace). there is no state for the per-field-analyzers, the "query-parser" query supports per-request based per-field-analyzers
+
+
 GET
 ====
 

@@ -27,6 +27,7 @@ class Store
   def Store.find(query, options = {})
     JSON.parse(Curl.http(:GET, @host, {index: @index,
                                        query: query,
+                                       explain: options[:explain] || false,
                                        analyzer: Store.analyzer,
                                        highlight: { field: options[:highlight] || 'content_store_index',
                                                     separator: "__SEPARATOR__",
@@ -85,13 +86,39 @@ get '/' do
   @total = 0
   @took = -1
   if @q
-    res = Store.find("content_store_index:\"#{@q}\" OR filename_index:\"#{@q}\"^2")
+    res = Store.find({
+                       bool: {
+                         should: [
+                           {
+                             "query-parser" => {
+                               "default-field" => "content_store_index",
+                               query: @q
+                             }
+                           },
+                           {
+                             "query-parser" => {
+                               "default-field" => "content_store_index",
+                               query: "\"#{@q}\""
+                             }
+                           },
+                           {
+                             "query-parser" => {
+                               "default-field" => "filename_index",
+                               query: @q,
+                               boost: 2
+                             },
+                           }
+                         ]
+                       }
+                     },explain: true)
+
     @total = res["total"]
     @took = res["took"]
     res["hits"].each do |h|
       @results << {
         score: h["_score"],
         highlight: h["_highlight"].escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>").gsub("__SEPARATOR__","\n---- cut ----\n"),
+        explain: h["_explain"],
         id: h["id"]
       }
     end
@@ -115,6 +142,7 @@ __END__
   %head
     %title= "bzzz."
     %link{:rel => :stylesheet, :type => :"text/css", :href => "//maxcdn.bootstrapcdn.com/bootswatch/3.2.0/spacelab/bootstrap.min.css"}
+    %script{src: "//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"}
   %body
     %form{ action: '/', method: 'GET' }
       %table{ border: 0, width: "100%", height: "10%" }
@@ -133,9 +161,11 @@ __END__
   - @results.each do |r|
     %tr
       %td
-        %pre
+        %pre.doc{ onclick: "$(this).children('.explain').toggle()" }
           = preserve do
             %a(href= "#{r[:id]}")> score: #{r[:score]} file: #{r[:id]}
+            %div.explain{style: 'display:none'}
+              #{r[:explain]}
             %br
             #{r[:highlight]}
 

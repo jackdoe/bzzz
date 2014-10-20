@@ -13,14 +13,16 @@
 (declare parse-query)
 (defn parse-lucene-query-parser
   ^Query
-  [analyzer & {:keys [query default-field default-operator]
-               :or {default-field "_default_", default-operator "and"}}]
+  [analyzer & {:keys [query default-field default-operator boost]
+               :or {default-field "_default_", default-operator "and" boost 1}}]
   (let [parser (doto
                    (QueryParser. *version* (as-str default-field) analyzer)
                  (.setDefaultOperator (case (as-str default-operator)
                                         "and" QueryParser/AND_OPERATOR
-                                        "or"  QueryParser/OR_OPERATOR)))]
-    (.parse parser query)))
+                                        "or"  QueryParser/OR_OPERATOR)))
+        query (.parse parser query)]
+    (.setBoost query boost)
+    query))
 
 (defn parse-bool-query
   ^Query

@@ -1,6 +1,6 @@
 # bzzz
 
-*work in progress* stateless clojure + lucene (4.9.1 at the moment) + jetty + ring search service
+*work in progress* stateless (clojure + lucene (4.9.1 at the moment) + jetty + ring) search service
 
 looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
 

@@ -1,9 +1,10 @@
 # bzzz
-(aka i-have-no-idea-what-i-am-doing)
 
-clojure + lucene (4.9 at the moment) + jetty + ring
+*work in progress* stateless clojure + lucene (4.9.1 at the moment) + jetty + ring search service
 
 looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
+
+
 
 ```
 $ lein trampoline run -- --port 3000 --directory /tmp/bzbzbz # by default 3000 and /tmp/BZZZ

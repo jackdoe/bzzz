@@ -281,7 +281,7 @@ STAT
 
 ```
 
-custom analyzers
+analyzers
 ===
 
 currently there is partial support for custom analyzers like:
@@ -318,6 +318,7 @@ tokenizers
 ---
 * whitespace * keyword `type: custom, tokenizer: "whitespace"` from token `test foo` produces `test` `foo`
 * keyword `type: custom, tokenizer: "keyword"` from token `test foo` produces `test foo`
+test
 * ngram `type: custom, min_gram 1, max_gram 30, tokenizer: "ngram"` from token `test` produces `t` `te` `tes` `test` `e` `es` `est` `s` `st` `t`
 * edge-ngram `type: custom, min_gram 1, max_gram 30, tokenizer: "edge-ngram"` from token `test` produces `t` `te` `tes` `test`
 * .. work in progress
@@ -325,7 +326,7 @@ tokenizers
 char-filters
 ---
 * pattern-replace `type: "pattern-replace", pattern: "ABC", "replacement": "ZZZ"`
-* html-strip `type: "html-strip`, escaped-tags:["br"]` from `bzbz<br><btml>` produces `bzbz<br>`
+* html-strip `type: "html-strip", escaped-tags:["br"]` from `bzbz<br><btml>` produces `bzbz<br>`
 * .. work in progress
 
 token-filters

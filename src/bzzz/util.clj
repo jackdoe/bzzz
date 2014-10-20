@@ -24,6 +24,11 @@
       default
       s)))
 
+(defn default-to [x val]
+  (if (nil? x)
+    val
+    x))
+
 (defn time-ms []
   (System/currentTimeMillis))
 

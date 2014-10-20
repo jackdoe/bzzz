@@ -40,7 +40,7 @@ class Store
   end
 
   def Store.analyzer
-    { content_store_index: {use: "standard"}, filename_index: {use: "standard"}}
+    { content_store_index: {type: "standard"}, filename_index: {type: "standard"}}
   end
 
   def Store.stat

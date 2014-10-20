@@ -15,11 +15,40 @@
                                         {:id "baz bar"
                                          :name_store_index_no_norms "bar baz"
                                          :name_index "with space"}]
-                       {:name_store_index_no_norms { :use "keyword" }})
+                       {:name_store_index_no_norms {:type "keyword" }})
           ret-1 (store test-index-name [{:id "WS baz bar"
                                          :name_store_index_no_norms "bar baz"
+                                         :name_ngram_store_index_no_norms "andurilXX"
+                                         :name_edge_ngram_store_index_no_norms "andurilXX"
+                                         :name_keyword_store_index_no_norms "hello worldXX"
+                                         :name_no_html_store_index_no_norms "bzbzXX<br><html>"
                                          :name_index "with space"}]
-                       {:name_store_index_no_norms { :use "whitespace" }})]
+                       {:name_store_index_no_norms {:type "whitespace" }
+                        :name_keyword_store_index_no_norms {:type "custom"
+                                                            :tokenizer "keyword"
+                                                            :char-filter [{:type "pattern-replace"
+                                                                           :pattern "X+",
+                                                                           :replacement "ZZ"}]}
+                        :name_no_html_store_index_no_norms {:type "custom"
+                                                            :tokenizer "whitespace"
+                                                            :char-filter [{:type "pattern-replace"
+                                                                           :pattern "X+",
+                                                                           :replacement "ZZ"}
+                                                                          {:type "html-strip",:escaped-tags ["br"]}]}
+                        :name_edge_ngram_store_index_no_norms {:type "custom"
+                                                               :tokenizer "edge-ngram"
+                                                               :char-filter [{:type "pattern-replace"
+                                                                              :pattern "X+",
+                                                                              :replacement "ZZ"}]
+                                                               :min_gram 1
+                                                               :max_gram 8}
+                        :name_ngram_store_index_no_norms {:type "custom"
+                                                          :tokenizer "ngram"
+                                                          :char-filter [{:type "pattern-replace"
+                                                                        :pattern "X+",
+                                                                        :replacement "ZZ"}]
+                                                          :min_gram 2
+                                                          :max_gram 4}})]
       (refresh-search-managers)
       (is (= true (ret-0 test-index-name)))
       (is (= true (ret-1 test-index-name)))))
@@ -30,6 +59,51 @@
       (is (= 1 (:total ret)))
       (is (nil? (:name_index (first (:hits ret)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))
+
+  (testing "search-no-html"
+    (let [ret (search :index test-index-name
+                      :query {:bool {:must [{:term {:field "name_no_html_store_index_no_norms", :value "bzbzZZ<br>"}}]
+                                     :must-not [{:term {:field "name_no_html_store_index_no_norms", :value "bzbzZZ<br><html>"}}]}})]
+      (is (= 1 (:total ret)))
+      (is (= "bzbzXX<br><html>" (:name_no_html_store_index_no_norms (first (:hits ret)))))))
+
+  (testing "search-keyword"
+    (let [ret (search :index test-index-name
+                      :query {:bool {:must [{:term {:field "name_keyword_store_index_no_norms", :value "hello worldZZ"}}]
+                                     :must-not [{:term {:field "name_keyword_store_index_no_norms", :value "hello worldXX"}}]}})]
+      (is (= 1 (:total ret)))
+      (is (= "hello worldXX" (:name_keyword_store_index_no_norms (first (:hits ret)))))))
+
+  (testing "search-ngram"
+    (let [ret (search :index test-index-name
+                      :query {:bool {:must [{:term {:field "name_ngram_store_index_no_norms", :value "an"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "and"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "andu"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "nd"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "ndu"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "ndur"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "du"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "dur"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "duri"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "ur"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "uri"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "uril"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "rilZ"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "ilZZ"}}]
+                                     :must-not [{:term {:field "name_ngram_store_index_no_norms", :value "anduril"}}
+                                                {:term {:field "name_ngram_store_index_no_norms", :value "andurilXX"}}]}})]
+      (is (= 1 (:total ret)))
+      (is (= "andurilXX" (:name_ngram_store_index_no_norms (first (:hits ret)))))))
+
+
+  (testing "search-edge-ngram"
+    (let [ret (search :index test-index-name
+                      :query {:bool {:must [{:term {:field "name_edge_ngram_store_index_no_norms", :value "an"}}
+                                            {:term {:field "name_edge_ngram_store_index_no_norms", :value "andurilZ"}}]
+                                     :must-not [{:term {:field "name_edge_ngram_store_index_no_norms", :value "andurilZZ"}}
+                                                {:term {:field "name_edge_ngram_store_index_no_norms", :value "andurilXX"}}]}})]
+      (is (= 1 (:total ret)))
+      (is (= "andurilXX" (:name_edge_ngram_store_index_no_norms (first (:hits ret)))))))
 
   (testing "search-changed-analyzer"
     (let [ret-kw (search :index test-index-name
@@ -57,7 +131,7 @@
 
   (testing "search-or-standard-and-highlight"
     (let [ret (search :index test-index-name
-                      :analyzer {:name_store_index {:use "standard"} }
+                      :analyzer {:name_store_index {:type "standard"} }
                       :highlight {:field "name_store_index"}
                       :query { :query-parser {:query "john@doe"
                                               :default-operator "or"

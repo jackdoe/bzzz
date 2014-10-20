@@ -92,7 +92,7 @@ POST
 {
     "analyzer": {
         "name_store_index": {
-            "use": "whitespace"
+            "type": "whitespace"
         }
     },
     "documents": [
@@ -122,7 +122,7 @@ GET
 {
     "analyzer": {
         "name_store_index": {
-            "use": "standard"
+            "type": "standard"
         }
     },
     "explain": false,
@@ -280,6 +280,58 @@ STAT
 }
 
 ```
+
+custom analyzers
+===
+
+currently there is partial support for custom analyzers like:
+```
+{
+    "field": {
+        "char-filter": [
+            {
+                "pattern": "X+",
+                "replacement": "ZZ",
+                "type": "pattern-replace"
+            },
+            {
+                "type": "html-strip"
+            }
+        ],
+        "tokenizer": "keyword",
+        "type": "custom"
+    }
+}
+
+```
+predefined analyzers
+---
+* whitespace `type: "whitespace"`
+* standard `type: "standard"`
+* keyword `type: "keyword"`
+* .. work in progress
+
+custom tokenfilter chain
+===
+
+tokenizers
+---
+* whitespace * keyword `type: custom, tokenizer: "whitespace"` from token `test foo` produces `test` `foo`
+* keyword `type: custom, tokenizer: "keyword"` from token `test foo` produces `test foo`
+* ngram `type: custom, min_gram 1, max_gram 30, tokenizer: "ngram"` from token `test` produces `t` `te` `tes` `test` `e` `es` `est` `s` `st` `t`
+* edge-ngram `type: custom, min_gram 1, max_gram 30, tokenizer: "edge-ngram"` from token `test` produces `t` `te` `tes` `test`
+* .. work in progress
+
+char-filters
+---
+* pattern-replace `type: "pattern-replace", pattern: "ABC", "replacement": "ZZZ"`
+* html-strip `type: "html-strip`, escaped-tags:["br"]` from `bzbz<br><btml>` produces `bzbz<br>`
+* .. work in progress
+
+token-filters
+---
+* .. work in progress
+
 ## License
 
 Distributed under the Eclipse Public License either version 1.0 or (at

@@ -10,6 +10,7 @@
                                      Explanation ComplexExplanation
                                      MatchAllDocsQuery
                                      Collector TopScoreDocCollector TopDocsCollector)))
+(set! *warn-on-reflection* true)
 (declare parse-query)
 (defn parse-lucene-query-parser
   ^Query
@@ -26,11 +27,13 @@
 
 (defn parse-bool-query
   ^Query
-  [analyzer & {:keys [must should minimum-should-match boost]
-               :or {minimum-should-match 0 should [] must [] boost 1}}]
+  [analyzer & {:keys [must must-not should minimum-should-match boost]
+               :or {minimum-should-match 0 should [] must [] must-not [] boost 1}}]
   (let [top ^BooleanQuery (BooleanQuery. true)]
     (doseq [q must]
       (.add top (parse-query q analyzer) BooleanClause$Occur/MUST))
+    (doseq [q must-not]
+      (.add top (parse-query q analyzer) BooleanClause$Occur/MUST_NOT))
     (doseq [q should]
       (.add top (parse-query q analyzer) BooleanClause$Occur/SHOULD))
     (.setMinimumNumberShouldMatch top minimum-should-match)

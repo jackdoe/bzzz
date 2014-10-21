@@ -2,13 +2,12 @@
 
 *work in progress* stateless (clojure + lucene-4.9.1 + jetty + ring) search service
 
-
-# run
+## run
 ```
 $ lein trampoline run -- --directory /tmp/bzbzbz
 ```
 
-# store something
+## store something
 
 ```
 $ curl -XPOST http://localhost:3000/ -d '
@@ -25,7 +24,7 @@ $ curl -XPOST http://localhost:3000/ -d '
 }'
 ```
 
-# search it
+## search it
 
 ```
 $ curl -XGET http://localhost:3000/ -d '
@@ -35,7 +34,7 @@ $ curl -XGET http://localhost:3000/ -d '
 }'
 ```
 
-# \o/
+## \o/
 
 some more examples.. and random ramblings.
 ```

@@ -95,7 +95,7 @@
 (defn refresh-search-managers []
   (locking mapping*
     (doseq [[index ^SearcherManager manager] @mapping*]
-      (log/info "refreshing: " index " " manager)
+      (log/debug "refreshing: " index " " manager)
       (.maybeRefresh manager))))
 
 (defn bootstrap-indexes []

@@ -333,6 +333,11 @@ token-filters
 ---
 * .. work in progress
 
+auto identifier host round robbin
+===
+
+if you add `--identifier "something-that-identifies-the-data-for-this-process"` and `--hosts=host_a:port,host_b:port...` `bzzz` will automatically query those hosts for their identifier and you can just send queries with `"hosts:["identifier_a","identifier_b"]"` and it will query random hosts who have < 10 second stamp in the last probe for those specific identifiers
+
 ## License
 
 Distributed under the Eclipse Public License either version 1.0 or (at

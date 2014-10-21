@@ -100,8 +100,9 @@
                        (:analyzer input))
     :delete (index/delete-from-query (:index input)
                                      (:query input))
-    :get (if (= "/_stat" uri)
-           (stat)
+    :get (case uri
+           "/_stat" (stat)
+           "/favicon.ico" "" ;; XXX
            (mapply index/search input))
     :put (search-many (:hosts input) (dissoc input :hosts))
     :patch (merge-discover-hosts (default-to (:discover-hosts input) {}))

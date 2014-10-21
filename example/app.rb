@@ -29,7 +29,7 @@ class Store
                                        query: query,
                                        explain: options[:explain] || false,
                                        analyzer: Store.analyzer,
-                                       highlight: { field: options[:highlight] || 'content_store_index',
+                                       highlight: { field: options[:highlight] || 'content',
                                                     separator: "__SEPARATOR__",
                                                     pre: "__HSTART__",
                                                     post: "__HEND__",
@@ -40,7 +40,19 @@ class Store
   end
 
   def Store.analyzer
-    { content_store_index: {type: "standard"}, filename_index: {type: "standard"}}
+    {
+      content: {
+        type: "custom",
+        tokenizer: "letter",
+        filter: [
+          {type: "lowercase"},
+          {type: "ngram",min_gram: 3,max_gram: 4}
+        ]
+      },
+      filename: {
+        type: "standard"
+      }
+    }
   end
 
   def Store.stat
@@ -53,12 +65,11 @@ def walk_and_index(path, every)
   docs = []
   puts "indexing #{path}/**/*\.c"
   Dir.glob("#{path}/**/*\.c").each do |f|
-    blob = File.read(f)
     name = f.gsub(path,'')
     doc = {
       id: name,
-      content_store_index: blob,
-      filename_index: name
+      content: File.read(f),
+      filename: name
     }
     docs << doc
     if docs.length > every
@@ -71,7 +82,7 @@ end
 
 if ARGV[0] == 'do-index'
   ["/usr/src/linux"].each do |dir|
-    walk_and_index(dir,10000) do |slice|
+    walk_and_index(dir,1000) do |slice|
       puts "sending #{slice.length} docs"
       Store.save(slice)
     end
@@ -91,19 +102,19 @@ get '/' do
                          should: [
                            {
                              "query-parser" => {
-                               "default-field" => "content_store_index",
+                               "default-field" => "content",
                                query: @q
                              }
                            },
                            {
                              "query-parser" => {
-                               "default-field" => "content_store_index",
+                               "default-field" => "content",
                                query: "\"#{@q}\""
                              }
                            },
                            {
                              "query-parser" => {
-                               "default-field" => "filename_index",
+                               "default-field" => "filename",
                                query: @q,
                                boost: 2
                              },
@@ -175,4 +186,4 @@ __END__
 %hr
 %pre
   = preserve do
-    #{@doc["content_store_index"].escape}
+    #{@doc["content"].escape}

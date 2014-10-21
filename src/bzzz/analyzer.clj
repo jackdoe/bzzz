@@ -95,7 +95,7 @@
 
 ;; bloody hell this is awesome!
 (defn token-filter-chain [obj]
-  (let [tokenizer (:tokenizer obj)
+  (let [tokenizer (need :tokenizer obj "need tokenizer: 'ngram|edge-ngram|whitespace|keyword...'")
         filter (default-to (:filter obj) [])]
     (proxy [Analyzer][]
       (createComponents [^String field ^Reader reader]
@@ -121,4 +121,4 @@
 (def analyzer* (atom (parse-analyzer {}))) ;; FIXME - move to top
 
 (defn analyzer-stat []
-  (.toString ^PerFieldAnalyzerWrapper @analyzer*))
+  { :last-index-analyzer (.toString ^PerFieldAnalyzerWrapper @analyzer*) })

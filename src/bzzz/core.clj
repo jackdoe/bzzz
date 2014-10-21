@@ -165,7 +165,7 @@
     :default const/default-port
     :parse-fn #(Integer/parseInt %)
     :validate [ #(port-validator %) "Must be a number between 0 and 65536"]]
-   ["-x" "--accept NUM-IN-SECONDS" "only consider discovered hosts who refreshed witihin the last X seconds"
+   ["-x" "--acceptable-discover-time-diff NUM-IN-SECONDS" "only consider discovered hosts who refreshed witihin the last X seconds"
     :id :acceptable-discover-time-diff
     :default const/default-acceptable-discover-time-diff
     :parse-fn #(Integer/parseInt %)
@@ -185,8 +185,6 @@
     (when (not (nil? errors))
       (log/fatal errors)
       (System/exit 1))
-    (log/info options)
-
     ;; split uses java.util.regex.Pattern/split so
     ;; bzzz.core=> (split "" #",")
     ;;[""]
@@ -200,9 +198,9 @@
 
   (index/bootstrap-indexes)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index/shutdown)))
-  (log/info "starting bzzz[" @identifier* "] on port" @port* "with index root directory" @index/root* "with discover hosts" @discover-hosts* "acceptable-discover-time-diff: " @acceptable-discover-time-diff*)
+  (log/info "starting bzzz --identifier" (as-str @identifier*) "--port" @port* "--directory" @index/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
   (every 5000 #(index/refresh-search-managers) periodic-pool :desc "search refresher")
   (every 1000 #(swap! timer* inc) periodic-pool :desc "timer")
   (every 1000 #(discover) periodic-pool :desc "periodic discover")
-  (every 10000 #(log/info @timer* @identifier* @discover-hosts* @peers*) periodic-pool :desc "dump")
+  (every 10000 #(log/info "up:" @timer* @identifier* @discover-hosts* @peers*) periodic-pool :desc "dump")
   (run-jetty handler {:port @port*}))

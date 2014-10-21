@@ -2,13 +2,43 @@
 
 *work in progress* stateless (clojure + lucene-4.9.1 + jetty + ring) search service
 
-looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
 
+# run
+```
+$ lein trampoline run -- --directory /tmp/bzbzbz
+```
 
+# store something
 
 ```
-$ lein trampoline run -- --port 3000 --directory /tmp/bzbzbz # by default 3000 and /tmp/BZZZ
+$ curl -XPOST http://localhost:3000/ -d '
+{
+    "documents": [
+        {
+            "name": "johny doe"
+        },
+        {
+            "name": "jack doe"
+        }
+    ],
+    "index": "bzbz"
+}'
+```
 
+# search it
+
+```
+$ curl -XGET http://localhost:3000/ -d '
+{
+    "index": "bzbz",
+    "query": "name:doe"
+}'
+```
+
+# \o/
+
+some more examples.. and random ramblings.
+```
 $ curl -XPOST http://localhost:3000/ -d '
 {
     "documents": [
@@ -337,6 +367,13 @@ auto identifier host round robbin
 ===
 
 if you add `--identifier "something-that-identifies-the-data-for-this-process"` and `--hosts=host_a:port,host_b:port...` `bzzz` will automatically query those hosts for their identifier and you can just send queries with `"hosts:["identifier_a","identifier_b"]"` and it will query random hosts who have < 10 second stamp in the last probe for those specific identifiers
+
+thanks to
+===
+* stackoverflow
+* looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
+* http://lucene.apache.org/core/4_9_1/core/overview-summary.html
+* http://clojuredocs.org/
 
 ## License
 

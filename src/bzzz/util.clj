@@ -34,3 +34,9 @@
 
 (defn time-took [start]
   (- (time-ms) start))
+
+(defn need [key obj ex]
+  (let [found (key obj)]
+    (if (not found)
+      (throw (Throwable. ex)))
+    found))

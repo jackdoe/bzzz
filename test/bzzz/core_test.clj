@@ -44,6 +44,7 @@
                                                                :max_gram 8}
                         :name_ngram_store_index_no_norms {:type "custom"
                                                           :tokenizer "ngram"
+                                                          :filter [{:type "lowercase"}]
                                                           :char-filter [{:type "pattern-replace"
                                                                         :pattern "X+",
                                                                         :replacement "ZZ"}]
@@ -88,9 +89,10 @@
                                             {:term {:field "name_ngram_store_index_no_norms", :value "ur"}}
                                             {:term {:field "name_ngram_store_index_no_norms", :value "uri"}}
                                             {:term {:field "name_ngram_store_index_no_norms", :value "uril"}}
-                                            {:term {:field "name_ngram_store_index_no_norms", :value "rilZ"}}
-                                            {:term {:field "name_ngram_store_index_no_norms", :value "ilZZ"}}]
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "rilz"}}
+                                            {:term {:field "name_ngram_store_index_no_norms", :value "ilzz"}}]
                                      :must-not [{:term {:field "name_ngram_store_index_no_norms", :value "anduril"}}
+                                                {:term {:field "name_ngram_store_index_no_norms", :value "andurilxx"}}
                                                 {:term {:field "name_ngram_store_index_no_norms", :value "andurilXX"}}]}})]
       (is (= 1 (:total ret)))
       (is (= "andurilXX" (:name_ngram_store_index_no_norms (first (:hits ret)))))))

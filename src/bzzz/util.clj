@@ -2,7 +2,7 @@
 
 (defn as-str ^String [x]
   (if (keyword? x)
-    (name x)
+    (subs (str x) 1)
     (str x)))
 
 (defn mapply [f & args]

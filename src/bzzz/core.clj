@@ -20,7 +20,7 @@
 (def periodic-pool (mk-pool))
 (def timer* (atom 0))
 (def port* (atom const/default-port))
-(def acceptable-discover-time-diff 10)
+(def acceptable-discover-time-diff* (atom const/default-acceptable-discover-time-diff))
 (def identifier* (atom const/default-identifier))
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
@@ -30,7 +30,7 @@
     (let [all-possible ((keyword identifier) @peers*)]
       (if all-possible
         (let [possible (filter #(< (- @timer* (second %))
-                                   acceptable-discover-time-diff) all-possible)]
+                                   @acceptable-discover-time-diff*) all-possible)]
           (if (= (count possible) 0)
             (throw (Throwable. (as-str identifier)))
             (first (rand-nth possible))))
@@ -121,7 +121,6 @@
          :headers {"Content-Type" "text/plain"}
          :body ex}))))
 
-
 (defn update-discover-state [host]
   (try
     (log/debug "sending discovery query to" host)
@@ -156,7 +155,6 @@
     (doseq [host hosts]
       (async/<!! c))))
 
-
 (defn port-validator [port]
   (< 0 port 0x10000))
 
@@ -166,10 +164,15 @@
     :default const/default-port
     :parse-fn #(Integer/parseInt %)
     :validate [ #(port-validator %) "Must be a number between 0 and 65536"]]
+   ["-x" "--accept NUM-IN-SECONDS" "only consider discovered hosts who refreshed witihin the last X seconds"
+    :id :acceptable-discover-time-diff
+    :default const/default-acceptable-discover-time-diff
+    :parse-fn #(Integer/parseInt %)
+    :validate [ #(> % 0) "Must be a number > 0"]]
    ["-i" "--identifier 'string'" "identifier used for auto-discover and resolving"
     :id :identifier
     :default const/default-identifier]
-   ["-o" "--hosts host:port,host:port" "hosts that will be queried for identifiers for auto-resolve"
+   ["-o" "--hosts host:port,host:port" "initial hosts that will be queried for identifiers for auto-resolve"
     :id :discover-hosts
     :default ""]
    ["-d" "--directory DIRECTORY" "directory that will contain all the indexes"
@@ -189,13 +192,14 @@
     (merge-discover-hosts (into {} (for [host (filter #(> (count %) 0)
                                                       (split (:discover-hosts options) #","))]
                                      [host true])))
+    (reset! acceptable-discover-time-diff* (:acceptable-discover-time-diff options))
     (reset! identifier* (keyword (:identifier options)))
     (reset! index/root* (:directory options))
     (reset! port* (:port options)))
 
   (index/bootstrap-indexes)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index/shutdown)))
-  (log/info "starting bzzz[" @identifier* "] on port" @port* "with index root directory" @index/root* "with discover hosts" @discover-hosts*)
+  (log/info "starting bzzz[" @identifier* "] on port" @port* "with index root directory" @index/root* "with discover hosts" @discover-hosts* "acceptable-discover-time-diff: " @acceptable-discover-time-diff*)
   (every 5000 #(index/refresh-search-managers) periodic-pool :desc "search refresher")
   (every 1000 #(swap! timer* inc) periodic-pool :desc "timer")
   (every 1000 #(discover) periodic-pool :desc "periodic discover")

@@ -32,12 +32,6 @@
   (with-open [writer (new-index-writer name)]
     (DirectoryReader/open ^IndexWriter writer false)))
 
-(defn index? [name]
-  (if (or (substring? "_index" name)
-          (= name id-field))
-    true
-    false))
-
 (defn analyzed? [name]
   (if (or (substring? "_not_analyzed" name)
           (= name id-field))
@@ -50,16 +44,26 @@
     false
     true))
 
+(defn stored? [name]
+  (if (and (substring? "_no_store" name)
+          (not (= name id-field)))
+    false
+    true))
+
+(defn indexed? [name]
+  (if (and (substring? "_no_index" name)
+          (not (= name id-field)))
+    false
+    true))
+
 (defn- add-field [document key value]
   (let [ str-key (as-str key) ]
     (.add ^Document document
           (Field. str-key (as-str value)
-                  (if (or
-                       (substring? "_store" str-key)
-                       (= str-key id-field))
+                  (if (stored? str-key)
                     Field$Store/YES
                     Field$Store/NO)
-                  (if (index? str-key)
+                  (if (indexed? str-key)
                     (case [(analyzed? str-key) (norms? str-key)]
                       [true true] Field$Index/ANALYZED
                       [true false] Field$Index/ANALYZED_NO_NORMS

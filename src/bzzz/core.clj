@@ -75,6 +75,7 @@
    :analyzer (analyzer/analyzer-stat)
    :identifier @identifier*
    :discover-hosts @discover-hosts*
+   :peers @peers*
    :timer @timer*})
 
 (defn validate-discover-url [x]

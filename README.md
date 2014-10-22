@@ -13,12 +13,8 @@ $ lein trampoline run -- --directory /tmp/bzbzbz
 $ curl -XPOST http://localhost:3000/ -d '
 {
     "documents": [
-        {
-            "name": "johny doe"
-        },
-        {
-            "name": "jack doe"
-        }
+        { "name": "john doe" },
+        { "name": "jack doe" }
     ],
     "index": "bzbz"
 }'
@@ -35,6 +31,25 @@ $ curl -XGET http://localhost:3000/ -d '
 ```
 
 ## \o/
+
+### you reap what you sow
+
+imagine simplified inverted index representation:
+
+```
+data = [ { name: jack doe }, { name: john doe }]
+                 0                   1
+inverted = {
+  name: {
+    jack: [0],
+    john: [1],
+    doe:  [0,1]
+  }
+}
+```
+queries are just operations on term-sets, for example `jack AND doe` is `([0] AND [0,1])` which results in `[0]`.
+Analyzers stand between your data and the inverted index: `jack doe -> WhiteSpaceTokenizer -> [jack] [doe]`, you you can also create something like a chain of token-modifiers/emitters so you have `input -> tokenizer -> tokenfilter -> tokenfilter... tokens...` like `Jack Doe -> WhiteSpaceTokenizer -> [Jack][Doe] -> LowerCaseTokenFilter -> [jack][doe]`
+
 
 some more examples.. and random ramblings.
 ```

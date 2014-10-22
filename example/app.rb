@@ -41,13 +41,16 @@ class Store
 
   def Store.analyzer
     {
+#      content: {
+#        type: "custom",
+#        tokenizer: "letter",
+#        filter: [
+#          {type: "lowercase"},
+#          {type: "ngram",min_gram: 3,max_gram: 5}
+#        ]
+#      },
       content: {
-        type: "custom",
-        tokenizer: "letter",
-        filter: [
-          {type: "lowercase"},
-          {type: "ngram",min_gram: 3,max_gram: 4}
-        ]
+        type: "standard"
       },
       filename: {
         type: "standard"
@@ -63,8 +66,9 @@ end
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
-  puts "indexing #{path}/**/*\.c"
-  Dir.glob("#{path}/**/*\.c").each do |f|
+  pattern = "#{path}/**/*\.{c,java}"
+  puts "indexing #{pattern}"
+  Dir.glob(pattern).each do |f|
     name = f.gsub(path,'')
     doc = {
       id: name,
@@ -81,7 +85,10 @@ def walk_and_index(path, every)
 end
 
 if ARGV[0] == 'do-index'
-  ["/usr/src/linux"].each do |dir|
+  v = ARGV
+  v.shift
+  v = ["/usr/src/linux"] unless ARGV.count > 0
+  v.each do |dir|
     walk_and_index(dir,1000) do |slice|
       puts "sending #{slice.length} docs"
       Store.save(slice)
@@ -97,31 +104,31 @@ get '/' do
   @total = 0
   @took = -1
   if @q
-    res = Store.find({
-                       bool: {
-                         should: [
-                           {
-                             "query-parser" => {
-                               "default-field" => "content",
-                               query: @q
-                             }
-                           },
-                           {
-                             "query-parser" => {
-                               "default-field" => "content",
-                               query: "\"#{@q}\""
-                             }
-                           },
-                           {
-                             "query-parser" => {
-                               "default-field" => "filename",
-                               query: @q,
-                               boost: 2
-                             },
-                           }
-                         ]
-                       }
-                     },explain: true)
+    queries = []
+    queries << {
+      "query-parser" => {
+        "defailt-operator" => "and",
+        "default-field" => "content",
+        query: @q
+      }
+    }
+
+    queries << {
+      "query-parser" => {
+        "default-field" => "content",
+        query: "\"#{@q}\""
+      }
+    } unless @q['"']
+
+    queries << {
+      "query-parser" => {
+        "default-field" => "filename",
+        query: @q,
+        boost: 2
+      }
+    }
+
+    res = Store.find({ bool: { should: queries } },explain: true)
 
     @total = res["total"]
     @took = res["took"]
@@ -134,6 +141,7 @@ get '/' do
       }
     end
   end
+
   haml :index
 end
 

@@ -4,7 +4,7 @@ require 'json'
 require 'sinatra'
 require 'haml'
 require 'cgi'
-
+PER_PAGE = 10
 class String
   def escape
     CGI::escapeHTML(self)
@@ -25,6 +25,7 @@ class Store
   end
 
   def Store.find(query, options = {})
+    p options
     JSON.parse(Curl.http(:GET, @host, {index: @index,
                                        query: query,
                                        explain: options[:explain] || false,
@@ -35,7 +36,7 @@ class Store
                                                     post: "__HEND__",
                                                   },
                                        page: options[:page] || 0,
-                                       size: options[:size] || 10,
+                                       size: options[:size] || PER_PAGE,
                                        refresh: options[:refresh] || false}.to_json).body_str)
   end
 
@@ -66,7 +67,7 @@ end
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
-  pattern = "#{path}/**/*\.{c,java}"
+  pattern = "#{path}/**/*\.{c,java,pm,pl}"
   puts "indexing #{pattern}"
   Dir.glob(pattern).each do |f|
     name = f.gsub(path,'')
@@ -103,6 +104,9 @@ get '/' do
   @results = []
   @total = 0
   @took = -1
+  @page = @params[:page].to_i || 0
+  @pages = 0
+
   if @q
     queries = []
     queries << {
@@ -127,18 +131,23 @@ get '/' do
         boost: 2
       }
     }
-
-    res = Store.find({ bool: { should: queries } },explain: true)
-
-    @total = res["total"]
-    @took = res["took"]
-    res["hits"].each do |h|
-      @results << {
-        score: h["_score"],
-        highlight: h["_highlight"].escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>").gsub("__SEPARATOR__","\n---- cut ----\n"),
-        explain: h["_explain"],
-        id: h["id"]
-      }
+    begin
+      res = Store.find({ bool: { should: queries } },explain: true, page: @page)
+      @err = nil
+      @total = res["total"]
+      @took = res["took"]
+      @pages = @total/PER_PAGE
+      res["hits"].each do |h|
+        @results << {
+          score: h["_score"],
+          highlight: h["_highlight"].escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>").gsub("__SEPARATOR__","\n---- cut ----\n"),
+          explain: h["_explain"],
+          id: h["id"]
+        }
+      end
+    rescue Exception => ex
+      @total = -1
+      @err = ex.message
     end
   end
 
@@ -146,7 +155,10 @@ get '/' do
 end
 
 get '/*' do
+  @q = @params[:q]
   @id = @request.path
+  @pages = 0
+  @page = 0
   res = Store.find({ term: { field: "id", value: @id }})
   error 404 if res["total"] == 0
   @doc = res["hits"].first
@@ -164,11 +176,16 @@ __END__
     %script{src: "//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"}
   %body
     %form{ action: '/', method: 'GET' }
-      %table{ border: 0, width: "100%", height: "10%" }
+      %table{ border: 0, width: "100%", height: "8%" }
         %tr{ align: "center", valign: "center" }
           %td
             %input{ type: "text", name: "q", value: @q }
             %input{ type: "submit", name: "submit", value: "search" }
+            - if @pages > 0
+              - if @page - 1 > -1
+                %a(href= "?q=#{@q}&page=#{@page - 1}")> &nbsp;prev
+              - if @page < @pages * PER_PAGE
+                %a(href= "?q=#{@q}&page=#{@page + 1}")> &nbsp;next
     %hr
     = yield
 
@@ -176,13 +193,23 @@ __END__
 %table{ border: 0, width: "100%", height: "100%" }
   %tr
     %td{collspan: 2, align: "center", valign: "center" }
-      total: #{@total}, took: #{@took}ms
+      total: #{@total}, took: #{@took}ms, pages: #{@pages}, page: #{@page}
+      - if @err
+        -if @err["ParseException"]
+          %br
+          oops, seems like we received a <b>ParseException</b>, some type of queries are not parsable by the 
+          %a(href="https://lucene.apache.org/core/4_9_0/queryparser/org/apache/lucene/queryparser/classic/QueryParser.html") Lucene QueryParser
+          %br
+          For example <a href="?q=Time::HiRes">Time::HiRes</a> breaks it because of <b>:</b>. You can search for those using quotes like: <a href='?q="Time::HiRes"'>"Time::HiRes"</a>
+
+        %br
+        <pre>#{@err}</pre>
   - @results.each do |r|
     %tr
       %td
         %pre.doc{ onclick: "$(this).children('.explain').toggle()" }
           = preserve do
-            %a(href= "#{r[:id]}")> score: #{r[:score]} file: #{r[:id]}
+            %a(href= "#{r[:id]}?q=#{@q}")> score: #{r[:score]} file: #{r[:id]}
             %div.explain{style: 'display:none'}
               #{r[:explain]}
             %br
@@ -193,5 +220,4 @@ __END__
   #{@id}
 %hr
 %pre
-  = preserve do
-    #{@doc["content"].escape}
+  #{@doc["content"].escape}

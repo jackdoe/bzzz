@@ -46,13 +46,13 @@
 
 (defn stored? [name]
   (if (and (substring? "_no_store" name)
-          (not (= name id-field)))
+           (not (= name id-field)))
     false
     true))
 
 (defn indexed? [name]
   (if (and (substring? "_no_index" name)
-          (not (= name id-field)))
+           (not (= name id-field)))
     false
     true))
 
@@ -160,15 +160,15 @@
           {:keys [field max-fragments separator fragments-key pre post]} config
           highlighter (Highlighter. (SimpleHTMLFormatter. pre post) scorer)]
       (fn [m]
-          (let [str ((keyword field) m)
-                token-stream (.tokenStream ^Analyzer analyzer
-                                           (name field)
-                                           (StringReader. str))]
-            (.getBestFragments ^Highlighter highlighter
-                               ^TokenStream token-stream
-                               ^String str
-                               (int max-fragments)
-                               ^String separator))))
+        (let [str (need (keyword field) m "highlight field not found in doc")
+              token-stream (.tokenStream ^Analyzer analyzer
+                                         (as-str field)
+                                         (StringReader. str))]
+          (.getBestFragments ^Highlighter highlighter
+                             ^TokenStream token-stream
+                             ^String str
+                             (int max-fragments)
+                             ^String separator))))
     (constantly nil)))
 
 (defn search

@@ -144,6 +144,15 @@
       (is (= "john doe" (:name (first (:hits ret)))))
       (is (= "jack doe foo" (:name (last (:hits ret)))))))
 
+  (testing "search-or-standard-and-highlight-missing-field"
+    (is (thrown-with-msg? Throwable #"highlight field not found in doc"
+                          (search :index test-index-name
+                                  :analyzer {:name {:type "standard"} }
+                                  :highlight {:field "name_should_be_missing"}
+                                  :query { :query-parser {:query "john@doe"
+                                                          :default-operator "or"
+                                                          :default-field "name"}}))))
+
   (testing "search-boost"
     (let [ret (search :index test-index-name
                       :explain false

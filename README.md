@@ -49,8 +49,26 @@ inverted = {
 ```
 queries are just operations on term-sets, for example `jack AND doe` is `([0] AND [0,1])` which results in `[0]`.
 
-Analyzers stand between your data and the inverted index: `jack doe -> WhiteSpaceTokenizer -> [jack] [doe]`, you you can also create something like a chain of token-modifiers/emitters so you have `input -> tokenizer -> tokenfilter -> tokenfilter... tokens...` like `Jack Doe -> WhiteSpaceTokenizer -> [Jack][Doe] -> LowerCaseTokenFilter -> [jack][doe]`
+Analyzers stand between your data and the inverted index: `jack doe -> WhiteSpaceTokenizer -> [jack] [doe]`, you you can also create something like a chain of token-modifiers/emitters: `input -> tokenizer -> tokenfilter -> tokenfilter...`
 
+```
+# example custom analyzer:
+{ "type":"custom","tokenizer":"whitespace","filters":[{"type":"lowercase"}]}
+
+Jack Doe
+  -> WhiteSpaceTokenizer ->
+     [Jack]
+        -> LowerCaseTokenFilter
+           [jack]
+     [Doe]
+        -> LowerCaseTokenFilter
+           [doe]
+```
+
+So using this token filter chain, when you give it a string `Jack Doe`, it will produce the terms `jack` and `doe`.
+Lets say that your query is `Doe`, if you do `{"term":{"field":"name", "value":"Doe"}}`, Lucene will lookup all documents in the `inverted` index that have the term `Doe`, but your custom analyzer will never produce that term because it actually `lowercase`s all the input, of course if you look for `{"term":{"field":"name", "value":"doe"}}` it will work, because this is the term that was produced, and at index time the `Jack Doe` document's id was added to the list of document ids that have the term `doe` in them.
+
+---------------------
 
 some more examples.. and random ramblings.
 ```

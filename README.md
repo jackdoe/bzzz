@@ -74,7 +74,8 @@ Lets say that your query is `Doe`, if you do `{"term":{"field":"name", "value":"
 #### predefined
 
 BZZZ supports some predefined analyzers like the `StandardAnalyzer`, `WhitespaceAnalyzer` and `KeywordAnalyzer`.
-jut by sending
+
+Example:
 
 ```
 {
@@ -83,7 +84,7 @@ jut by sending
 }
 ```
 
-the `StandardAnalyzer` will be used used when indexing documents with that field, or doing query parsing using Lucene's `QueryParser`.
+`StandardAnalyzer` will be used used when indexing documents with that field, or doing query parsing using Lucene's `QueryParser`.
 
 #### custom
 
@@ -125,8 +126,8 @@ with the search string "JackX", the custom analyzer will produce:
 * ckz
 * kz
 
-Notice how all terms are `lowercased`, and the `X` in the end is replaced with `z`, also you can see
-that we made our regex case sensitive, because char-filters are executed before the tokenizer and the token filters.
+Notice how all terms are `lowercased`, and the `X` in the end is replaced with `z`, also you can see that we made our regex case sensitive, because char-filters are executed before the tokenizer and the token filters.
+
 If we use the same analyzer with lucene's QueryParser and search for 'jackx' it will look like this:
 
 ```
@@ -172,6 +173,7 @@ internally this will be turned into:
 ```
 
 in the end, everything is a term, if you know what your modifier emmits you can search for it.
+
 At the moment I am working on adding more and more analyzers/tokenizers/tokenfilters/charfilters into BZZZ.
 
 

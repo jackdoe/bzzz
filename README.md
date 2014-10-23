@@ -47,7 +47,7 @@ inverted = {
   }
 }
 ```
-queries are just operations on term-sets, for example `jack AND doe` is `([0] AND [0,1])` which results in `[0]`.
+queries are just operations on term-sets, for example `jack AND doe` is `([0] AND [0,1])` which results in `0: data[0] - { name: jack doe }`.
 
 Analyzers stand between your data and the inverted index: `jack doe -> WhiteSpaceTokenizer -> [jack] [doe]`, you you can also create something like a chain of token-modifiers/emitters: `input -> tokenizer -> tokenfilter -> tokenfilter...`
 

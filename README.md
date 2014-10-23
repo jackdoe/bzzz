@@ -262,7 +262,7 @@ Lucene's NIOFSDirectory does file based locking, so you can write to the same fi
 
 ### IndexSearcher/SearcherManager
 
-on every _query_ request comes, BZZZ will check if there is already a `SearcherManager` servicing this index, if not it will create new SearcherManager, and then acquire() an IndexSearcher for the current request
+on every _query_ request BZZZ will check if there is already a `SearcherManager` servicing this index, if not it will create new SearcherManager, and then acquire() an IndexSearcher for the current request
 
 _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data changed for example)
 

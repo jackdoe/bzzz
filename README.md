@@ -204,7 +204,7 @@ PUT:
     "query": "name:jack",
 }
 ```
-(of course instead of __shard_0/1 you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the @peers* map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
+(of course instead of `__shard_0/1` you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the @peers* map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
 
 In the `hosts` array you can also add arrays like:
 ```
@@ -223,7 +223,7 @@ PUT:
 }
 ```
 
-so in this case, the host that you send the request to, will fire multi-search request to __shard0, and ask it for `["__shard_0","__shard_1"]` and another multi-search reques to __shard_2 and ask it to `["__shard_2","__shard_3"]`, so in the end you will query 1 box, which will query 2 boxes, and each of those will query 2 boxes (including themselves).
+so in this case, the host that you send the request to, will fire multi-search request to `__shard0`, and ask it for `["__shard_0","__shard_1"]` and another multi-search reques to `__shard_2` and ask it to `["__shard_2","__shard_3"]`, so in the end you will query 1 box, which will query 2 boxes, and each of those will query 2 boxes (including themselves).
 
 This can can become quite hard to grasp `["a","b",["c","d","e",["f,"g","h",["z","x","c"]]]]` for example.
 

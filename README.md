@@ -129,7 +129,12 @@ If we use the same analyzer with lucene's QueryParser and search for 'jackx' it 
 
 ```
 {
-   "query": { "query-parser": { "query": "some_field_name:jack, "default-operator":"and" } },
+   "query": {
+              "query-parser": { 
+                  "query": "some_field_name:jack,
+                  "default-operator":"and" 
+              } 
+            },
    analyzer... (same sa above)
 }
 

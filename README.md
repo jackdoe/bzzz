@@ -49,14 +49,14 @@ inverted = {
 ```
 queries are just operations on term-sets, for example `jack AND doe` is `([0] AND [0,1])` which results in `0: data[0] - { name: jack doe }`.
 
-Analyzers stand between your data and the inverted index: `jack doe -> WhiteSpaceTokenizer -> [jack] [doe]`, you you can also create something like a chain of token-modifiers/emitters: `input -> tokenizer -> tokenfilter -> tokenfilter...`
+Analyzers stand between your data and the inverted index: `jack doe -> whitespaceTokenizer -> [jack] [doe]`, you you can also create something like a chain of token-modifiers/emitters: `input -> tokenizer -> tokenfilter -> tokenfilter...`
 
 ```
 # example custom analyzer:
 { "type":"custom","tokenizer":"whitespace","filters":[{"type":"lowercase"}]}
 
 Jack Doe
-  -> WhiteSpaceTokenizer ->
+  -> whitespaceTokenizer ->
      [Jack]
         -> LowerCaseTokenFilter
            [jack]
@@ -67,6 +67,118 @@ Jack Doe
 
 So using this token filter chain, when you give it a string `Jack Doe`, it will produce the terms `jack` and `doe`.
 Lets say that your query is `Doe`, if you do `{"term":{"field":"name", "value":"Doe"}}`, Lucene will lookup all documents in the `inverted` index that have the term `Doe`, but your custom analyzer will never produce that term because it actually `lowercase`s all the input, of course if you look for `{"term":{"field":"name", "value":"doe"}}` it will work, because this is the term that was produced, and at index time the `Jack Doe` document's id was added to the list of document ids that have the term `doe` in them.
+
+
+### analyzers
+
+#### predefined
+
+BZZZ supports some predefined analyzers like the `StandardAnalyzer`, `WhitespaceAnalyzer` and `KeywordAnalyzer`.
+jut by sending
+
+```
+{
+    "query": { "term":{ "field":"some_field_name","value":"joe" } }, (or indexing documents: [{"some_field_name":"joe doe"}])
+    "analyzer": { "some_field_name": { "type": "standard" } }
+}
+```
+
+the `StandardAnalyzer` will be used used when indexing documents with that field, or doing query parsing using Lucene's `QueryParser`.
+
+#### custom
+
+There is also an potion to create your own token-filter-chain, using custom combination of `tokenizer + token filters + character filters`.
+
+```
+{
+    "query": ... / "documents":[...]
+    "analyzer": {
+        "some_field_name": {
+            "char-filter": [
+                {
+                    "pattern": "(?i)X+",
+                    "replacement": "Z",
+                    "type": "pattern-replace"
+                }
+            ],
+            "filter": [
+                {
+                    "type": "lowercase"
+                }
+            ],
+            "max_gram": 3,
+            "min_gram": 2,
+            "tokenizer": "ngram",
+            "type": "custom"
+        }
+    }
+}
+```
+
+with the search string "JackX", the custom analyzer will produce:
+
+* ja
+* jac
+* ac
+* ack
+* ck
+* ckz
+* kz
+
+Notice how all terms are `lowercased`, and the `X` in the end is replaced with `z`, also you can see
+that we made our regex case sensitive, because char-filters are executed before the tokenizer and the token filters.
+If we use the same analyzer with lucene's QueryParser and search for 'jackx' it will look like this:
+
+```
+{
+   "query": { "query-parser": { "query": "some_field_name:jack, "default-operator":"and" } },
+   analyzer... (same sa above)
+}
+
+internally this will be turned into:
+{
+    "query": {
+        "bool": {
+            "must": [
+                {
+                    "term": {
+                        "field": "some_field_name",
+                        "value": "ja"
+                    }
+                },
+                {
+                    "term": {
+                        "field": "some_field_name",
+                        "value": "jac"
+                    }
+                }
+                {
+                    "term": {
+                        "field": "some_field_name",
+                        "value": "ac"
+                    }
+                }
+                {
+                    "term": {
+                        "field": "some_field_name",
+                        "value": "ack"
+                    }
+                }
+            ]
+        }
+    }
+}
+
+```
+
+in the end, everything is a term, if you know what your modifier emmits you can search for it.
+At the moment I am working on adding more and more analyzers/tokenizers/tokenfilters/charfilters into BZZZ.
+
+
+# state / schema / mappings
+
+one very important difference between BZZZ and other Lucene frontends (like ElasticSearch or Solr) is that BZZZ
+does not keep a schema-like mapping anywhere, it is up to the
 
 ---------------------
 

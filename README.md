@@ -230,8 +230,43 @@ All those examples with `hosts` keys are actually a `mutli-search` requests, and
 ## state / schema / mappings
 
 one very important difference between BZZZ and other Lucene frontends (like ElasticSearch or Solr) is that BZZZ
-does not keep a schema-like mapping anywhere, it is up to the
+does not keep a schema-like mapping anywhere, every index request/query request can have different analyzer mapping
+and the actual field name relates to the store/indextype
 
+if you want to have field named `name`:
+
+* name -> indexed analyzed with norms and stored
+* name_no_store -> indexed analyzed with norms, not stored
+* name_not_analyzed -> indexed not analyzed with norms, stored
+* ... you can see where this is going
+* no_store
+* no_index
+* no_norms
+* not_analyzed
+* and you can combine them.
+
+so *any* BZZZ process can just start reading/writing into any index, without a care in the world. you can also just copy a bunch of lucene files around, and everything will work, this convension is also very easy to be copied in java, so you can easilly share same index with different lucene writer.
+
+## directories / writers / searchers
+
+### IndexWriter
+
+_every_ write request to BZZZ does the following:
+
+* _open_ a new Directory in the `--directory`/`index_name` path
+* write the data
+* optimize the lucene index
+* close the writer
+
+Lucene's NIOFSDirectory does file based locking, so you can write to the same files from multiple entry points
+
+### IndexSearcher/SearcherManager
+
+on every _query_ request comes, BZZZ will check if there is already a `SearcherManager` servicing this index, if not it will create new SearcherManager, and then acquire() an IndexSearcher for the current request
+
+_every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data changed for example)
+
+so when BZZZ starts it actually does not know which indexes it has in the root directory, it just waits for the first request to see if it can find the requested index or not.
 
 ---------------------
 

@@ -32,7 +32,7 @@ $ curl -XGET http://localhost:3000/ -d '
 
 ## \o/
 
-### you reap what you sow
+### Analyzers - "You will find only what you bring in"
 
 imagine simplified inverted index representation:
 
@@ -67,9 +67,6 @@ Jack Doe
 
 So using this token filter chain, when you give it a string `Jack Doe`, it will produce the terms `jack` and `doe`.
 Lets say that your query is `Doe`, if you do `{"term":{"field":"name", "value":"Doe"}}`, Lucene will lookup all documents in the `inverted` index that have the term `Doe`, but your custom analyzer will never produce that term because it actually `lowercase`s all the input, of course if you look for `{"term":{"field":"name", "value":"doe"}}` it will work, because this is the term that was produced, and at index time the `Jack Doe` document's id was added to the list of document ids that have the term `doe` in them.
-
-
-### analyzers
 
 #### predefined
 
@@ -177,10 +174,64 @@ in the end, everything is a term, if you know what your modifier emmits you can 
 At the moment I am working on adding more and more analyzers/tokenizers/tokenfilters/charfilters into BZZZ.
 
 
-# state / schema / mappings
+## why BZZZ
+
+* have moderately useful (out of the box) network lucene wrapper
+* distribute work
+* should be able to restart frequently
+* _user_ controlled sharding
+
+
+BZZZ being extremely simple it can actually scale very well if you know your data, for example if we have 100_000_000 documents and we want to search them, we can just spawn 100BZZZ processess across multiple machines, and just put different pieces of data in different boxes (hash($id) % BOXES). BZZZ supports swarm like queries, so you can ask 1 box, to ask 5 boxes, and each of those 5 boxes can ask 5 more, and actually the _user_ is in control of that.
+
+* multi-searching shard identification and automatic shard resolving
+the way BZZZ does this is by simply continuously updating a @discover-hosts* atom map, and every time you a box checks if another box is alive, it also gets its current @discover-hosts* and it merges it, it also gets the box's identifier.
+
+This identifier can be used when a query is construcded like so:
+```
+PUT:
+{
+    "hosts": [
+        "__shard_0",
+        "__shard_1"
+    ],
+    "index": "example",
+    "query": "name:jack",
+}
+```
+(of course instead of __shard_0/1 you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the @peers* map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
+
+In the `hosts` array you can also add arrays like:
+```
+PUT:
+{
+    "hosts": [
+        [
+            "__shard_0",
+            "__shard_1"
+        ],
+        [
+            "__shard_2",
+            "__shard_3"
+        ]
+    ]
+}
+```
+
+so in this case, the host that you send the request to, will fire multi-search request to __shard0, and ask it for `["__shard_0","__shard_1"]` and another multi-search reques to __shard_2 and ask it to `["__shard_2","__shard_3"]`, so in the end you will query 1 box, which will query 2 boxes, and each of those will query 2 boxes (including themselves).
+
+This can can become quite hard to grasp `["a","b",["c","d","e",["f,"g","h",["z","x","c"]]]]` for example.
+
+All those examples with `hosts` keys are actually a `mutli-search` requests, and the only difference between a regular search request and a multi-search request is the fact that it is sent using the `HTTP PUT` method, and has a `hosts` key
+
+* you specify the identifier of a process by using the `--identifier` startup parameter, there is _no_ disk stored state for it, so you can switch processess that were serving identifier `a` to start serving `b` (of course you have to be careful if the shard served from A is also the same as B, or just change the --directory of the processto read from shard A's data)
+
+
+## state / schema / mappings
 
 one very important difference between BZZZ and other Lucene frontends (like ElasticSearch or Solr) is that BZZZ
 does not keep a schema-like mapping anywhere, it is up to the
+
 
 ---------------------
 

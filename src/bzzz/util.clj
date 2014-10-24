@@ -40,3 +40,15 @@
     (if (not found)
       (throw (Throwable. ex)))
     found))
+
+;; from https://github.com/arohner/clj-wallhack/blob/master/src/wall/hack.clj
+(defn wall-hack-field
+  "Access to private or protected field. field-name must be something Named
+
+   class - the class where the field is declared
+   field-name - Named
+   obj - the instance object, or a Class for static fields"
+  [class field-name obj]
+  (-> class (.getDeclaredField (name field-name))
+    (doto (.setAccessible true))
+    (.get obj)))

@@ -155,6 +155,49 @@
       (is (= "john doe" (:name (first (:hits ret)))))
       (is (= "jack doe foo" (:name (last (:hits ret)))))))
 
+  (testing "search-or-standard-and-highlight-fragments"
+    (let [s "zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz XXX YYY zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz"
+          query { :query-parser {:query "xxx@yyy"
+                                 :default-operator "or"
+                                 :default-field "name"}}
+          ]
+      (store test-index-name
+             [{:name s}]
+             {:name {:type "standard" }})
+      (refresh-search-managers)
+      (let [ret (search :index test-index-name
+                        :analyzer {:name {:type "standard"} }
+                        :highlight {:field "name"
+                                    :use-text-fragments true
+                                    :pre ""
+                                    :post ""}
+                        :query query)]
+        (is (= 1 (:total ret)))
+        (let [first-d (first (:hits ret))
+              first-f (first (:_highlight first-d))]
+          (is (= (:name first-d) s))
+          (is (= (:text first-f) (subs (:name first-d)
+                                       (:text-start-pos first-f)
+                                       (:text-end-pos first-f))))
+          (is (= 1199 (:text-start-pos first-f)))
+          (is (= 1375 (:text-end-pos first-f)))
+          (let [clean-pos-start (:text-start-pos first-f)
+                clean-pos-end (:text-end-pos first-f)
+                ret (search :index test-index-name
+                        :analyzer {:name {:type "standard"} }
+                        :highlight {:field "name"
+                                    :use-text-fragments true
+                                    :pre "++"
+                                    :post "++"}
+                        :query query)
+                d (first (:hits ret))
+                f (first (:_highlight d))]
+            (is (= (:name d) s))
+            (is (= clean-pos-start (:text-start-pos f)))
+            (is (= (+ 8 clean-pos-end) (:text-end-pos f))))))))
+
+
+
   (testing "search-or-standard-and-highlight-missing-field"
     (is (thrown-with-msg? Throwable #"highlight field not found in doc"
                           (search :index test-index-name

@@ -8,13 +8,13 @@
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.document Document Field Field$Index Field$Store)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
-                                               SimpleHTMLFormatter)
+                                               SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexWriter IndexReader Term
                                     IndexWriterConfig DirectoryReader FieldInfo)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher
                                      Explanation Collector TopScoreDocCollector TopDocsCollector)
            (org.apache.lucene.store NIOFSDirectory Directory)))
-
+(set! *warn-on-reflection* true)
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def mapping* (atom {}))
@@ -23,10 +23,10 @@
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
 
 (defn root-identifier-path []
-  (File. (File. (as-str @root*)) (as-str @identifier*)))
+  (File. ^File (File. (as-str @root*)) (as-str @identifier*)))
 
 (defn new-index-directory ^Directory [name]
-  (let [path (root-identifier-path)]
+  (let [path ^File (root-identifier-path)]
     (.mkdir path)
     (NIOFSDirectory. (File. path (as-str (acceptable-index-name name))))))
 
@@ -158,6 +158,14 @@
 (defn delete-all [index]
   (use-writer index (fn [^IndexWriter writer] (.deleteAll writer))))
 
+
+(defn fragment->map [^TextFragment fragment]
+  {:text (.toString fragment)
+   :score (.getScore fragment)
+   :frag-num (wall-hack-field TextFragment :fragNum fragment)
+   :text-start-pos (wall-hack-field TextFragment :textStartPos fragment)
+   :text-end-pos (wall-hack-field TextFragment :textEndPos fragment)})
+
 (defn- make-highlighter
   [^Query query ^IndexSearcher searcher config analyzer]
   (if config
@@ -165,22 +173,30 @@
           scorer (QueryScorer. (.rewrite query indexReader))
           config (merge {:field :_content
                          :max-fragments 5
+                         :use-text-fragments false
                          :separator "..."
                          :pre "<b>"
                          :post "</b>"}
                         config)
-          {:keys [field max-fragments separator fragments-key pre post]} config
+          {:keys [field max-fragments separator fragments-key pre post use-text-fragments]} config
           highlighter (Highlighter. (SimpleHTMLFormatter. pre post) scorer)]
       (fn [m]
         (let [str (need (keyword field) m "highlight field not found in doc")
               token-stream (.tokenStream ^Analyzer analyzer
                                          (as-str field)
                                          (StringReader. str))]
-          (.getBestFragments ^Highlighter highlighter
-                             ^TokenStream token-stream
-                             ^String str
-                             (int max-fragments)
-                             ^String separator))))
+          (if use-text-fragments
+            (map #(fragment->map %)
+                 (.getBestTextFragments ^Highlighter highlighter
+                                        ^TokenStream token-stream
+                                        ^String str
+                                        true
+                                        (int max-fragments)))
+            (.getBestFragments ^Highlighter highlighter
+                               ^TokenStream token-stream
+                               ^String str
+                               (int max-fragments)
+                               ^String separator)))))
     (constantly nil)))
 
 (defn search

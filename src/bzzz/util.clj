@@ -1,5 +1,5 @@
-(ns bzzz.util)
-
+(ns bzzz.util
+  (use [clojure.string :only (split join)]))
 (defn as-str ^String [x]
   (if (keyword? x)
     (subs (str x) 1)
@@ -38,7 +38,9 @@
 (defn need [key obj ex]
   (let [found (key obj)]
     (if (not found)
-      (throw (Throwable. ex)))
+      (throw (Throwable. (if (string? ex)
+                           ex
+                           (join " " ex)))))
     found))
 
 ;; from https://github.com/arohner/clj-wallhack/blob/master/src/wall/hack.clj

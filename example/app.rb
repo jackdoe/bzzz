@@ -32,7 +32,7 @@ class Store
                                        query: query,
                                        explain: options[:explain] || false,
                                        analyzer: Store.analyzer,
-                                       highlight: { field: options[:highlight] || 'content',
+                                       highlight: { fields: options[:highlight] || ['content','filename'],
                                                     "use-text-fragments" => options[:use_text_fragments] || false,
                                                     separator: "__SEPARATOR__",
                                                     pre: "__HSTART__",
@@ -141,12 +141,16 @@ get '/' do
       @took = res["took"]
       @pages = @total/PER_PAGE
       res["hits"].each do |h|
-        @results << {
+        row = {
           score: h["_score"],
-          highlight: h["_highlight"].escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>").gsub("__SEPARATOR__","\n<i>---- cut ----</i>\n"),
+          highlight: [],
           explain: h["_explain"],
           id: h["id"]
         }
+        if h["_highlight"] && h["_highlight"]["content"]
+          row[:highlight] = h["_highlight"]["content"].map { |x| x["text"] }.join("\n<i>---- cut ----</i>\n").escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>")
+        end
+        @results << row
       end
     rescue Exception => ex
       @total = -1

@@ -145,15 +145,17 @@
   (testing "search-or-standard-and-highlight"
     (let [ret (search :index test-index-name
                       :analyzer {:name {:type "standard"} }
-                      :highlight {:field "name"}
+                      :highlight {:fields ["name"]}
                       :query { :query-parser {:query "john@doe"
                                               :default-operator "or"
                                               :default-field "name"}})]
       (is (= 2 (:total ret)))
-      (is (= "<b>john</b> <b>doe</b>" (:_highlight (first (:hits ret)))))
-      (is (= "jack <b>doe</b> foo" (:_highlight (last (:hits ret)))))
-      (is (= "john doe" (:name (first (:hits ret)))))
-      (is (= "jack doe foo" (:name (last (:hits ret)))))))
+      (let [f (first (:hits ret))
+            l (last (:hits ret))]
+        (is (= "<b>john</b> <b>doe</b>" (:text (first (:name (:_highlight f))))))
+        (is (= "jack <b>doe</b> foo"  (:text (first (:name (:_highlight l))))))
+        (is (= "john doe" (:name f)))
+        (is (= "jack doe foo" (:name l))))))
 
   (testing "search-or-standard-and-highlight-fragments"
     (let [s "zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz XXX YYY zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz"
@@ -167,14 +169,14 @@
       (refresh-search-managers)
       (let [ret (search :index test-index-name
                         :analyzer {:name {:type "standard"} }
-                        :highlight {:field "name"
-                                    :use-text-fragments true
+                        :highlight {:fields ["name"]
                                     :pre ""
                                     :post ""}
                         :query query)]
         (is (= 1 (:total ret)))
         (let [first-d (first (:hits ret))
-              first-f (first (:_highlight first-d))]
+              first-f (first (:name (:_highlight first-d)))]
+
           (is (= (:name first-d) s))
           (is (= (:text first-f) (subs (:name first-d)
                                        (:text-start-pos first-f)
@@ -185,13 +187,12 @@
                 clean-pos-end (:text-end-pos first-f)
                 ret (search :index test-index-name
                         :analyzer {:name {:type "standard"} }
-                        :highlight {:field "name"
-                                    :use-text-fragments true
+                        :highlight {:fields ["name"]
                                     :pre "++"
                                     :post "++"}
                         :query query)
                 d (first (:hits ret))
-                f (first (:_highlight d))]
+                f (first (:name (:_highlight d)))]
             (is (= (:name d) s))
             (is (= clean-pos-start (:text-start-pos f)))
             (is (= (+ 8 clean-pos-end) (:text-end-pos f))))))))
@@ -202,7 +203,7 @@
     (is (thrown-with-msg? Throwable #"highlight field not found in doc"
                           (search :index test-index-name
                                   :analyzer {:name {:type "standard"} }
-                                  :highlight {:field "name_should_be_missing"}
+                                  :highlight {:fields ["name_should_be_missing"]}
                                   :query { :query-parser {:query "john@doe"
                                                           :default-operator "or"
                                                           :default-field "name"}}))))

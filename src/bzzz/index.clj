@@ -90,11 +90,11 @@
   (let [m (into {:_score score }
                 (for [^Field f (.getFields doc)]
                   [(keyword (.name f)) (.stringValue f)]))
-        fragments (highlighter m)]
+        highlighted (highlighter m)]
     (conj
      m
      (when explanation (assoc m :_explain (.toString explanation)))
-     (when fragments   (assoc m :_highlight fragments)))))
+     (when highlighted   (assoc m :_highlight highlighted)))))
 
 (defn get-search-manager ^SearcherManager [index]
   (locking mapping*
@@ -172,33 +172,26 @@
   (if config
     (let [indexReader (.getIndexReader searcher)
           scorer (QueryScorer. (.rewrite query indexReader))
-          config (merge {:field :_content
-                         :max-fragments 5
-                         :use-text-fragments false
-                         :separator "..."
+          config (merge {:max-fragments 5
                          :pre "<b>"
                          :post "</b>"}
                         config)
-          {:keys [field max-fragments separator fragments-key pre post use-text-fragments]} config
+          {:keys [fields max-fragments separator fragments-key pre post use-text-fragments]} config
           highlighter (Highlighter. (SimpleHTMLFormatter. pre post) scorer)]
       (fn [m]
-        (let [str (need (keyword field) m "highlight field not found in doc")
-              token-stream (.tokenStream ^Analyzer analyzer
-                                         (as-str field)
-                                         (StringReader. str))]
-          (if use-text-fragments
-            (map #(fragment->map %)
-                 (.getBestTextFragments ^Highlighter highlighter
-                                        ^TokenStream token-stream
-                                        ^String str
-                                        true
-                                        (int max-fragments)))
-            (.getBestFragments ^Highlighter highlighter
-                               ^TokenStream token-stream
-                               ^String str
-                               (int max-fragments)
-                               ^String separator)))))
-    (constantly nil)))
+        (into {} (for [field fields]
+                   (let [str (need (keyword field) m [field "highlight field not found in doc"])
+                         token-stream (.tokenStream ^Analyzer analyzer
+                                                    (as-str field)
+                                                    (StringReader. str))]
+                     [ (keyword field)
+                      (map #(fragment->map %)
+                           (.getBestTextFragments ^Highlighter highlighter
+                                                  ^TokenStream token-stream
+                                                  ^String str
+                                                  true
+                                                  (int max-fragments)))])))))
+      (constantly nil)))
 
 (defn search
   [& {:keys [index query page size explain refresh highlight analyzer]

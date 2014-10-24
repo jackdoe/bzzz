@@ -22,12 +22,13 @@
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
 
-(defn root-identifier-path []
+(defn root-identifier-path ^File []
   (File. ^File (File. (as-str @root*)) (as-str @identifier*)))
 
 (defn new-index-directory ^Directory [name]
   (let [path ^File (root-identifier-path)]
-    (.mkdir path)
+    (try
+      (.mkdir path))
     (NIOFSDirectory. (File. path (as-str (acceptable-index-name name))))))
 
 (defn new-index-writer ^IndexWriter [name]
@@ -115,7 +116,7 @@
   (reset! mapping* {}))
 
 (defn bootstrap-indexes []
-  (doseq [f (.listFiles (File. (as-str @root*)))]
+  (doseq [f (.listFiles (root-identifier-path))]
     (if (.isDirectory ^File f)
       (get-search-manager (.getName ^File f)))))
 

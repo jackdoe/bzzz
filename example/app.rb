@@ -9,6 +9,9 @@ class String
   def escape
     CGI::escapeHTML(self)
   end
+  def escapeCGI
+    CGI::escape(self)
+  end
 end
 
 class Store
@@ -25,12 +28,12 @@ class Store
   end
 
   def Store.find(query, options = {})
-    p options
     JSON.parse(Curl.http(:GET, @host, {index: @index,
                                        query: query,
                                        explain: options[:explain] || false,
                                        analyzer: Store.analyzer,
                                        highlight: { field: options[:highlight] || 'content',
+                                                    "use-text-fragments" => options[:use_text_fragments] || false,
                                                     separator: "__SEPARATOR__",
                                                     pre: "__HSTART__",
                                                     post: "__HEND__",
@@ -140,7 +143,7 @@ get '/' do
       res["hits"].each do |h|
         @results << {
           score: h["_score"],
-          highlight: h["_highlight"].escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>").gsub("__SEPARATOR__","\n---- cut ----\n"),
+          highlight: h["_highlight"].escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>").gsub("__SEPARATOR__","\n<i>---- cut ----</i>\n"),
           explain: h["_explain"],
           id: h["id"]
         }
@@ -159,7 +162,23 @@ get '/*' do
   @id = @request.path
   @pages = 0
   @page = 0
-  res = Store.find({ term: { field: "id", value: @id }})
+  query = {
+    bool: {
+      must: [
+        { term: { field: "id", value: @id }},
+      ]
+    }
+  }
+  if @q
+    query[:bool][:must] << {
+      "query-parser" => {
+        "defailt-operator" => "and",
+        "default-field" => "content",
+        query: @q || ""
+      }
+    }
+  end
+  res = Store.find(query, {use_text_fragments: true})
   error 404 if res["total"] == 0
   @doc = res["hits"].first
   haml :item
@@ -207,13 +226,14 @@ __END__
   - @results.each do |r|
     %tr
       %td
-        %pre.doc{ onclick: "$(this).children('.explain').toggle()" }
-          = preserve do
-            %a(href= "#{r[:id]}?q=#{@q}")> score: #{r[:score]} file: #{r[:id]}
-            %div.explain{style: 'display:none'}
-              #{r[:explain]}
-            %br
-            #{r[:highlight]}
+        %a{ onclick: "$(this).parent().find('.explain').toggle()"}
+          explain
+        %a(href= "#{r[:id]}?q=#{@q.escapeCGI}") score: #{r[:score]} file: #{r[:id]}
+        %br
+        %pre.explain{style: 'display:none'}
+          #{r[:explain]}
+        = preserve do
+          <pre ondblclick="window.location = '#{r[:id]}?q=#{@q.escapeCGI}'">#{r[:highlight]}</pre>
 
 @@ item
 %center

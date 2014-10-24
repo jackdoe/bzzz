@@ -1,9 +1,20 @@
 (ns bzzz.core-test
+  (:import (java.io File))
   (:use clojure.test
         bzzz.core
         bzzz.index))
 
 (def test-index-name "lein-test-testing-index")
+
+(defn should-work []
+  (let [ret (search :index test-index-name
+                    :query {:query-parser {:query "john doe"
+                                           :default-operator :and
+                                           :default-field "name"}})]
+    (println ret)
+    (is (= 1 (:total ret)))
+    (is (= "john doe" (:name (first (:hits ret)))))))
+
 (deftest test-app
   (testing "cleanup"
     (delete-all test-index-name)

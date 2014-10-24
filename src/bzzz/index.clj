@@ -16,13 +16,19 @@
            (org.apache.lucene.store NIOFSDirectory Directory)))
 
 (def root* (atom default-root))
+(def identifier* (atom default-identifier))
 (def mapping* (atom {}))
 
 (defn acceptable-index-name [name]
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
 
+(defn root-identifier-path []
+  (File. (File. (as-str @root*)) (as-str @identifier*)))
+
 (defn new-index-directory ^Directory [name]
-  (NIOFSDirectory. (File. (File. (as-str @root*)) (as-str (acceptable-index-name name)))))
+  (let [path (root-identifier-path)]
+    (.mkdir path)
+    (NIOFSDirectory. (File. path (as-str (acceptable-index-name name))))))
 
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory name)
@@ -101,6 +107,12 @@
     (doseq [[index ^SearcherManager manager] @mapping*]
       (log/debug "refreshing: " index " " manager)
       (.maybeRefresh manager))))
+
+(defn reset-search-managers []
+  (doseq [[name ^SearcherManager manager] @mapping*]
+    (log/info "\tclosing: " name " " manager)
+    (.close manager))
+  (reset! mapping* {}))
 
 (defn bootstrap-indexes []
   (doseq [f (.listFiles (File. (as-str @root*)))]
@@ -198,10 +210,7 @@
 (defn shutdown []
   (locking mapping*
     (log/info "executing shutdown hook, current mapping: " @mapping*)
-    (doseq [[name ^SearcherManager manager] @mapping*]
-      (log/info "\tclosing: " name " " manager)
-      (.close manager))
-    (reset! mapping* {})
+    (reset-search-managers)
     (log/info "mapping after cleanup: " @mapping*)))
 
 (defn index-stat []

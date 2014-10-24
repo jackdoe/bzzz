@@ -21,7 +21,6 @@
 (def timer* (atom 0))
 (def port* (atom const/default-port))
 (def acceptable-discover-time-diff* (atom const/default-acceptable-discover-time-diff))
-(def identifier* (atom const/default-identifier))
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
 
@@ -73,7 +72,7 @@
 (defn stat []
   {:index (index/index-stat)
    :analyzer (analyzer/analyzer-stat)
-   :identifier @identifier*
+   :identifier @index/identifier*
    :discover-hosts @discover-hosts*
    :peers @peers*
    :timer @timer*})
@@ -90,7 +89,7 @@
                                                 [(validate-discover-url host) true])))))
     (catch Exception e
       (log/warn "merge-discovery-hosts" x (.getMessage e))))
-  {:identifier @identifier* :discover-hosts @discover-hosts*})
+  {:identifier @index/identifier* :discover-hosts @discover-hosts*})
 
 (defn work [method uri input]
   (log/debug "received request" method input)
@@ -148,7 +147,7 @@
   ;; hackish, just POC
   (locking peers*
     (swap! peers*
-           assoc-in [@identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
+           assoc-in [@index/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
 
   (let [c (async/chan) hosts @discover-hosts*]
     (doseq [[host unused] hosts]
@@ -192,15 +191,15 @@
                                                       (split (:discover-hosts options) #","))]
                                      [host true])))
     (reset! acceptable-discover-time-diff* (:acceptable-discover-time-diff options))
-    (reset! identifier* (keyword (:identifier options)))
+    (reset! index/identifier* (keyword (:identifier options)))
     (reset! index/root* (:directory options))
     (reset! port* (:port options)))
 
   (index/bootstrap-indexes)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index/shutdown)))
-  (log/info "starting bzzz --identifier" (as-str @identifier*) "--port" @port* "--directory" @index/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
+  (log/info "starting bzzz --identifier" (as-str @index/identifier*) "--port" @port* "--directory" @index/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
   (every 5000 #(index/refresh-search-managers) periodic-pool :desc "search refresher")
   (every 1000 #(swap! timer* inc) periodic-pool :desc "timer")
   (every 1000 #(discover) periodic-pool :desc "periodic discover")
-  (every 10000 #(log/info "up:" @timer* @identifier* @discover-hosts* @peers*) periodic-pool :desc "dump")
+  (every 10000 #(log/info "up:" @timer* @index/identifier* @discover-hosts* @peers*) periodic-pool :desc "dump")
   (run-jetty handler {:port @port*}))

@@ -9,6 +9,8 @@
                                      Scorer TermQuery SearcherManager
                                      Explanation ComplexExplanation
                                      MatchAllDocsQuery
+                                     FilteredQuery QueryWrapperFilter
+                                     ConstantScoreQuery
                                      Collector TopScoreDocCollector TopDocsCollector)))
 (set! *warn-on-reflection* true)
 (declare parse-query)
@@ -24,6 +26,23 @@
         query (.parse parser query)]
     (.setBoost query boost)
     query))
+
+(defn parse-filtered-query
+  ^Query
+  [analyzer & {:keys [query filter boost]
+               :or {boost 1}}]
+  (let [q (FilteredQuery. (parse-query query analyzer)
+                          (QueryWrapperFilter. (parse-query filter analyzer)))]
+    (.setBoost q boost)
+    q))
+
+(defn parse-constant-score-query
+  ^Query
+  [analyzer & {:keys [query boost]
+               :or {boost 1}}]
+  (let [q (ConstantScoreQuery. ^Query (parse-query query analyzer))]
+    (.setBoost q boost)
+    q))
 
 (defn parse-bool-query
   ^Query
@@ -52,6 +71,8 @@
   (case (as-str key)
     "query-parser" (mapply parse-lucene-query-parser analyzer val)
     "term" (mapply parse-term-query analyzer val)
+    "filtered" (mapply parse-filtered-query analyzer val)
+    "constant-score" (mapply parse-constant-score-query analyzer val)
     "match-all" (MatchAllDocsQuery.)
     "bool" (mapply parse-bool-query analyzer val)))
 

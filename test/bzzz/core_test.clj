@@ -24,10 +24,12 @@
     (let [ret-0 (store test-index-name [{:name "jack doe foo"}
                                         {:name "john doe"}
                                         {:id "baz bar"
+                                         :name "duplicate",
                                          :name_no_norms "bar baz"
                                          :name_no_store "with space"}]
                        {:name_no_norms {:type "keyword" }})
           ret-1 (store test-index-name [{:id "WS baz bar"
+                                         :name "duplicate"
                                          :name_no_norms "bar baz"
                                          :name_ngram_no_norms "andurilXX"
                                          :name_edge_ngram_no_norms "andurilXX"
@@ -71,6 +73,25 @@
       (is (= 1 (:total ret)))
       (is (nil? (:name_no_store (first (:hits ret)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))
+
+  (testing "search-filter-query"
+    (let [ret (search :index test-index-name
+                      :query {:filtered {:filter {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}
+                                         :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}})
+          ret-2 (search :index test-index-name
+                      :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}})]
+      (is (= 1 (:total ret)))
+      (is (= 2 (:total ret-2)))
+      (is (= (:_score (first (:hits ret))) (:_score (first (:hits ret-2)))))
+      (is (= "baz bar" (:id (first (:hits ret)))))))
+
+  (testing "search-constant-score-query"
+    (let [ret (search :index test-index-name
+                      :query {:constant-score {:boost 10
+                                               :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}})]
+      (is (= 2 (:total ret)))
+      (is (= (= (:_score (first (:hits ret))) (:_score (last (:hits ret))))) 10)))
+
 
   (testing "search-no-html"
     (let [ret (search :index test-index-name

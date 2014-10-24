@@ -99,6 +99,17 @@
       (is (= (:total ret) num-docs))
       (is (> num-docs 0))))
 
+
+  (testing "search-random-score-query"
+    (let [ret (search :index test-index-name
+                      :query {:random-score-query {:base 100
+                                                   :query {:match-all {}}}})
+          num-docs (:docs (get (index-stat) test-index-name))]
+      (is (= (:total ret) num-docs))
+      (is (> (:_score (first (:hits ret))) 100))
+      (is (not (= (:_score (first (:hits ret))) 100))) ;; well.. :D
+      (is (> num-docs 0))))
+
   (testing "search-no-html"
     (let [ret (search :index test-index-name
                       :query {:bool {:must [{:term {:field "name_no_html_no_norms", :value "bzbzZZ<br>"}}]

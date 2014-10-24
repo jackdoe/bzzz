@@ -3,6 +3,7 @@
   (use bzzz.util)
   (use bzzz.const)
   (use bzzz.query)
+  (use bzzz.random-score-query)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
@@ -226,8 +227,11 @@
 
 (defn index-stat []
   (into {} (for [[name searcher] @mapping*]
-             [name (use-searcher name
-                                 (fn [^IndexSearcher searcher]
-                                   (let [reader (.getIndexReader searcher)]
-                                     {:docs (.numDocs reader)
-                                      :has-deletions (.hasDeletions reader)})))])))
+             (let [sample (search :index name
+                                  :query {:random-score-query {:query {:match-all {}}}})]
+               [name (use-searcher name
+                                   (fn [^IndexSearcher searcher]
+                                     (let [reader (.getIndexReader searcher)]
+                                       {:docs (.numDocs reader)
+                                        :sample sample
+                                        :has-deletions (.hasDeletions reader)})))]))))

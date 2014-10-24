@@ -2,6 +2,7 @@
   (use bzzz.const)
   (use bzzz.util)
   (use bzzz.analyzer)
+  (use bzzz.random-score-query)
   (:import (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.index Term)
            (org.apache.lucene.search BooleanClause BooleanClause$Occur
@@ -35,6 +36,12 @@
                           (QueryWrapperFilter. (parse-query filter analyzer)))]
     (.setBoost q boost)
     q))
+
+(defn parse-random-score-query
+  ^Query
+  [analyzer & {:keys [query base]
+               :or {base 100}}]
+  (random-score-query (parse-query query analyzer) base))
 
 (defn parse-constant-score-query
   ^Query
@@ -73,6 +80,7 @@
     "term" (mapply parse-term-query analyzer val)
     "filtered" (mapply parse-filtered-query analyzer val)
     "constant-score" (mapply parse-constant-score-query analyzer val)
+    "random-score-query" (mapply parse-random-score-query analyzer val)
     "match-all" (MatchAllDocsQuery.)
     "bool" (mapply parse-bool-query analyzer val)))
 

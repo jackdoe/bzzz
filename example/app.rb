@@ -217,11 +217,12 @@ get '/*' do
     bool: {
       must: [
         { term: { field: "id", value: @id }},
-      ]
+      ],
+      should: []
     }
   }
   if @q
-    query[:bool][:must] << {
+    query[:bool][:should] << {
       "query-parser" => {
         "defailt-operator" => "and",
         "default-field" => "content",

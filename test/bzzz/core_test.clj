@@ -92,6 +92,12 @@
       (is (= 2 (:total ret)))
       (is (= (= (:_score (first (:hits ret))) (:_score (last (:hits ret))))) 10)))
 
+  (testing "search-match-all"
+    (let [ret (search :index test-index-name
+                      :query {:match-all {}})
+          num-docs (:docs (get (index-stat) test-index-name))]
+      (is (= (:total ret) num-docs))
+      (is (> num-docs 0))))
 
   (testing "search-no-html"
     (let [ret (search :index test-index-name

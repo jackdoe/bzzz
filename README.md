@@ -258,7 +258,7 @@ so *any* BZZZ process can just start reading/writing into any index, without a c
 
 _every_ write request to BZZZ does the following:
 
-* _open_ a new Directory in the `--directory`/`index_name` path
+* _open_ a new Directory in the `--directory`/`--identifier`/`index_name` path
 * write the data
 * optimize the lucene index
 * close the writer
@@ -266,12 +266,12 @@ _every_ write request to BZZZ does the following:
 Lucene's NIOFSDirectory does file based locking, so you can write to the same files from multiple entry points
 
 ### IndexSearcher/SearcherManager
+on startup it will walk thru the `--directory`/`--identifier` and create `SearcherManager`s for all of the existing indexes there.
 
 on every _query_ request BZZZ will check if there is already a `SearcherManager` servicing this index, if not it will create new SearcherManager, and then acquire() an IndexSearcher for the current request
 
 _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data changed for example)
 
-so when BZZZ starts it actually does not know which indexes it has in the root directory, it just waits for the first request to see if it can find the requested index or not.
 
 ---------------------
 

@@ -162,9 +162,9 @@
 (defn fragment->map [^TextFragment fragment]
   {:text (.toString fragment)
    :score (.getScore fragment)
-   :frag-num (wall-hack-field TextFragment :fragNum fragment)
-   :text-start-pos (wall-hack-field TextFragment :textStartPos fragment)
-   :text-end-pos (wall-hack-field TextFragment :textEndPos fragment)})
+   :frag-num (wall-hack-field (class fragment) :fragNum fragment)
+   :text-start-pos (wall-hack-field (class fragment) :textStartPos fragment)
+   :text-end-pos (wall-hack-field (class fragment) :textEndPos fragment)})
 
 (defn- make-highlighter
   [^Query query ^IndexSearcher searcher config analyzer]

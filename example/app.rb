@@ -4,6 +4,8 @@ require 'json'
 require 'sinatra'
 require 'haml'
 require 'cgi'
+require 'ripper'
+
 PER_PAGE = 10
 class String
   def escape
@@ -32,7 +34,7 @@ class Store
                                        query: query,
                                        explain: options[:explain] || false,
                                        analyzer: Store.analyzer,
-                                       highlight: { fields: options[:highlight] || ['content','filename'],
+                                       highlight: { fields: options[:highlight] || ['content','filename','defined'],
                                                     "use-text-fragments" => options[:use_text_fragments] || false,
                                                     separator: "__SEPARATOR__",
                                                     pre: "__HSTART__",
@@ -45,14 +47,11 @@ class Store
 
   def Store.analyzer
     {
-#      content: {
-#        type: "custom",
-#        tokenizer: "letter",
-#        filter: [
-#          {type: "lowercase"},
-#          {type: "ngram",min_gram: 3,max_gram: 5}
-#        ]
-#      },
+      defined: {
+        type: "custom",
+        tokenizer: "whitespace",
+        filters: [{type: "lowercase"}]
+      },
       content: {
         type: "standard"
       },
@@ -67,17 +66,56 @@ class Store
   end
 end
 
+# taken from
+# https://github.com/jimweirich/sorcerer/blob/master/lib/sorcerer/subexpression.rb
+def sexp_next(sexp)
+  ret = []
+  if sexp.is_a?(Array)
+    if sexp.first.is_a?(Symbol)
+      case sexp.first
+      when :program
+        ret.concat(sexp_next(sexp[1]))
+      when :var_ref
+        sexp.each { |s| ret.concat(sexp_next(s)) }
+      when :vcall               # [:vcall, target]
+      when :fcall               # [:fcall, target]
+      when :call                # [:call, target, ".", meth]
+        ret.concat(sexp_next(sexp[3]))
+        ret.concat(sexp_next(sexp[1]))
+      when :method_add_arg      # [:method_add_arg, call, args]
+        ret.concat(sexp_next(sexp[2]))
+      when :method_add_block    # [:method_add_block, call, block]
+      when :const_path_ref
+        ret.concat(sexp_next(sexp[1]))
+      when :defs
+        ret << "#{sexp[1][1][1]}.#{sexp[3][1]}"
+      when :def
+        ret << sexp[1][1]
+      else
+        sexp.each { |s| ret.concat(sexp_next(s)) }
+      end
+    else
+      sexp.each { |s| ret.concat(sexp_next(s)) }
+    end
+  end
+  ret
+end
+
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
-  pattern = "#{path}/**/*\.{c,java,pm,pl}"
+  pattern = "#{path}/**/*\.{c,java,pm,pl,rb}"
   puts "indexing #{pattern}"
   Dir.glob(pattern).each do |f|
     name = f.gsub(path,'')
+    content = File.read(f)
+    defined = ""
+    defined = sexp_next(Ripper.sexp(content)).join(" ") if f =~ /\.rb$/
     doc = {
       id: name,
-      content: File.read(f),
-      filename: name
+      content: content,
+      filename: name,
+      defined: defined
     }
     docs << doc
     if docs.length > every
@@ -112,6 +150,14 @@ get '/' do
 
   if @q
     queries = []
+    queries << {
+      "query-parser" => {
+        "defailt-operator" => "OR",
+        "default-field" => "defined",
+        query: @q
+      }
+    }
+
     queries << {
       "query-parser" => {
         "defailt-operator" => "and",
@@ -150,6 +196,7 @@ get '/' do
         if h["_highlight"] && h["_highlight"]["content"]
           row[:highlight] = h["_highlight"]["content"].map { |x| x["text"] }.join("\n<i>---- cut ----</i>\n").escape.gsub("__HEND__","</b>").gsub("__HSTART__","<b>")
         end
+
         @results << row
       end
     rescue Exception => ex

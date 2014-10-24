@@ -200,13 +200,13 @@
 
 
   (testing "search-or-standard-and-highlight-missing-field"
-    (is (thrown-with-msg? Throwable #"highlight field not found in doc"
-                          (search :index test-index-name
-                                  :analyzer {:name {:type "standard"} }
-                                  :highlight {:fields ["name_should_be_missing"]}
-                                  :query { :query-parser {:query "john@doe"
-                                                          :default-operator "or"
-                                                          :default-field "name"}}))))
+    (let [ret (search :index test-index-name
+            :analyzer {:name {:type "standard"} }
+            :highlight {:fields ["name_should_be_missing"]}
+            :query { :query-parser {:query "john@doe"
+                                    :default-operator "or"
+                                    :default-field "name"}})]
+      (is (= (:name_should_be_missing (:_highlight (first (:hits ret)))) []))))
 
   (testing "search-boost"
     (let [ret (search :index test-index-name

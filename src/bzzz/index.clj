@@ -180,17 +180,18 @@
           highlighter (Highlighter. (SimpleHTMLFormatter. pre post) scorer)]
       (fn [m]
         (into {} (for [field fields]
-                   (let [str (need (keyword field) m [field "highlight field not found in doc"])
-                         token-stream (.tokenStream ^Analyzer analyzer
-                                                    (as-str field)
-                                                    (StringReader. str))]
-                     [ (keyword field)
-                      (map #(fragment->map %)
-                           (.getBestTextFragments ^Highlighter highlighter
-                                                  ^TokenStream token-stream
-                                                  ^String str
-                                                  true
-                                                  (int max-fragments)))])))))
+                   [ (keyword field)
+                     (let [str ((keyword field) m)]
+                       (if str
+                         (map #(fragment->map %)
+                              (.getBestTextFragments ^Highlighter highlighter
+                                                     ^TokenStream (.tokenStream ^Analyzer analyzer
+                                                                                (as-str field)
+                                                                                (StringReader. str))
+                                                     ^String str
+                                                     true
+                                                     (int max-fragments)))
+                         []))]))))
       (constantly nil)))
 
 (defn search

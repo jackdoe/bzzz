@@ -30,7 +30,7 @@
             (let [sub-scorer (.scorer sub-weight ctx acceptDocs)]
               (proxy [Scorer] [this]
                 (nextDoc [] (.nextDoc sub-scorer))
-                (advance [] (.advance sub-scorer))
+                (advance [target] (.advance sub-scorer target))
                 (cost [] (.cost sub-scorer))
                 (freq [] (.freq sub-scorer))
                 (docID [] (.docID sub-scorer))

@@ -103,8 +103,9 @@
   (testing "search-random-score-query"
     (let [ret (search :index test-index-name
                       :explain true
-                      :query {:random-score-query {:base 100
-                                                   :query {:match-all {}}}})
+                      :query {:bool {:must [{:match-all {}}
+                                            {:random-score-query {:base 100
+                                                                  :query {:match-all {}}}}]}})
           num-docs (:docs (get (index-stat) test-index-name))]
       (is (= (:total ret) num-docs))
       (is (> (:_score (first (:hits ret))) 100))

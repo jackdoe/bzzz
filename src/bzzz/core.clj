@@ -64,6 +64,7 @@
                   (throw (Throwable. (as-str (:exception next)))))
                 (-> sum
                     (assoc-in [:took] (time-took ms-start))
+                    (update-in [:facets] merge-with (:facets next)) ;; XXX: FIXME
                     (update-in [:total] + (:total next))
                     (update-in [:hits] concat (:hits next))))
               { :total 0, :hits [], :took -1 }
@@ -94,9 +95,7 @@
 (defn work [method uri input]
   (log/debug "received request" method input)
   (condp = method
-    :post (index/store (:index input)
-                       (:documents input)
-                       (:analyzer input))
+    :post (mapply index/store input)
     :delete (index/delete-from-query (:index input)
                                      (:query input))
     :get (case uri

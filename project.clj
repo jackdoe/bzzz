@@ -7,6 +7,7 @@
   :jvm-opts ["-Xmx4g"]
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.apache.lucene/lucene-core "4.9.1"]
+                 [org.apache.lucene/lucene-facet "4.9.1"]
                  [org.apache.lucene/lucene-highlighter "4.9.1"]
                  [org.apache.lucene/lucene-queryparser "4.9.1"]
                  [org.apache.lucene/lucene-analyzers-common "4.9.1"]

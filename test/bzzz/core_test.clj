@@ -11,7 +11,6 @@
                     :query {:query-parser {:query "john doe"
                                            :default-operator :and
                                            :default-field "name"}})]
-    (println ret)
     (is (= 1 (:total ret)))
     (is (= "john doe" (:name (first (:hits ret)))))))
 
@@ -21,48 +20,50 @@
     (refresh-search-managers))
 
   (testing "store"
-    (let [ret-0 (store test-index-name [{:name "jack doe foo"}
-                                        {:name "john doe"}
-                                        {:id "baz bar"
-                                         :name "duplicate",
-                                         :name_no_norms "bar baz"
-                                         :name_no_store "with space"}]
-                       {:name_no_norms {:type "keyword" }})
-          ret-1 (store test-index-name [{:id "WS baz bar"
-                                         :name "duplicate"
-                                         :name_no_norms "bar baz"
-                                         :name_ngram_no_norms "andurilXX"
-                                         :name_edge_ngram_no_norms "andurilXX"
-                                         :name_keyword_no_norms "hello worldXX"
-                                         :name_no_html_no_norms "bzbzXX<br><html>"
-                                         :name_no_store "with space"}]
-                       {:name_no_norms {:type "whitespace" }
-                        :name_keyword_no_norms {:type "custom"
-                                                            :tokenizer "keyword"
-                                                            :char-filter [{:type "pattern-replace"
-                                                                           :pattern "X+",
-                                                                           :replacement "ZZ"}]}
-                        :name_no_html_no_norms {:type "custom"
-                                                            :tokenizer "whitespace"
-                                                            :char-filter [{:type "pattern-replace"
-                                                                           :pattern "X+",
-                                                                           :replacement "ZZ"}
-                                                                          {:type "html-strip",:escaped-tags ["br"]}]}
-                        :name_edge_ngram_no_norms {:type "custom"
-                                                               :tokenizer "edge-ngram"
-                                                               :char-filter [{:type "pattern-replace"
-                                                                              :pattern "X+",
-                                                                              :replacement "ZZ"}]
-                                                               :min_gram 1
-                                                               :max_gram 8}
-                        :name_ngram_no_norms {:type "custom"
-                                                          :tokenizer "ngram"
-                                                          :filter [{:type "lowercase"}]
+    (let [ret-0 (store :index test-index-name
+                       :documents [{:name "jack doe foo"}
+                                   {:name "john doe"}
+                                   {:id "baz bar"
+                                    :name "duplicate",
+                                    :name_no_norms "bar baz"
+                                    :name_no_store "with space"}]
+                       :analyzer {:name_no_norms {:type "keyword" }})
+          ret-1 (store :index test-index-name
+                       :documents [{:id "WS baz bar"
+                                    :name "duplicate"
+                                    :name_no_norms "bar baz"
+                                    :name_ngram_no_norms "andurilXX"
+                                    :name_edge_ngram_no_norms "andurilXX"
+                                    :name_keyword_no_norms "hello worldXX"
+                                    :name_no_html_no_norms "bzbzXX<br><html>"
+                                    :name_no_store "with space"}]
+                       :analyzer {:name_no_norms {:type "whitespace" }
+                                  :name_keyword_no_norms {:type "custom"
+                                                          :tokenizer "keyword"
                                                           :char-filter [{:type "pattern-replace"
-                                                                        :pattern "X+",
-                                                                        :replacement "ZZ"}]
-                                                          :min_gram 2
-                                                          :max_gram 4}})]
+                                                                         :pattern "X+",
+                                                                         :replacement "ZZ"}]}
+                                  :name_no_html_no_norms {:type "custom"
+                                                          :tokenizer "whitespace"
+                                                          :char-filter [{:type "pattern-replace"
+                                                                         :pattern "X+",
+                                                                         :replacement "ZZ"}
+                                                                        {:type "html-strip",:escaped-tags ["br"]}]}
+                                  :name_edge_ngram_no_norms {:type "custom"
+                                                             :tokenizer "edge-ngram"
+                                                             :char-filter [{:type "pattern-replace"
+                                                                            :pattern "X+",
+                                                                            :replacement "ZZ"}]
+                                                             :min_gram 1
+                                                             :max_gram 8}
+                                  :name_ngram_no_norms {:type "custom"
+                                                        :tokenizer "ngram"
+                                                        :filter [{:type "lowercase"}]
+                                                        :char-filter [{:type "pattern-replace"
+                                                                       :pattern "X+",
+                                                                       :replacement "ZZ"}]
+                                                        :min_gram 2
+                                                        :max_gram 4}})]
       (refresh-search-managers)
       (is (= true (ret-0 test-index-name)))
       (is (= true (ret-1 test-index-name)))))
@@ -79,7 +80,7 @@
                       :query {:filtered {:filter {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}
                                          :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}})
           ret-2 (search :index test-index-name
-                      :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}})]
+                        :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}})]
       (is (= 1 (:total ret)))
       (is (= 2 (:total ret-2)))
       (is (= (:_score (first (:hits ret))) (:_score (first (:hits ret-2)))))
@@ -201,11 +202,11 @@
     (let [s "zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz XXX YYY zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz"
           query { :query-parser {:query "xxx@yyy"
                                  :default-operator "or"
-                                 :default-field "name"}}
-          ]
-      (store test-index-name
-             [{:name s}]
-             {:name {:type "standard" }})
+                                 :default-field "name"}}]
+      (store :index test-index-name
+             :documents [{:name s}]
+             :analyzer {:name {:type "standard" }})
+
       (refresh-search-managers)
       (let [ret (search :index test-index-name
                         :analyzer {:name {:type "standard"} }
@@ -226,11 +227,11 @@
           (let [clean-pos-start (:text-start-pos first-f)
                 clean-pos-end (:text-end-pos first-f)
                 ret (search :index test-index-name
-                        :analyzer {:name {:type "standard"} }
-                        :highlight {:fields ["name"]
-                                    :pre "++"
-                                    :post "++"}
-                        :query query)
+                            :analyzer {:name {:type "standard"} }
+                            :highlight {:fields ["name"]
+                                        :pre "++"
+                                        :post "++"}
+                            :query query)
                 d (first (:hits ret))
                 f (first (:name (:_highlight d)))]
             (is (= (:name d) s))
@@ -241,11 +242,11 @@
 
   (testing "search-or-standard-and-highlight-missing-field"
     (let [ret (search :index test-index-name
-            :analyzer {:name {:type "standard"} }
-            :highlight {:fields ["name_should_be_missing"]}
-            :query { :query-parser {:query "john@doe"
-                                    :default-operator "or"
-                                    :default-field "name"}})]
+                      :analyzer {:name {:type "standard"} }
+                      :highlight {:fields ["name_should_be_missing"]}
+                      :query { :query-parser {:query "john@doe"
+                                              :default-operator "or"
+                                              :default-field "name"}})]
       (is (= (:name_should_be_missing (:_highlight (first (:hits ret)))) []))))
 
   (testing "search-boost"
@@ -315,6 +316,26 @@
                       :default-field "name"
                       :query "doe")]
       (is (= 0 (:total ret)))))
+
+  (testing "facets"
+    (dotimes [n 1000]
+      (store :index test-index-name
+             :documents [{:name "abc" :name_st "ddd mmm"}
+                         {:name "def 123" :name_st "uuu ooo"}]
+             :facets {:name {}
+                      :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
+             :analyzer {:name {:type "keyword"}
+                        :bzbz-used-only-for-facet {:type "standard"}})
+      (refresh-search-managers)
+      (let [ret (search :index test-index-name
+                        :facets {:name {:size 1}, :name_st {:path ["uuu"]}}
+                        :query {:match-all {}})
+            f (:facets ret)
+            nf (:name f)
+            ns (:name_st f)]
+        (is (= (count nf) 1))
+        (is (= (count ns) 4))
+        (is (= (+ 1 n) (:count (first nf)))))))
 
   (testing "teardown"
     (shutdown)))

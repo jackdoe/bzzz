@@ -249,7 +249,7 @@
 
 (defn search
   [& {:keys [index query page size explain refresh highlight analyzer facets]
-      :or {page 0, size 20, explain false refresh false analyzer nil facets nil}}]
+      :or {page 0, size default-size, explain false refresh false analyzer nil facets nil}}]
   (if refresh
     (refresh-search-managers))
   (use-searcher index
@@ -270,8 +270,8 @@
                     {:total (.getTotalHits score-collector)
                      :facets (let [fc (FastTaxonomyFacetCounts. taxo-reader facet-config facet-collector)]
                                (into {} (for [[k v] facets]
-                                          (let [fr (.getTopChildren fc
-                                                                    (default-to (:size v) 10)
+                                          (if-let [fr (.getTopChildren fc
+                                                                    (default-to (:size v) default-facet-group-size)
                                                                     (as-str k)
                                                                     ^"[Ljava.lang.String;" (into-array
                                                                                             String []))]

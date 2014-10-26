@@ -41,15 +41,14 @@
         args {:accept :json
               :as :json
               :body-encoding "UTF-8"
-              :body (json/write-str input)
               :socket-timeout 1000
               :conn-timeout 1000}]
     (log/info "<" input "> in part <" part ">")
     (try
       (let [resolved (peer-resolve (first part))]
         (if (> (count part) 1)
-          (:body (http-client/put resolved args))
-          (:body (http-client/get resolved args))))
+          (:body (http-client/put resolved (assoc args :body (json/write-str (assoc input :hosts part)))))
+          (:body (http-client/get resolved (assoc args :body (json/write-str input))))))
       (catch Throwable e
         {:exception (with-err-str (pst e 36))}))))
 

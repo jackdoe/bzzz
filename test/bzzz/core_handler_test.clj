@@ -26,10 +26,12 @@
   {:index test-index-name
    :query query})
 
-(def put-request
+(defn put-request [enforce-limit size]
   {:index test-index-name
    :hosts hosts
    :query query
+   :size size
+   :enforce-limits enforce-limit
    :facets {:name {:size 7}}})
 
 (defn send-delete-request []
@@ -61,8 +63,21 @@
     (refresh-search-managers)
     (let [r (:body (http-client/put host {:accept :json
                                           :as :json
-                                          :body (json/write-str put-request)}))]
-      (is (= (* 2 (count (flatten hosts))) (:total r)))))
+                                          :body (json/write-str (put-request false 1000))}))
+          cnt (* 2 (count (flatten hosts)))]
+      (is (= cnt (:total r)))
+      (is (= cnt (count (:hits r))))))
+
+  (testing "put-limit"
+    (refresh-search-managers)
+    (dotimes [n (* 2 (count (flatten hosts)))]
+      (let [should-be (+ 1 n)
+            r (:body (http-client/put host {:accept :json
+                                            :as :json
+                                            :body (json/write-str (put-request true should-be))}))
+            cnt (* 2 (count (flatten hosts)))]
+        (is (= cnt (:total r)))
+        (is (= should-be (count (:hits r)))))))
 
   (testing "delete-and-should-be-zero"
     (is (= (:body (send-delete-request)
@@ -70,7 +85,7 @@
     (refresh-search-managers)
     (let [r (:body (http-client/put host {:accept :json
                                           :as :json
-                                          :body (json/write-str put-request)}))]
+                                          :body (json/write-str (put-request false 10))}))]
       (is (= 0 (:total r)))))
   
   (testing "stop"

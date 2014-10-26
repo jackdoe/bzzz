@@ -43,7 +43,7 @@
               :body-encoding "UTF-8"
               :socket-timeout 1000
               :conn-timeout 1000}]
-    (log/info "<" input "> in part <" part ">")
+    (log/debug "<" input "> in part <" part ">")
     (try
       (let [resolved (peer-resolve (first part))]
         (if (> (count part) 1)
@@ -52,22 +52,34 @@
       (catch Throwable e
         {:exception (with-err-str (pst e 36))}))))
 
+(defn limit [input result]
+  (let [hits (:hits result)
+        size (default-to (:size input) default-size)]
+    (if (> (count (:hits result)) size)
+      (let [sorted (sort-by :_score hits)]
+        (assoc result :hits (subvec (vec sorted) 0 size)))
+      result)))
+
 (defn search-many [hosts input]
   (let [c (async/chan)
-        ms-start (time-ms)]
+        ms-start (time-ms)
+        enforce-limits (default-to (:enforce-limits input) true)]
     (doseq [part hosts]
       (async/go (async/>! c (search-remote part input))))
-    (let [ collected (into [] (for [part hosts] (async/<!! c)))]
-      (reduce (fn [sum next]
-                (if (:exception next)
-                  (throw (Throwable. (as-str (:exception next)))))
-                (-> sum
-                    (assoc-in [:took] (time-took ms-start))
-                    (update-in [:facets] merge-with (:facets next)) ;; XXX: FIXME
-                    (update-in [:total] + (:total next))
-                    (update-in [:hits] concat (:hits next))))
-              { :total 0, :hits [], :took -1 }
-              collected))))
+    (let [collected (into [] (for [part hosts] (async/<!! c)))
+          result (reduce (fn [sum next]
+                           (if (:exception next)
+                             (throw (Throwable. (as-str (:exception next)))))
+                           (-> sum
+                               (assoc-in [:took] (time-took ms-start))
+                               (update-in [:facets] merge-with (:facets next)) ;; XXX: FIXME
+                               (update-in [:total] + (:total next))
+                               (update-in [:hits] concat (:hits next))))
+                         { :total 0, :hits [], :took -1 }
+                         collected)]
+      (if enforce-limits
+        (limit input result)
+        result))))
 
 (defn stat []
   {:index (index/index-stat)

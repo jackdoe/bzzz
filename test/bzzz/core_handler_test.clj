@@ -11,7 +11,7 @@
 (def test-index-name :testing-handler-index)
 (def host "http://localhost:3000/")
 (def id default-identifier)
-(def hosts [id id id [id id [id id id id id id id id id [id] [id id [id]]]]])
+(def hosts [id host id id [id id [id id id host [host host id host] [host] [host id] [id host] id id id id id id [id] [id id [id]]]]])
 
 (def query {:term {:field "name"
                    :value "doe"}})

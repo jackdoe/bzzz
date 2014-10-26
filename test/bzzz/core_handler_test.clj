@@ -13,18 +13,18 @@
 (def id default-identifier)
 (def hosts [id id id [id id [id id id id id id id id id [id] [id id [id]]]]])
 
+(def query {:term {:field "name"
+                   :value "doe"}})
+
 (def store-request
   {:index test-index-name
    :documents [{:name "jack doe"}
                {:name "john doe"}]
    :facets {:name {}}})
 
-(def query {:term {:field "name"
-                   :value "doe"}})
 (def delete-request
   {:index test-index-name
    :query query})
-
 
 (def put-request
   {:index test-index-name
@@ -32,6 +32,10 @@
    :query query
    :facets {:name {:size 7}}})
 
+(defn send-delete-request []
+  (http-client/delete host {:accept :json
+                            :as :json
+                            :body (json/write-str delete-request)}))
 (defonce server
   (run-jetty handler {:port 3000
                       :join? false}))
@@ -44,9 +48,7 @@
     (discover))
 
   (testing "delete"
-    (is (= (:body (http-client/delete host {:accept :json
-                                            :as :json
-                                            :body (json/write-str delete-request)}))
+    (is (= (:body (send-delete-request))
            {test-index-name "name:doe"})))
 
   (testing "store"
@@ -63,10 +65,8 @@
       (is (= (* 2 (count (flatten hosts))) (:total r)))))
 
   (testing "delete-and-should-be-zero"
-    (is (= (:body (http-client/delete host {:accept :json
-                                            :as :json
-                                            :body (json/write-str delete-request)}))
-           {test-index-name "name:doe"}))
+    (is (= (:body (send-delete-request)
+                  {test-index-name "name:doe"})))
     (refresh-search-managers)
     (let [r (:body (http-client/put host {:accept :json
                                           :as :json

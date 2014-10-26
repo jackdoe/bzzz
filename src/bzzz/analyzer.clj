@@ -15,7 +15,7 @@
            (org.apache.lucene.analysis.miscellaneous PerFieldAnalyzerWrapper)
            (org.apache.lucene.analysis.core WhitespaceAnalyzer KeywordAnalyzer)
            (org.apache.lucene.util Version)))
-(set! *warn-on-reflection* true)
+
 ;; https://lucene.apache.org/core/4_6_0/core/org/apache/lucene/analysis/Analyzer.html
 ;; Analyzer analyzer = new Analyzer() {
 ;;  @Override
@@ -52,7 +52,7 @@
     (to-char-filter (gen-char-filter reader (first filters)) (next filters))))
 
 (defn to-lucene-tokenizer [name obj ^Reader reader]
-  (let [char-filter (to-char-filter reader
+  (let [char-filter ^CharFilter (to-char-filter reader
                                     (default-to (:char-filter obj) []))]
     (case (as-str name)
       "whitespace" (WhitespaceTokenizer. *version* char-filter)
@@ -60,12 +60,12 @@
       "keyword" (KeywordTokenizer. char-filter)
       "edge-ngram" (EdgeNGramTokenizer. *version*
                                         char-filter
-                                        (need :min_gram obj "need min_gram")
-                                        (need :max_gram obj "need max_gram"))
+                                        (int (need :min_gram obj "need min_gram"))
+                                        (int (need :max_gram obj "need max_gram")))
       "ngram" (NGramTokenizer. *version*
                                char-filter
-                               (need :min_gram obj "need min_gram")
-                               (need :max_gram obj "need max_gram")))))
+                               (int (need :min_gram obj "need min_gram"))
+                               (int (need :max_gram obj "need max_gram"))))))
 
 (defn gen-token-filter [^TokenStream source obj]
   (let [type (need :type obj "need tokenfilter type: 'custom|whitespace|keyword..'")]
@@ -74,18 +74,18 @@
       "limit" (LimitTokenCountFilter. source (need :max-token-count obj "need max-token-count"))
       "length" (LengthFilter. (default-to (:enable-position-increment obj) true)
                               source
-                              (need :min obj "need min length")
-                              (need :max obj "need max length"))
+                              (int (need :min obj "need min length"))
+                              (int (need :max obj "need max length")))
       "position" (PositionFilter. source (default-to (:position-increment obj) 0))
       "reverse" (ReverseStringFilter. *version* source)
       "edge-ngram" (EdgeNGramTokenFilter. *version*
                                           source
-                                          (need :min_gram obj "need min_gram")
-                                          (need :max_gram obj "need max_gram"))
+                                          (int (need :min_gram obj "need min_gram"))
+                                          (int (need :max_gram obj "need max_gram")))
       "ngram" (NGramTokenFilter. *version*
                                  source
-                                 (need :min_gram obj "need min_gram")
-                                 (need :max_gram obj "need max_gram")))))
+                                 (int (need :min_gram obj "need min_gram"))
+                                 (int (need :max_gram obj "need max_gram"))))))
 
 
 (defn to-lucene-token-filter [source filters]

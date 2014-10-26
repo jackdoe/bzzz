@@ -13,7 +13,6 @@
                                      FilteredQuery QueryWrapperFilter
                                      ConstantScoreQuery
                                      Collector TopScoreDocCollector TopDocsCollector)))
-(set! *warn-on-reflection* true)
 (declare parse-query)
 (defn parse-lucene-query-parser
   ^Query

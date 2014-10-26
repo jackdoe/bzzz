@@ -22,7 +22,6 @@
                                      TopDocsCollector MultiCollector)
            (org.apache.lucene.store NIOFSDirectory Directory)))
 
-(set! *warn-on-reflection* true)
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def mapping* (atom {}))

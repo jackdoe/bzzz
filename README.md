@@ -2,6 +2,8 @@
 
 *work in progress* stateless (clojure + lucene-4.10.1 + jetty + ring) search service
 
+[![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
+
 ## run
 ```
 $ lein trampoline run -- --directory /tmp/bzbzbz

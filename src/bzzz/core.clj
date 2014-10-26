@@ -16,7 +16,6 @@
   (:import (java.net URL))
   (:gen-class :main true))
 
-(set! *warn-on-reflection* true)
 (def periodic-pool (mk-pool))
 (def timer* (atom 0))
 (def port* (atom const/default-port))
@@ -41,8 +40,8 @@
         args {:accept :json
               :as :json
               :body-encoding "UTF-8"
-              :socket-timeout 1000
-              :conn-timeout 1000}]
+              :socket-timeout (default-to (:socket-timeout input) 1000)
+              :conn-timeout (default-to (:connect-timeout input) 1000)}]
     (log/debug "<" input "> in part <" part ">")
     (try
       (let [resolved (peer-resolve (first part))]

@@ -1,9 +1,12 @@
 (defproject bzzz "0.1.0-SNAPSHOT"
   :description "clojure + lucene + ring + jetty"
   :url "http://github.com/jackdoe/bzzz"
+  :maintainer {:email "jack@sofialondonmoskva.com"}
+  :global-vars {*warn-on-reflection* true}
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :jvm-opts ["-Xmx4g"]
+  ;; :jvm-opts ["-Xmx4g"]
+  :plugins [[lein-rpm "0.0.5"]]
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.apache.lucene/lucene-core "4.10.1"]
                  [org.apache.lucene/lucene-facet "4.10.1"]

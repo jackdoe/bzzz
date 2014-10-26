@@ -39,7 +39,7 @@
   (let [found (key obj)]
     (if (not found)
       (throw (Throwable. (if (string? ex)
-                           ex
+                           ^String ex
                            (join " " ex)))))
     found))
 

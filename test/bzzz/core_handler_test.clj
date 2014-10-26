@@ -33,6 +33,8 @@
    :hosts hosts
    :query query
    :size size
+   :socket-timeout 10000
+   :connect-timeout 10000
    :enforce-limits enforce-limit
    :facets {:name {:size facet-size}}})
 

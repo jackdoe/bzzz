@@ -52,18 +52,48 @@
       (catch Throwable e
         {:exception (with-err-str (pst e 36))}))))
 
-(defn limit [input result]
-  (let [hits (:hits result)
-        size (default-to (:size input) default-size)]
-    (if (> (count (:hits result)) size)
-      (let [sorted (sort-by :_score hits)]
-        (assoc result :hits (subvec (vec sorted) 0 size)))
-      result)))
+(defn limit [input result field-key sort-key]
+  (if-let [hits (field-key result)]
+    (let [size (default-to (:size input) default-size)
+          sorted (sort-by sort-key #(compare %2 %1) hits)]
+      (assoc result field-key (if (and  (> (count hits) size)
+                                        (default-to (:enforce-limits input) true))
+                                (subvec (vec sorted) 0 size)
+                                sorted)))
+    result))
+
+(defn concat-facets [big small]
+  (if (not big)
+    small ;; initial reduce
+    (into big
+          (for [[k v] small]
+            (if-let [big-list (get big k)]
+              [k (concat v big-list)]
+              [k v])))))
+
+(defn input-facet-settings [input dim]
+  (let [global-ef (default-to (:enforce-limits input) true)]
+    (if-let [config (get-in [:facets (keyword dim)] input)]
+      (if (contains? config :enforce-limits)
+        config
+        (assoc config :enforce-limits global-ef))
+      {:enforce-limits global-ef})))
+
+(defn merge-facets [result]
+  ;; produces not-sorted output
+  (into {}
+        (for [[k v] (default-to result {})]
+          [k (vals (reduce (fn [sum next]
+                             (let [l (:label next)]
+                               (if (contains? sum l)
+                                 (update-in sum [l :count] + (:count next))
+                                 (assoc sum l next))))
+                           {}
+                           v))])))
 
 (defn search-many [hosts input]
   (let [c (async/chan)
-        ms-start (time-ms)
-        enforce-limits (default-to (:enforce-limits input) true)]
+        ms-start (time-ms)]
     (doseq [part hosts]
       (async/go (async/>! c (search-remote part input))))
     (let [collected (into [] (for [part hosts] (async/<!! c)))
@@ -72,14 +102,18 @@
                              (throw (Throwable. (as-str (:exception next)))))
                            (-> sum
                                (assoc-in [:took] (time-took ms-start))
-                               (update-in [:facets] merge-with (:facets next)) ;; XXX: FIXME
+                               (update-in [:facets] concat-facets (:facets next))
                                (update-in [:total] + (:total next))
                                (update-in [:hits] concat (:hits next))))
                          { :total 0, :hits [], :took -1 }
-                         collected)]
-      (if enforce-limits
-        (limit input result)
-        result))))
+                         collected)
+          fixed-facets (into {} (for [[k v] (merge-facets (:facets result))]
+                                  [k (limit (input-facet-settings input k)
+                                            v
+                                            (keyword k)
+                                            :count)]))
+          fixed-result (assoc result :facets fixed-facets)]
+      (limit input fixed-result :hits :_score))))
 
 (defn stat []
   {:index (index/index-stat)

@@ -42,9 +42,9 @@
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory name)
                 (IndexWriterConfig. *version* @analyzer*)))
-
+(def taxo-prefix "__taxo-")
 (defn taxo-dir-name [name]
-  (str "taxo-" (as-str name)))
+  (str taxo-prefix (as-str name)))
 
 (defn new-taxo-writer ^DirectoryTaxonomyWriter [name]
   (DirectoryTaxonomyWriter. (new-index-directory (taxo-dir-name name))))
@@ -132,11 +132,6 @@
     (.close manager))
   (reset! mapping* {}))
 
-(defn bootstrap-indexes []
-  (doseq [f (.listFiles (root-identifier-path))]
-    (if (.isDirectory ^File f)
-      (get-search-manager (.getName ^File f)))))
-
 (defn use-taxo-reader [index callback]
   ;; FIXME: reuse
   (let [reader (new-taxo-reader index)]
@@ -162,6 +157,16 @@
         (.forceMerge writer 1)
         (.close taxo)
         (.close writer)))))
+
+(defn bootstrap-indexes []
+  (doseq [f (filter (fn [x] (= (.indexOf (.getName ^File x) (as-str taxo-prefix)) -1))
+                    (.listFiles (root-identifier-path)))]
+    (if (.isDirectory ^File f)
+      (let [name (.getName ^File f)]
+        (use-writer name (fn [writer taxo]
+                           ;; do nothing, just open/close the taxo directory
+                           ))
+        (get-search-manager name)))))
 
 (defn get-facet-config ^FacetsConfig [facets]
   (let [config (FacetsConfig.)]
@@ -268,10 +273,12 @@
                                                                                     facet-collector]))]
                     (.search searcher query wrap)
                     {:total (.getTotalHits score-collector)
-                     :facets (let [fc (FastTaxonomyFacetCounts. taxo-reader facet-config facet-collector)]
+                     :facets (let [fc (FastTaxonomyFacetCounts. taxo-reader
+                                                                facet-config
+                                                                facet-collector)]
                                (into {} (for [[k v] facets]
                                           (if-let [fr (.getTopChildren fc
-                                                                    (default-to (:size v) default-facet-group-size)
+                                                                    (default-to (:size v) default-size)
                                                                     (as-str k)
                                                                     ^"[Ljava.lang.String;" (into-array
                                                                                             String []))]

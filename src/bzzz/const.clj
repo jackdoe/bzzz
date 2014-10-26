@@ -6,7 +6,6 @@
 (def default-root "/tmp/BZZZ")
 (def default-port 3000)
 (def default-size 20)
-(def default-facet-group-size 10)
 (def default-identifier :__shard_0)
 (def default-acceptable-discover-time-diff 10)
 

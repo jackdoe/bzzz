@@ -1,6 +1,6 @@
 # bzzz
 
-*work in progress* stateless (clojure + lucene-4.9.1 + jetty + ring) search service
+*work in progress* stateless (clojure + lucene-4.10.1 + jetty + ring) search service
 
 ## run
 ```

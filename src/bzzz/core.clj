@@ -108,6 +108,25 @@
                          { :total 0, :hits [], :took -1 }
                          collected)
           fixed-facets (into {} (for [[k v] (merge-facets (:facets result))]
+                                  ;; this is broken by design
+                                  ;; :__shard_2 {:facets {:name [{:label "jack doe"
+                                  ;;                              :count 100}
+                                  ;;                             {:label "john doe"
+                                  ;;                              :count 10}]}}
+                                  ;;                          ;; -----<cut>-------
+                                  ;;                          ;; {:label "foo bar"
+                                  ;;                          ;; :count 8}
+                                  ;;
+                                  ;; :__shard_3 {:facets {:name [{:label "foo bar"
+                                  ;;                              :count 9}]}}}
+                                  ;;
+                                  ;; so when the multi-search merge happens
+                                  ;; with size=2,it will actully return only
+                                  ;; 'jack doe(100)' and 'john doe(10)' even though
+                                  ;; the actual count of 'foo bar' is 17, because
+                                  ;; __shard_2 actually didnt even send 'foo bar'
+                                  ;; because of the size=2 cut
+
                                   [k (limit (input-facet-settings input k)
                                             v
                                             (keyword k)

@@ -127,8 +127,7 @@
 
         {:directory "/etc/bzzz"
          :filemode "644"
-         :configuration true
-         :noreplace true
+         :configuration "noreplace"
          :sources [(source (file (:root project) "pkg" "bzzz-0.config")
                            "bzzz-0.config")
                    (source (file (:root project) "pkg" "log4j.properties")

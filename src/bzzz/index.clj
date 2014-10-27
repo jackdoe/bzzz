@@ -41,7 +41,9 @@
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory name)
                 (IndexWriterConfig. *version* @analyzer*)))
+
 (def taxo-prefix "__taxo-")
+
 (defn taxo-dir-name [name]
   (str taxo-prefix (as-str name)))
 
@@ -109,7 +111,7 @@
     (conj
      m
      (when explanation (assoc m :_explain (.toString explanation)))
-     (when highlighted   (assoc m :_highlight highlighted)))))
+     (when highlighted (assoc m :_highlight highlighted)))))
 
 (defn get-search-manager ^SearcherManager [index]
   (locking mapping*

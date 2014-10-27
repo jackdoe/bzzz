@@ -3,7 +3,7 @@
   (use bzzz.util)
   (use bzzz.const)
   (use [clojure.string :only (split join)])
-  (use [clojure.repl :only (pst)])
+
   (use [overtone.at-at :only (every mk-pool)])
   (:require [bzzz.const :as const])
   (:require [bzzz.index :as index])
@@ -11,7 +11,7 @@
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
-  (:require [clj-http.client :as http-client])
+  (:require [org.httpkit.client :as http-client])
   (:require [clojure.tools.logging :as log])
   (:import (java.net URL))
   (:gen-class :main true))
@@ -35,21 +35,26 @@
         identifier)))) ;; nothing matches the identifier
 
 ;; [ "a", ["b","c",["d","e"]]]
-(defn search-remote [hosts input]
+(defn search-remote [hosts input c]
   (let [part (if (or (vector? hosts) (list? hosts)) hosts [hosts])
-        args {:accept :json
-              :as :json
-              :body-encoding "UTF-8"
-              :socket-timeout (default-to (:socket-timeout input) 1000)
-              :conn-timeout (default-to (:connect-timeout input) 1000)}]
-    (log/debug "<" input "> in part <" part ">")
+        is-multi (> (count part) 1)
+        args {:timeout (default-to (:timeout input) 1000)
+              :as :text
+              :body (json/write-str (if is-multi
+                                      (assoc input :hosts part)
+                                      input))}
+        callback (fn [{:keys [status headers body error]}]
+                   (if error
+                     (async/>!! c {:exception error})
+                     (async/>!! c (jr body))))
+        resolved (peer-resolve (first part))]
+    (log/debug "<" input "> in part <" part "> to resolved <" resolved ">")
     (try
-      (let [resolved (peer-resolve (first part))]
-        (if (> (count part) 1)
-          (:body (http-client/put resolved (assoc args :body (json/write-str (assoc input :hosts part)))))
-          (:body (http-client/get resolved (assoc args :body (json/write-str input))))))
+      (if is-multi
+        (http-client/put resolved args callback)
+        (http-client/get resolved args callback))
       (catch Throwable e
-        {:exception (with-err-str (pst e 36))}))))
+        (async/>!! c {:exception (ex-str e)})))))
 
 (defn limit [input result field-key sort-key]
   (if-let [hits (field-key result)]
@@ -90,47 +95,55 @@
                            {}
                            v))])))
 
+(defn merge-and-limit-facets [input result]
+  (assoc result
+    :facets
+    (into {} (for [[k v] (merge-facets (:facets result))]
+               ;; this is broken by design
+               ;; :__shard_2 {:facets {:name [{:label "jack doe"
+               ;;                              :count 100}
+               ;;                             {:label "john doe"
+               ;;                              :count 10}]}}
+               ;;                          ;; -----<cut>-------
+               ;;                          ;; {:label "foo bar"
+               ;;                          ;; :count 8}
+               ;;
+               ;; :__shard_3 {:facets {:name [{:label "foo bar"
+               ;;                              :count 9}]}}}
+               ;;
+               ;; so when the multi-search merge happens
+               ;; with size=2,it will actully return only
+               ;; 'jack doe(100)' and 'john doe(10)' even though
+               ;; the actual count of 'foo bar' is 17, because
+               ;; __shard_2 actually didnt even send 'foo bar'
+               ;; because of the size=2 cut
+
+               [k (limit (input-facet-settings input k)
+                         v
+                         (keyword k)
+                         :count)]))))
+
+(defn remote-reducer [sum next]
+  (if (:exception next)
+    (throw (Throwable. (as-str (:exception next)))))
+  (-> sum
+      (update-in [:facets] concat-facets (get next :facets))
+      (update-in [:total] + (get next :total))
+      (update-in [:hits] concat (get next :hits))))
+
 (defn search-many [hosts input]
   (let [c (async/chan)
         ms-start (time-ms)]
+
     (doseq [part hosts]
-      (async/go (async/>! c (search-remote part input))))
+      (search-remote part input c))
     (let [collected (into [] (for [part hosts] (async/<!! c)))
-          result (reduce (fn [sum next]
-                           (if (:exception next)
-                             (throw (Throwable. (as-str (:exception next)))))
-                           (-> sum
-                               (assoc-in [:took] (time-took ms-start))
-                               (update-in [:facets] concat-facets (:facets next))
-                               (update-in [:total] + (:total next))
-                               (update-in [:hits] concat (:hits next))))
+          result (reduce remote-reducer
                          { :total 0, :hits [], :took -1 }
                          collected)
-          fixed-facets (into {} (for [[k v] (merge-facets (:facets result))]
-                                  ;; this is broken by design
-                                  ;; :__shard_2 {:facets {:name [{:label "jack doe"
-                                  ;;                              :count 100}
-                                  ;;                             {:label "john doe"
-                                  ;;                              :count 10}]}}
-                                  ;;                          ;; -----<cut>-------
-                                  ;;                          ;; {:label "foo bar"
-                                  ;;                          ;; :count 8}
-                                  ;;
-                                  ;; :__shard_3 {:facets {:name [{:label "foo bar"
-                                  ;;                              :count 9}]}}}
-                                  ;;
-                                  ;; so when the multi-search merge happens
-                                  ;; with size=2,it will actully return only
-                                  ;; 'jack doe(100)' and 'john doe(10)' even though
-                                  ;; the actual count of 'foo bar' is 17, because
-                                  ;; __shard_2 actually didnt even send 'foo bar'
-                                  ;; because of the size=2 cut
-
-                                  [k (limit (input-facet-settings input k)
-                                            v
-                                            (keyword k)
-                                            :count)]))
-          fixed-result (assoc result :facets fixed-facets)]
+          fixed-result (assoc-in (merge-and-limit-facets input result)
+                                 [:took]
+                                 (time-took ms-start))]
       (limit input fixed-result :hits :_score))))
 
 (defn stat []
@@ -177,32 +190,34 @@
                                  (:uri request)
                                  (json/read-str (slurp-or-default (:body request) "{}") :key-fn keyword)))}
     (catch Throwable e
-      (let [ex (with-err-str (pst e 36))]
+      (let [ex (ex-str e)]
         (log/warn request "->" ex)
         {:status 500
          :headers {"Content-Type" "text/plain"}
          :body ex}))))
 
-(defn update-discover-state [host]
+(defn update-discovery-state [host c]
   (try
     (log/debug "sending discovery query to" host)
-    (let [info (:body (http-client/patch host {:accept :json
-                                               :as :json
-                                               :body (json/write-str {:discover-hosts @discover-hosts*})
-                                               :body-encoding "UTF-8"
-                                               :socket-timeout 500
-                                               :conn-timeout 500}))
-          host-identifier (keyword (need :identifier info "need identifier"))
-          remote-discover-hosts (:discover-hosts info)]
-      (log/debug "updating" host "with identifier" host-identifier)
-      (locking peers*
-        (swap! peers*
-               assoc-in [host-identifier host] @timer*))
-      (merge-discover-hosts remote-discover-hosts)
-      true)
+    (http-client/patch host
+                       {:body (json/write-str {:discover-hosts @discover-hosts*})
+                        :as :text
+                        :timeout 500}
+                       (fn [{:keys [status headers body error]}]
+                         (if error
+                           (log/info error)
+                           (let [info (jr body)
+                                 host-identifier (keyword (need :identifier info "need identifier"))
+                                 remote-discover-hosts (:discover-hosts info)]
+                             (log/debug "updating" host "with identifier" host-identifier)
+                             (locking peers*
+                               (swap! peers*
+                                      assoc-in [host-identifier host] @timer*))
+                             (merge-discover-hosts remote-discover-hosts)))
+                         (async/>!! c true)))
     (catch Exception e
       (log/warn "update-discovery-state" host (.getMessage e))
-      true)))
+      (async/>!! c false))))
 
 (defn discover []
   ;; just add localhost:port to the possible servers for specific identifier
@@ -210,10 +225,10 @@
   (locking peers*
     (swap! peers*
            assoc-in [@index/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
-
-  (let [c (async/chan) hosts @discover-hosts*]
+  (let [c (async/chan)
+        hosts @discover-hosts*]
     (doseq [[host unused] hosts]
-      (async/go (async/>! c (update-discover-state host))))
+      (update-discovery-state host c))
     (doseq [host hosts]
       (async/<!! c))))
 

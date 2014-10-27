@@ -274,19 +274,25 @@
                                                                                     facet-collector]))]
                     (.search searcher query wrap)
                     {:total (.getTotalHits score-collector)
-                     :facets (let [fc (FastTaxonomyFacetCounts. taxo-reader
-                                                                facet-config
-                                                                facet-collector)]
-                               (into {} (for [[k v] facets]
-                                          (if-let [fr (.getTopChildren fc
-                                                                    (default-to (:size v) default-size)
-                                                                    (as-str k)
-                                                                    ^"[Ljava.lang.String;" (into-array
-                                                                                            String []))]
-                                            [(keyword (.dim fr))
-                                             (into [] (for [^LabelAndValue lv (.labelValues fr)]
-                                                        {:label (.label lv)
-                                                         :count (.value lv)}))]))))
+                     :facets (try (let [fc (FastTaxonomyFacetCounts. taxo-reader
+                                                                     facet-config
+                                                                     facet-collector)]
+                                    (into {} (for [[k v] facets]
+                                               (if-let [fr (.getTopChildren fc
+                                                                            (default-to (:size v) default-size)
+                                                                            (as-str k)
+                                                                            ^"[Ljava.lang.String;" (into-array
+                                                                                                    String []))]
+                                                 [(keyword (.dim fr))
+                                                  (into [] (for [^LabelAndValue lv (.labelValues fr)]
+                                                             {:label (.label lv)
+                                                              :count (.value lv)}))]))))
+                                  (catch Throwable e
+                                    (let [ex (ex-str e)]
+                                      (log/warn (ex-str e))
+                                      {}))) ;; do not send the error back,
+                                            ;; even though we might fake a facet result
+                                            ;; it could really surprise the client
                      :hits (into []
                                  (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
                                    (document->map (.doc searcher (.doc hit))

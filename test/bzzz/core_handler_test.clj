@@ -1,10 +1,11 @@
 (ns bzzz.core-handler-test
   (:import (java.io StringReader))
   (:require [clojure.data.json :as json])
-  (:require [clj-http.client :as http-client])
+  (:require [org.httpkit.client :as http-client])
   (:use clojure.test
         bzzz.core
         bzzz.const
+        bzzz.util
         ring.adapter.jetty
         bzzz.index))
 
@@ -33,25 +34,25 @@
    :hosts hosts
    :query query
    :size size
-   :socket-timeout 10000
-   :connect-timeout 10000
+   :timeout 10000
    :enforce-limits enforce-limit
    :facets {:name {:size facet-size}}})
 
 (defn send-put-request [enforce-limit size facet-size]
-  (http-client/put host {:accept :json
-                         :as :json
-                         :body (json/write-str (put-request enforce-limit size facet-size))}))
+  (let [{:keys [status headers body error] :as resp}
+        @(http-client/put host {:body (json/write-str (put-request enforce-limit size facet-size))})]
+    (jr body)))
 
 (defn send-get-request [size facet-size]
-  (http-client/get host {:accept :json
-                         :as :json
-                         :body (json/write-str (put-request false size facet-size))}))
+  (let [{:keys [status headers body error] :as resp}
+        @(http-client/get host {:body (json/write-str (put-request false size facet-size))})]
+    (jr body)))
 
 (defn send-delete-request []
-  (http-client/delete host {:accept :json
-                            :as :json
-                            :body (json/write-str delete-request)}))
+  (let [{:keys [status headers body error] :as resp}
+        @(http-client/delete host {:body (json/write-str delete-request)})]
+    (jr body)))
+
 (defonce server
   (run-jetty handler {:port 3000
                       :join? false}))
@@ -64,20 +65,25 @@
     (discover))
 
   (testing "delete"
-    (is (= (:body (send-delete-request))
+    (is (= (send-delete-request)
            {test-index-name "name:doe"})))
 
   (testing "store"
-    (is (= (:body (http-client/post host {:accept :json
-                                          :as :json
-                                          :body (json/write-str store-request)}))
-           {test-index-name true})))
+    (let [{:keys [status headers body error] :as resp}
+          @(http-client/post host {:body (json/write-str store-request)})]
+      (jr body)))
+
+  ;; "Elapsed time: 27907.134538 msecs" - async with httpkit
+  ;; "Elapsed time: 83890.603676 msecs" - sync request with async/go per host
+  ;; (testing "n-times-put"
+  ;;  (time (dotimes [n 1000]
+  ;;           (send-put-request false 1000 10))))
 
   (testing "put"
     (refresh-search-managers)
-    (let [r (:body (send-put-request false 1000 10))
-          r1 (:body (send-put-request false 1 10))
-          r2 (:body (send-put-request true 1 2))
+    (let [r (send-put-request false 1000 10)
+          r1 (send-put-request false 1 10)
+          r2 (send-put-request true 1 2)
           hcnt (count (flatten hosts))
           cnt (* 4 hcnt)
           nf (get-in r1 [:facets :name])
@@ -96,7 +102,7 @@
     (refresh-search-managers)
     (dotimes [n 4]
       (let [should-be (+ 1 n)
-            r (:body (send-get-request should-be should-be))
+            r (send-get-request should-be should-be)
             nf (get-in r [:facets :name])]
         (is (= 4 (:total r)))
         (is (= 2 (:count (first nf))))
@@ -109,16 +115,16 @@
     (refresh-search-managers)
     (dotimes [n (* 4 (count (flatten hosts)))]
       (let [should-be (+ 1 n)
-            r (:body (send-put-request true should-be 10))
+            r (send-put-request true should-be 10)
             cnt (* 4 (count (flatten hosts)))]
         (is (= cnt (:total r)))
         (is (= should-be (count (:hits r)))))))
 
   (testing "delete-and-should-be-zero"
-    (is (= (:body (send-delete-request)
-                  {test-index-name "name:doe"})))
+    (is (= (send-delete-request)
+           {test-index-name "name:doe"}))
     (refresh-search-managers)
-    (let [r (:body (send-put-request false 10 10))]
+    (let [r (send-put-request false 10 10)]
       (is (= 0 (:total r)))))
   
   (testing "stop"

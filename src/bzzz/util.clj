@@ -1,4 +1,6 @@
 (ns bzzz.util
+  (:require [clojure.data.json :as json])
+  (use [clojure.repl :only (pst)])
   (use [clojure.string :only (split join)]))
 (defn as-str ^String [x]
   (if (keyword? x)
@@ -54,3 +56,9 @@
   (-> class (.getDeclaredField (name field-name))
     (doto (.setAccessible true))
     (.get obj)))
+
+(defn jr [body]
+  (json/read-str body :key-fn keyword))
+
+(defn ex-str [e]
+  (with-err-str (pst e 36)))

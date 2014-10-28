@@ -32,7 +32,7 @@
                        :documents [{:id "WS baz bar"
                                     :name "duplicate"
                                     :name_no_norms "bar baz"
-                                    :name_ngram_no_norms "andurilXX"
+                                    :name_ngram_no_norms "andurilxX"
                                     :name_edge_ngram_no_norms "andurilXX"
                                     :name_keyword_no_norms "hello worldXX"
                                     :name_no_html_no_norms "bzbzXX<br><html>"
@@ -60,7 +60,7 @@
                                                         :tokenizer "ngram"
                                                         :filter [{:type "lowercase"}]
                                                         :char-filter [{:type "pattern-replace"
-                                                                       :pattern "X+",
+                                                                       :pattern "(?i)X+",
                                                                        :replacement "ZZ"}]
                                                         :min_gram 2
                                                         :max_gram 4}})]
@@ -144,10 +144,10 @@
                                             {:term {:field "name_ngram_no_norms", :value "rilz"}}
                                             {:term {:field "name_ngram_no_norms", :value "ilzz"}}]
                                      :must-not [{:term {:field "name_ngram_no_norms", :value "anduril"}}
-                                                {:term {:field "name_ngram_no_norms", :value "andurilxx"}}
+                                                {:term {:field "name_ngram_no_norms", :value "andurilxX"}}
                                                 {:term {:field "name_ngram_no_norms", :value "andurilXX"}}]}})]
       (is (= 1 (:total ret)))
-      (is (= "andurilXX" (:name_ngram_no_norms (first (:hits ret)))))))
+      (is (= "andurilxX" (:name_ngram_no_norms (first (:hits ret)))))))
 
 
   (testing "search-edge-ngram"

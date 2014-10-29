@@ -386,6 +386,23 @@
                       :query "doe")]
       (is (= 0 (:total ret)))))
 
+  (testing "write-exception-rolled-back"
+    (dotimes [n 100]
+      (is (thrown? Throwable
+                   (store :index test-index-name
+                          :documents [{:name "zzz" :name_st "aaa@bbb"}
+                                      {:name "lll" :name_st "bbb@aaa"}
+                                      {:name_no_store_no_index "exception"}]
+                          :facets {:name {}
+                                   :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
+                          :analyzer {:name {:type "keyword"}
+                                     :bzbz-used-only-for-facet {:type "standard"}})))
+      (refresh-search-managers)
+      (let [ret (search :index test-index-name
+                        :facets {:name {}, :name_st {}}
+                        :query {:term {:field "name", :value "zzz"}})]
+        (is (= 0 (:total ret))))))
+
   (testing "facets"
     (dotimes [n 1000]
       (store :index test-index-name

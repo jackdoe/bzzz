@@ -7,6 +7,7 @@
   (use [clojure.string :only (join)])
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader File)
+           (java.lang OutOfMemoryError)
            (org.apache.lucene.analysis.tokenattributes CharTermAttribute)
            (org.apache.lucene.facet FacetsConfig FacetField FacetsCollector LabelAndValue)
            (org.apache.lucene.facet.taxonomy FastTaxonomyFacetCounts)
@@ -140,17 +141,56 @@
       (use-taxo-reader index (fn [^DirectoryTaxonomyReader reader] (callback searcher reader)))
       (finally (.release manager searcher)))))
 
+(defn log-close-err [^Directory dir ^Throwable e]
+  (log/warn (str
+             (.toString dir)
+             " Got exception while close()ing the writer,and directory is still locked."
+             " Unlocking it. "
+             "[ should never happen, there is a race between this IndexWriter/unlock and other process/thread index writer open ]"
+             " Exception: " (ex-str e))))
+  
+(defn safe-close-writer [^IndexWriter writer]
+  (try
+    (do 
+      (.close writer))
+    (catch Throwable e
+      (if (IndexWriter/isLocked (.getDirectory writer))
+        (do
+          (log-close-err (.getDirectory writer) e)
+          (IndexWriter/unlock (.getDirectory writer)))))))
+
+(defn safe-close-taxo [^DirectoryTaxonomyWriter taxo]
+  (try
+    (.close taxo)
+    (catch Throwable e
+      (if (IndexWriter/isLocked (.getDirectory taxo))
+        (do
+          (log-close-err (.getDirectory taxo) e)
+          (DirectoryTaxonomyWriter/unlock (.getDirectory taxo)))))))
+
 (defn use-writer [index callback]
   (let [writer (new-index-writer index)
         taxo (new-taxo-writer index)]
     (try
-      (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)
+      (do
+        (.prepareCommit writer)
+        (.prepareCommit taxo)
+        (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)]
+          (.commit taxo)
+          (.commit writer)
+          (.forceMerge writer 1)
+          rc))
+      (catch Exception e
+        (do
+          (if-not (instance? OutOfMemoryError e)
+            (do
+              (.rollback taxo)
+              (.rollback writer)))
+          (throw e)))
       (finally
-        (.commit taxo)
-        (.commit writer)
-        (.forceMerge writer 1)
-        (.close taxo)
-        (.close writer)))))
+        (do
+          (safe-close-taxo taxo)
+          (safe-close-writer writer))))))
 
 (defn bootstrap-indexes []
   (doseq [f (filter (fn [x] (= (.indexOf (.getName ^File x) (as-str taxo-prefix)) -1))

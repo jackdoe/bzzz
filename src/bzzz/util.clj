@@ -113,3 +113,30 @@
       (index_float? name)
       (index_double? name)
       (index_long? name)))
+
+(defn is-parse-nil [x parser]
+  (if x
+    (parser x)
+    nil))
+
+(defn int-or-parse ^Integer [x]
+  (if (integer? x)
+    (int x)
+    (Integer/parseInt x)))
+
+(defn long-or-parse ^Long [x]
+  (if (integer? x)
+    (long x)
+    (Long/parseLong x)))
+
+(defn double-or-parse ^Double [x]
+  (if (float? x)
+    (double x)
+    (Double/parseDouble x)))
+
+(defn float-or-parse ^Float [x]
+  (if (float? x)
+    (float x)
+    (Float/parseFloat x)))
+  
+(defn indexed [coll] (map-indexed vector coll))

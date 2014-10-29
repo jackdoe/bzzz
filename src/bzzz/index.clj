@@ -17,7 +17,7 @@
                                        IntField LongField FloatField DoubleField)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
-           (org.apache.lucene.index IndexWriter IndexReader Term
+           (org.apache.lucene.index IndexWriter IndexReader Term IndexableField
                                     IndexWriterConfig DirectoryReader FieldInfo)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher
                                      Explanation Collector TopScoreDocCollector
@@ -73,22 +73,31 @@
 
 (defn numeric-field [^Field$Store stored ^String key ^String value]
   (if (index_integer? key)
-    (IntField. key (Integer/parseInt value) stored)
+    (IntField. key (int-or-parse value) stored)
     (if (index_long? key)
-      (LongField. key (Long/parseLong value) stored)
+      (LongField. key (long-or-parse value) stored)
       (if (index_float? key)
-        (FloatField. key (Float/parseFloat value) stored)
-        (DoubleField. key (Double/parseDouble value) stored)))))
+        (FloatField. key (float-or-parse value) stored)
+        (DoubleField. key (double-or-parse value) stored)))))
 
-(defn add-field [document key value]
+(defn add-field [^Document document key value]
   (let [str-key (as-str key)
         stored (if (stored? str-key)
                  Field$Store/YES
                  Field$Store/NO)
-        field (if (numeric? str-key)
-                (numeric-field stored str-key value)
-                (text-field stored str-key value))]
-    (.add ^Document document field)))
+        generator (if (numeric? str-key)
+                    #(numeric-field stored str-key %)
+                    #(text-field stored str-key %))]
+    (if (vector? value)
+      (do
+        (if (stored? str-key)
+          (.add document (Field. str-key
+                                 "__array_identifier__"
+                                 Field$Store/YES
+                                 Field$Index/NO)))
+        (doseq [v value]
+          (.add document (generator v))))
+      (.add document (generator value)))))
 
 (defn map->document [hmap]
   (let [document (Document.)]
@@ -97,10 +106,17 @@
     document))
 
 (defn document->map
-  [^Document doc score highlighter ^Explanation explanation]
+  [^Document doc only-fields score highlighter ^Explanation explanation]
   (let [m (into {:_score score }
-                (for [^Field f (.getFields doc)]
-                  [(keyword (.name f)) (.stringValue f)]))
+                (for [^IndexableField f (.getFields doc)]
+                  (let [str-name (.name f)
+                        name (keyword str-name)]
+                    (if (or (nil? only-fields)
+                            (name only-fields))
+                      (let [values (.getValues doc str-name)]
+                        (if (= (count values) 1)
+                          [name (first values)]
+                          [name (vec (rest values))]))))))
         highlighted (highlighter m)]
     (conj
      m
@@ -148,10 +164,10 @@
              " Unlocking it. "
              "[ should never happen, there is a race between this IndexWriter/unlock and other process/thread IndexWriter/open ]"
              " Exception: " (ex-str e))))
-  
+
 (defn safe-close-writer [^IndexWriter writer]
   (try
-    (do 
+    (do
       (.close writer))
     (catch Throwable e
       (if (IndexWriter/isLocked (.getDirectory writer))
@@ -253,14 +269,24 @@
 (defn delete-all [index]
   (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
 
-(defn fragment->map [^TextFragment fragment]
+(defn fragment->map [^TextFragment fragment fidx]
   {:text (.toString fragment)
    :score (.getScore fragment)
+   :index fidx
    :frag-num (wall-hack-field (class fragment) :fragNum fragment)
    :text-start-pos (wall-hack-field (class fragment) :textStartPos fragment)
    :text-end-pos (wall-hack-field (class fragment) :textEndPos fragment)})
 
-(defn- make-highlighter
+(defn get-best-fragments [str field highlighter analyzer max-fragments fidx]
+  (map #(fragment->map % fidx)
+       (.getBestTextFragments ^Highlighter highlighter
+                              ^TokenStream (.tokenStream ^Analyzer analyzer
+                                                         (as-str field)
+                                                         (StringReader. str))
+                              ^String str
+                              true
+                              (int max-fragments))))
+(defn make-highlighter
   [^Query query ^IndexSearcher searcher config analyzer]
   (if config
     (let [indexReader (.getIndexReader searcher)
@@ -274,21 +300,20 @@
       (fn [m]
         (into {} (for [field fields]
                    [(keyword field)
-                    (if-let [str ((keyword field) m)]
-                      (map #(fragment->map %)
-                           (.getBestTextFragments ^Highlighter highlighter
-                                                  ^TokenStream (.tokenStream ^Analyzer analyzer
-                                                                             (as-str field)
-                                                                             (StringReader. str))
-                                                  ^String str
-                                                  true
-                                                  (int max-fragments)))
+                    (if-let [value ((keyword field) m)]
+                      (flatten (into [] (for [[fidx str] (indexed (if (vector? value) value [value]))]
+                                          (vec (get-best-fragments str
+                                                                   field
+                                                                   highlighter
+                                                                   analyzer
+                                                                   max-fragments
+                                                                   fidx)))))
                       [])]))))
     (constantly nil)))
 
 (defn search
-  [& {:keys [index query page size explain refresh highlight analyzer facets]
-      :or {page 0, size default-size, explain false refresh false analyzer nil facets nil}}]
+  [& {:keys [index query page size explain refresh highlight analyzer facets fields]
+      :or {page 0, size default-size, explain false, refresh false, analyzer nil, facets nil, fields nil}}]
   (if refresh
     (refresh-search-managers))
   (use-searcher index
@@ -329,6 +354,7 @@
                      :hits (into []
                                  (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
                                    (document->map (.doc searcher (.doc hit))
+                                                  fields
                                                   (.score hit)
                                                   highlighter
                                                   (when explain

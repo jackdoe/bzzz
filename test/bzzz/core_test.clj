@@ -26,11 +26,13 @@
                                     :long_long "570"
                                     :float_float "57.383"
                                     :double_double "570.383"}
-                                   {:name "john doe"
-                                    :age_integer "67"
-                                    :long_long "670"
-                                    :float_float "67.383"
-                                    :double_double "670.383"}
+                                   {:name ["john doe highlight","jack2 doe2 highlight",3,"highhlight"]
+                                    :name_no_store ["new york","new york2",3]
+                                    :age_integer ["67",64]
+                                    :long_long ["670", 671]
+                                    :float_float ["67.383", 67.384]
+                                    :float_float_no_store ["67.383", 67.384]
+                                    :double_double [670.383, 67.384]}
                                    {:id "baz bar"
                                     :name "duplicate",
                                     :name_no_norms "bar baz"
@@ -201,15 +203,16 @@
     (let [ret (search :index test-index-name
                       :analyzer {:name {:type "standard"} }
                       :highlight {:fields ["name"]}
+                      :explain true
                       :query { :query-parser {:query "john@doe"
                                               :default-operator "or"
                                               :default-field "name"}})]
       (is (= 2 (:total ret)))
       (let [f (first (:hits ret))
             l (last (:hits ret))]
-        (is (= "<b>john</b> <b>doe</b>" (:text (first (:name (:_highlight f))))))
+        (is (= "<b>john</b> <b>doe</b> highlight" (:text (first (:name (:_highlight f))))))
         (is (= "jack <b>doe</b> foo"  (:text (first (:name (:_highlight l))))))
-        (is (= "john doe" (:name f)))
+        (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name f)))
         (is (= "jack doe foo" (:name l))))))
 
   (testing "search-or-standard-and-highlight-fragments"
@@ -276,7 +279,7 @@
                                                        :value "foo"
                                                        :boost 10}}]}})]
       (is (= 2 (:total ret)))
-      (is (= "john doe" (:name (last (:hits ret)))))
+      (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (last (:hits ret)))))
       (is (= "jack doe foo" (:name (first (:hits ret)))))))
 
   (testing "search-or-pages"
@@ -304,7 +307,7 @@
       (is (= 1 (count (:hits ret-page-0))))
       (is (= 1 (count (:hits ret-page-1))))
       (is (= 0 (count (:hits ret-page-2))))
-      (is (= "john doe" (:name (first (:hits ret-page-0)))))
+      (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret-page-0)))))
       (is (= "jack doe foo" (:name (last (:hits ret-page-1)))))))
 
   (testing "search-and"
@@ -313,9 +316,9 @@
                                              :default-operator :and
                                              :default-field "name"}})]
       (is (= 1 (:total ret)))
-      (is (= "john doe" (:name (first (:hits ret)))))))
+      (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret)))))))
 
-  (testing "search-and"
+  (testing "search-range"
     (let [ret (search :index test-index-name
                       :query {:bool {:must [{:range {:field "age_integer"
                                                      :min "45"
@@ -370,13 +373,38 @@
         (is (= "47" (:age_integer r)))
         (is (= "470" (:long_long r))))))
 
+  (testing "search-and"
+    (let [ret (search :index test-index-name
+                      :highlight {:fields ["name","age_integer"]}
+                      :query {:bool {:must [{:range {:field "age_integer" :min 63 :max 65}}
+                                            {:term {:field "name"
+                                                    :value "highlight"}}
+                                            {:term {:field "name"
+                                                    :value "3"}}
+                                            {:term {:field "name"
+                                                    :value "jack2"}}]}})]
+      (is (= 1 (:total ret)))
+      (let [h (first (:hits ret))
+            hi (:name (:_highlight h))]
+        (is (= '() (:age_integer (:_highlight h))))
+        (is (= nil (:float_float_no_store h)))
+        (is (= ["670" "671"] (:long_long h)))
+        (is (= ["67" "64"] (:age_integer h)))
+        (is (= ["670.383" "67.384"] (:double_double h)))
+        (is (= ["67.383" "67.384"] (:float_float h)))
+        (is (= 0 (:index (first hi))))
+        (is (= 2 (:index (last hi))))
+        (is (= "<b>3</b>" (:text (last hi))))
+        (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name h))))))
+
+
   (testing "delete-by-query-and-search"
     (delete-from-query test-index-name "name:foo")
     (refresh-search-managers)
     (let [ret (search :index test-index-name
                       :query "name:doe")]
       (is (= 1 (:total ret)))
-      (is (= "john doe" (:name (first (:hits ret)))))))
+      (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret)))))))
 
   (testing "cleanup-and-expect-zero"
     (delete-all test-index-name)

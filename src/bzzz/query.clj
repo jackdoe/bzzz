@@ -75,13 +75,6 @@
     (.setBoost q boost)
     q))
 
-(defn is-parse-nil [x is cast parser]
-  (if x
-    (if (is x)
-      (cast x)
-      (parser x))
-    nil))
-
 (defn parse-numeric-range-query
   ^Query
   [analyzer & {:keys [^String field min max ^Boolean min-inclusive ^Boolean max-inclusive boost]
@@ -90,26 +83,26 @@
     (throw (Throwable. (str field " is not numeric (need to have _integer|_float|_double|_long in the name"))))
   (let [q (if (index_integer? field)
             (NumericRangeQuery/newIntRange field
-                                           (is-parse-nil min #(integer? %) #(int %) #(Integer/parseInt %))
-                                           (is-parse-nil max #(integer? %) #(int %) #(Integer/parseInt %))
+                                           (is-parse-nil min #(int-or-parse %))
+                                           (is-parse-nil max #(int-or-parse %))
                                            min-inclusive
                                            max-inclusive)
             (if (index_long? field)
               (NumericRangeQuery/newLongRange field
-                                              (is-parse-nil min #(integer? %) #(long %) #(Long/parseLong %))
-                                              (is-parse-nil max #(integer? %) #(long %) #(Long/parseLong %))
+                                              (is-parse-nil min #(long-or-parse %))
+                                              (is-parse-nil max #(long-or-parse %))
                                               min-inclusive
                                               max-inclusive)
 
               (if (index_float? field)
                 (NumericRangeQuery/newFloatRange field
-                                                 (is-parse-nil min #(float? %) #(float %) #(Float/parseFloat %))
-                                                 (is-parse-nil max #(float? %) #(float %) #(Float/parseFloat %))
+                                                 (is-parse-nil min #(float-or-parse %))
+                                                 (is-parse-nil max #(float-or-parse %))
                                                  min-inclusive
                                                  max-inclusive)
                 (NumericRangeQuery/newDoubleRange field
-                                                  (is-parse-nil min #(float? %) #(double %) #(Double/parseDouble %))
-                                                  (is-parse-nil max #(float? %) #(double %) #(Double/parseDouble %))
+                                                  (is-parse-nil min #(double-or-parse %))
+                                                  (is-parse-nil max #(double-or-parse %))
                                                   min-inclusive
                                                   max-inclusive))))]
     (.setBoost q boost)

@@ -146,7 +146,7 @@
              (.toString dir)
              " Got exception while close()ing the writer,and directory is still locked."
              " Unlocking it. "
-             "[ should never happen, there is a race between this IndexWriter/unlock and other process/thread index writer open ]"
+             "[ should never happen, there is a race between this IndexWriter/unlock and other process/thread IndexWriter/open ]"
              " Exception: " (ex-str e))))
   
 (defn safe-close-writer [^IndexWriter writer]

@@ -21,11 +21,25 @@
 
   (testing "store"
     (let [ret-0 (store :index test-index-name
-                       :documents [{:name "jack doe foo"}
-                                   {:name "john doe"}
+                       :documents [{:name "jack doe foo"
+                                    :age_integer "57"
+                                    :long_long "570"
+                                    :float_float "57.383"
+                                    :double_double "570.383"}
+                                   {:name "john doe"
+                                    :age_integer "67"
+                                    :long_long "670"
+                                    :float_float "67.383"
+                                    :double_double "670.383"}
                                    {:id "baz bar"
                                     :name "duplicate",
                                     :name_no_norms "bar baz"
+                                    :age_integer "47"
+                                    :long_long "470"
+                                    :float_float "47.383"
+                                    :float_float_no_store "47.383"
+                                    :double_double "470.383"
+                                    :filterable_no_store_integer "470"
                                     :name_no_store "with space"}]
                        :analyzer {:name_no_norms {:type "keyword" }})
           ret-1 (store :index test-index-name
@@ -105,8 +119,8 @@
     (let [ret (search :index test-index-name
                       :explain true
                       :query {:bool {:must [{:match-all {}}
-                                            {:random-score-query {:base 100
-                                                                  :query {:match-all {}}}}]}})
+                                            {:random-score {:base 100
+                                                            :query {:match-all {}}}}]}})
           num-docs (:docs (get (index-stat) test-index-name))]
       (is (= (:total ret) num-docs))
       (is (> (:_score (first (:hits ret))) 100))
@@ -300,6 +314,61 @@
                                              :default-field "name"}})]
       (is (= 1 (:total ret)))
       (is (= "john doe" (:name (first (:hits ret)))))))
+
+  (testing "search-and"
+    (let [ret (search :index test-index-name
+                      :query {:bool {:must [{:range {:field "age_integer"
+                                                     :min "45"
+                                                     :max 47
+                                                     :min-inclusive true
+                                                     :max-inclusive true}}
+                                            {:range {:field "long_long"
+                                                     :min "470"
+                                                     :max 471
+                                                     :min-inclusive true
+                                                     :max-inclusive false}}
+                                            {:range {:field "float_float"
+                                                     :min "47.01"
+                                                     :max "47.99"
+                                                     :min-inclusive false
+                                                     :max-inclusive false}}
+                                            {:range {:field "double_double"
+                                                     :min "470.01"
+                                                     :max "470.99"
+                                                     :min-inclusive false
+                                                     :max-inclusive false}}]}})
+          ret-nil (search :index test-index-name
+                          :query {:range {:field "age_integer"}})
+          ret-ub (search :index test-index-name
+                         :query {:bool {:must [{:range {:field "age_integer"
+                                                        :min "45"
+                                                        :max nil
+                                                        :min-inclusive true
+                                                        :max-inclusive true}}
+                                               {:range {:field "long_long"
+                                                        :min nil
+                                                        :max nil
+                                                        :min-inclusive true
+                                                        :max-inclusive false}}
+                                               {:range {:field "float_float"
+                                                        :min nil
+                                                        :max "47.99"
+                                                        :min-inclusive false
+                                                        :max-inclusive false}}
+                                               {:range {:field "double_double"
+                                                        :min "470.01"
+                                                        :max nil
+                                                        :min-inclusive false
+                                                        :max-inclusive false}}]}})]
+      (is (= 1 (:total ret)))
+      (is (= 3 (:total ret-nil))) ;; all documents containing the age_integer field
+      (let [r (first (:hits ret))]
+        (is (= r (first (:hits ret-ub))))
+        (is (= nil (:float_float_no_store r)))
+        (is (= "47.383" (:float_float r)))
+        (is (= "470.383" (:double_double r)))
+        (is (= "47" (:age_integer r)))
+        (is (= "470" (:long_long r))))))
 
   (testing "delete-by-query-and-search"
     (delete-from-query test-index-name "name:foo")

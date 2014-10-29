@@ -1,5 +1,6 @@
 (ns bzzz.util
   (:require [clojure.data.json :as json])
+  (use bzzz.const)
   (use [clojure.repl :only (pst)])
   (use [clojure.string :only (split join)]))
 (defn as-str ^String [x]
@@ -62,3 +63,53 @@
 
 (defn ex-str [e]
   (with-err-str (pst e 36)))
+
+(defn analyzed? [name]
+  (if (or (substring? "_not_analyzed" name)
+          (= name id-field))
+    false
+    true))
+
+(defn norms? [name]
+  (if (or (substring? "_no_norms" name)
+          (= name id-field))
+    false
+    true))
+
+(defn index_integer? [name]
+  (if (substring? "_integer" name)
+    true
+    false))
+
+(defn index_long? [name]
+  (if (substring? "_long" name)
+    true
+    false))
+
+(defn index_float? [name]
+  (if (substring? "_float" name)
+    true
+    false))
+
+(defn index_double? [name]
+  (if (substring? "_double" name)
+    true
+    false))
+
+(defn stored? [name]
+  (if (and (substring? "_no_store" name)
+           (not (= name id-field)))
+    false
+    true))
+
+(defn indexed? [name]
+  (if (and (substring? "_no_index" name)
+           (not (= name id-field)))
+    false
+    true))
+
+(defn numeric? [name]
+  (or (index_integer? name)
+      (index_float? name)
+      (index_double? name)
+      (index_long? name)))

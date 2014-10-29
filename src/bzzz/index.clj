@@ -12,7 +12,8 @@
            (org.apache.lucene.facet.taxonomy FastTaxonomyFacetCounts)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
            (org.apache.lucene.analysis Analyzer TokenStream)
-           (org.apache.lucene.document Document Field Field$Index Field$Store)
+           (org.apache.lucene.document Document Field Field$Index Field$Store
+                                       IntField LongField FloatField DoubleField)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexWriter IndexReader Term
@@ -57,44 +58,36 @@
   (with-open [writer (new-index-writer name)]
     (DirectoryReader/open ^IndexWriter writer false)))
 
-(defn analyzed? [name]
-  (if (or (substring? "_not_analyzed" name)
-          (= name id-field))
-    false
-    true))
 
-(defn norms? [name]
-  (if (or (substring? "_no_norms" name)
-          (= name id-field))
-    false
-    true))
+(defn text-field [^Field$Store stored ^String key value]
+  (Field. key (as-str value)
+          stored
+          (if (indexed? key)
+            (case [(analyzed? key) (norms? key)]
+              [true true] Field$Index/ANALYZED
+              [true false] Field$Index/ANALYZED_NO_NORMS
+              [false true] Field$Index/NOT_ANALYZED
+              [false false] Field$Index/NOT_ANALYZED_NO_NORMS)
+            Field$Index/NO)))
 
-(defn stored? [name]
-  (if (and (substring? "_no_store" name)
-           (not (= name id-field)))
-    false
-    true))
+(defn numeric-field [^Field$Store stored ^String key ^String value]
+  (if (index_integer? key)
+    (IntField. key (Integer/parseInt value) stored)
+    (if (index_long? key)
+      (LongField. key (Long/parseLong value) stored)
+      (if (index_float? key)
+        (FloatField. key (Float/parseFloat value) stored)
+        (DoubleField. key (Double/parseDouble value) stored)))))
 
-(defn indexed? [name]
-  (if (and (substring? "_no_index" name)
-           (not (= name id-field)))
-    false
-    true))
-
-(defn- add-field [document key value]
-  (let [ str-key (as-str key) ]
-    (.add ^Document document
-          (Field. str-key (as-str value)
-                  (if (stored? str-key)
-                    Field$Store/YES
-                    Field$Store/NO)
-                  (if (indexed? str-key)
-                    (case [(analyzed? str-key) (norms? str-key)]
-                      [true true] Field$Index/ANALYZED
-                      [true false] Field$Index/ANALYZED_NO_NORMS
-                      [false true] Field$Index/NOT_ANALYZED
-                      [false false] Field$Index/NOT_ANALYZED_NO_NORMS)
-                    Field$Index/NO)))))
+(defn add-field [document key value]
+  (let [str-key (as-str key)
+        stored (if (stored? str-key)
+                 Field$Store/YES
+                 Field$Store/NO)
+        field (if (numeric? str-key)
+                (numeric-field stored str-key value)
+                (text-field stored str-key value))]
+    (.add ^Document document field)))
 
 (defn map->document [hmap]
   (let [document (Document.)]
@@ -311,7 +304,7 @@
 (defn index-stat []
   (into {} (for [[name searcher] @mapping*]
              (let [sample (search :index name
-                                  :query {:random-score-query {:query {:match-all {}}}})]
+                                  :query {:random-score {:query {:match-all {}}}})]
                [name (use-searcher name
                                    (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                      (let [reader (.getIndexReader searcher)]

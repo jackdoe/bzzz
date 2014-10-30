@@ -137,7 +137,13 @@
     (doseq [[index ^SearcherManager manager] @mapping*]
       (log/debug "refreshing: " index " " manager)
       ;; FIXME - reopen cached taxo readers
-      (.maybeRefresh manager))))
+      (try
+        (.maybeRefresh manager)
+        (catch Throwable e
+          (do
+            (log/info (str index " maybeRefresh exception, closing it. Exception: " (ex-str e)))
+            (.close manager)
+            (swap! mapping* dissoc index)))))))
 
 (defn reset-search-managers []
   (doseq [[name ^SearcherManager manager] @mapping*]
@@ -243,8 +249,8 @@
     (add-facet-field-single doc dim val)))
 
 (defn store
-  [& {:keys [index documents analyzer facets]
-      :or {analyzer nil facets {}}}]
+  [& {:keys [index documents analyzer facets no-binlog]
+      :or {analyzer nil facets {} no-binlog false}}]
   (if analyzer
     (reset! analyzer* (parse-analyzer analyzer)))
   (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
@@ -258,11 +264,12 @@
                               (.updateDocument writer ^Term (Term. ^String id-field
                                                                    (as-str (:id m))) (.build config doc))
                               (.addDocument writer (.build config taxo doc)))))
-                        (binlog-append writer {:action "store"
-                                               :index index
-                                               :documents documents
-                                               :analyzer :analyzer
-                                               :facets facets}))
+                        (if-not no-binlog
+                          (binlog-append writer {:action "store"
+                                                 :index index
+                                                 :documents documents
+                                                 :analyzer :analyzer
+                                                 :facets facets})))
                       { index true })))
 
 (defn delete-from-query
@@ -321,11 +328,16 @@
                       [])]))))
     (constantly nil)))
 
+
+(defn get-score-collector ^TopDocsCollector [sort pq-size]
+  (TopScoreDocCollector/create pq-size true))
+
 (defn search
-  [& {:keys [index query page size explain refresh highlight analyzer facets fields hide-binlog]
+  [& {:keys [index query page size explain refresh highlight analyzer facets fields hide-binlog sort]
       :or {page 0, size default-size, explain false,
            refresh false, analyzer nil, facets nil,
-           fields nil, hide-binlog true}}]
+           fields nil, hide-binlog true
+           sort nil}}]
   (if refresh
     (refresh-search-managers))
   (use-searcher index
@@ -335,13 +347,14 @@
                         query (parse-query query analyzer)
                         highlighter (make-highlighter query searcher highlight analyzer)
                         pq-size (+ (* page size) size)
-                        score-collector ^TopDocsCollector (TopScoreDocCollector/create pq-size true)
+                        score-collector (get-score-collector sort pq-size)
                         facet-collector (FacetsCollector.)
                         facet-config (get-facet-config facets)
                         wrap (MultiCollector/wrap
-                              ^"[Lorg.apache.lucene.search.Collector;" (into-array Collector
-                                                                                   [score-collector
-                                                                                    facet-collector]))]
+                              ^"[Lorg.apache.lucene.search.Collector;"
+                              (into-array Collector
+                                          [score-collector
+                                           facet-collector]))]
                     (.search searcher
                              query
                              (if hide-binlog

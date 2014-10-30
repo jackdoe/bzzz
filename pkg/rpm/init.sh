@@ -17,15 +17,20 @@ JAVA="java"
 NAME=bzzz
 NFILES=${NFILES:-32768}
 DAEMON="/usr/lib/bzzz/start.sh"
+
 export BZZZ_USER="bzzz"
 start() {
     ulimit -n $NFILES
     for i in `ls -1 /etc/bzzz/bzzz-*.config`; do
-        echo -n $"Starting $i"
-        daemon --user $BZZZ_USER $DAEMON $i 2>&1 > /dev/null < /dev/null &
-        RETVAL=$?
-        echo
-        [ $RETVAL -eq 0 ] || return $RETVAL
+        echo -n "Starting $i"
+        runuser -s /bin/bash $BZZZ_USER -c "/usr/lib/bzzz/start.sh $i &"
+        rc=$?
+        if [ $rc -ne 0 ]; then
+            echo "... failed"
+            return $rc
+        else
+            echo "... done"
+        fi
     done
     return 0
 }

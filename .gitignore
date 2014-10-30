@@ -3,6 +3,8 @@
 /checkouts
 /binary/*.rpm
 /binary/*.md5
+/binary/*.sh
+/binary/*.pl
 pom.xml
 pom.xml.asc
 *.jar

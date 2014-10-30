@@ -15,7 +15,6 @@
   (:import (java.net URL))
   (:gen-class :main true))
 
-(def periodic-pool (mk-pool))
 (def timer* (atom 0))
 (def port* (atom const/default-port))
 (def acceptable-discover-time-diff* (atom const/default-acceptable-discover-time-diff))
@@ -53,7 +52,7 @@
                        (catch Throwable e
                          (async/>!! c {:exception (ex-str e)})))))
         resolved (peer-resolve (first part))]
-    (log/debug "<" input "> in part <" part "> to resolved <" resolved ">")
+    (log/trace "<" input "> in part <" part "> to resolved <" resolved ">")
     (try
       (if is-multi
         (http-client/put resolved args callback)
@@ -184,7 +183,7 @@
       (log/warn "merge-discovery-hosts" x (.getMessage e))))
   {:identifier @index/identifier* :discover-hosts @discover-hosts*})
 
-(defn work [method uri input]
+(defn work [method uri qs input]
   (log/debug "received request" method input)
   (condp = method
     :post (mapply index/store input)
@@ -204,6 +203,7 @@
      :headers {"Content-Type" "application/json"}
      :body (json/write-str (work (:request-method request)
                                  (:uri request)
+                                 (:query-string request)
                                  (json/read-str (slurp-or-default (:body request) "{}") :key-fn keyword)))}
     (catch Throwable e
       (let [ex (ex-str e)]
@@ -212,27 +212,28 @@
          :headers {"Content-Type" "application/json"}
          :body (json/write-str {:exception ex})}))))
 
-(defn update-discovery-state [host c]
+(defn update-discovery-state [host c str-state]
   (try
-    (log/debug "sending discovery query to" host)
+    (log/trace "sending discovery query to" host)
     (http-client/patch host
-                       {:body (json/write-str {:discover-hosts @discover-hosts*})
+                       {:body str-state
                         :as :text
+                        :keepalive -1
                         :timeout 500}
                        (fn [{:keys [status headers body error]}]
                          (if error
-                           (log/info error)
+                           (log/trace error)
                            (let [info (jr body)
                                  host-identifier (keyword (need :identifier info "need identifier"))
                                  remote-discover-hosts (:discover-hosts info)]
-                             (log/debug "updating" host "with identifier" host-identifier)
+                             (log/trace "updating" host "with identifier" host-identifier)
                              (locking peers*
                                (swap! peers*
                                       assoc-in [host-identifier host] @timer*))
                              (merge-discover-hosts remote-discover-hosts)))
                          (async/>!! c true)))
     (catch Exception e
-      (log/warn "update-discovery-state" host (.getMessage e))
+      (log/trace "update-discovery-state" host (.getMessage e))
       (async/>!! c false))))
 
 (defn discover []
@@ -241,10 +242,12 @@
   (locking peers*
     (swap! peers*
            assoc-in [@index/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
+  (Thread/sleep (* (int (rand 20)) 1000))
   (let [c (async/chan)
-        hosts @discover-hosts*]
+        hosts @discover-hosts*
+        str-state (json/write-str {:discover-hosts @discover-hosts*})]
     (doseq [[host unused] hosts]
-      (update-discovery-state host c))
+      (update-discovery-state host c str-state))
     (doseq [host hosts]
       (async/<!! c))))
 
@@ -291,8 +294,14 @@
   (index/bootstrap-indexes)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index/shutdown)))
   (log/info "starting bzzz --identifier" (as-str @index/identifier*) "--port" @port* "--directory" @index/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
-  (every 5000 #(index/refresh-search-managers) periodic-pool :desc "search refresher")
-  (every 1000 #(swap! timer* inc) periodic-pool :desc "timer")
-  (every 1000 #(discover) periodic-pool :desc "periodic discover")
-  (every 10000 #(log/info "up:" @timer* @index/identifier* @discover-hosts* @peers*) periodic-pool :desc "dump")
-  (run-jetty handler {:port @port*}))
+  (every 5000 #(index/refresh-search-managers) (mk-pool) :desc "search refresher")
+  (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
+  (every 120000 #(discover) (mk-pool) :desc "periodic discover")
+  (every 10000 #(log/trace "up:" @timer* @index/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
+  (repeatedly
+   (try
+     (run-jetty handler {:port @port*})
+     (catch Throwable e
+       (do
+         (log/warn (ex-str e))
+         (Thread/sleep 10000))))))

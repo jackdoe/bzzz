@@ -21,7 +21,7 @@ if [ "x$BZZZ_MIN_MEM" = "x" ]; then
     BZZZ_MIN_MEM=256m
 fi
 if [ "x$BZZZ_MAX_MEM" = "x" ]; then
-    BZZZ_MAX_MEM=1g
+    BZZZ_MAX_MEM=512m
 fi
 if [ "x$BZZZ_HEAP_SIZE" != "x" ]; then
     BZZZ_MIN_MEM=$BZZZ_HEAP_SIZE
@@ -37,9 +37,12 @@ if [ ! -x "$JAVA" ]; then
 fi
 
 source /etc/bzzz/$BASE
-
+exec 0>&-
+exec 1>&-
+exec 2>&-
 $JAVA -Dlog4j.configuration=file:/etc/bzzz/log4j.properties $JAVA_OPTS \
       -jar /usr/lib/bzzz/bzzz.jar \
       --directory $BZZZ_DIRECTORY \
       --port $BZZZ_PORT \
-      --identifier $BZZZ_IDENTIFIER 2>&1
+      --hosts $BZZZ_HOSTS \
+      --identifier $BZZZ_IDENTIFIER

@@ -3,6 +3,7 @@
   :url "http://github.com/jackdoe/bzzz"
   :maintainer {:email "jack@sofialondonmoskva.com"}
   :global-vars {*warn-on-reflection* true}
+  :jvm-opts ["-Xmx1g"]
   :plugins [[lein-rpm "0.0.5"]] ;; .. used only because I couldnt find
                                 ;; good way to add dependencies to
                                 ;; '.lein-classpath' type tasks

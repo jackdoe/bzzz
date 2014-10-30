@@ -1,4 +1,5 @@
 (ns bzzz.core-test
+  (:import (java.io StringReader File))
   (:require [clojure.java.io :as io])
   (:use clojure.test
         bzzz.core
@@ -17,7 +18,7 @@
     (is (= expected (:total ret)))
     (is (= "zzz" (:name (first (:hits ret)))))))
 
-(defn get-path [p]
+(defn get-path ^File [p]
   (io/file (as-str default-root) (as-str default-identifier) (as-str p)))
 
 (defn store-something [name]
@@ -51,7 +52,8 @@
                                     :long_long ["670", 671]
                                     :float_float ["67.383", 67.384]
                                     :float_float_no_store ["67.383", 67.384]
-                                    :double_double [670.383, 67.384]}
+                                    :double_double [670.383, 67.384]
+                                    :dont_want "XXXXXXX"}
                                    {:id "baz bar"
                                     :name "duplicate",
                                     :name_no_norms "bar baz"
@@ -397,6 +399,11 @@
   (testing "search-and"
     (let [ret (search :index test-index-name
                       :highlight {:fields ["name","age_integer"]}
+                      :fields {:age_integer true
+                               :name true
+                               :long_long true
+                               :double_double true
+                               :float_float true}
                       :query {:bool {:must [{:range {:field "age_integer" :min 63 :max 65}}
                                             {:term {:field "name"
                                                     :value "highlight"}}
@@ -409,6 +416,7 @@
             hi (:name (:_highlight h))]
         (is (= '() (:age_integer (:_highlight h))))
         (is (= nil (:float_float_no_store h)))
+        (is (= nil (:dont_want h)))
         (is (= ["670" "671"] (:long_long h)))
         (is (= ["67" "64"] (:age_integer h)))
         (is (= ["670.383" "67.384"] (:double_double h)))

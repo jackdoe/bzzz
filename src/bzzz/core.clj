@@ -22,16 +22,19 @@
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
 
+(defn rescent? [than]
+  (< (- @timer* (second than)) @acceptable-discover-time-diff*))
+
+(defn possible-hosts [identifier]
+  (filter rescent? (default-to ((keyword identifier) @peers*) [])))
+
 (defn peer-resolve [identifier]
-  (locking peers*
-    (let [all-possible ((keyword identifier) @peers*)]
-      (if all-possible
-        (let [possible (filter #(< (- @timer* (second %))
-                                   @acceptable-discover-time-diff*) all-possible)]
-          (if (= (count possible) 0)
-            (throw (Throwable. (as-str identifier)))
-            (first (rand-nth possible))))
-        identifier)))) ;; nothing matches the identifier
+  (if-let [all-possible ((keyword identifier) @peers*)]
+    (let [possible (filter rescent? all-possible)]
+      (if (= (count possible) 0)
+        (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier))))
+        (first (rand-nth possible))))
+    identifier)) ;; nothing matches the identifier
 
 ;; [ "a", ["b","c",["d","e"]]]
 (defn search-remote [hosts input c]

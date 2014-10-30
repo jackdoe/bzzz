@@ -253,8 +253,8 @@
     (add-facet-field-single doc dim val)))
 
 (defn store
-  [& {:keys [index documents analyzer facets no-binlog]
-      :or {analyzer nil facets {} no-binlog false}}]
+  [& {:keys [index documents analyzer facets force-binlog-stamp]
+      :or {analyzer nil facets {} force-binlog-stamp nil}}]
   (if analyzer
     (reset! analyzer* (parse-analyzer analyzer)))
   (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
@@ -268,24 +268,28 @@
                               (.updateDocument writer ^Term (Term. ^String id-field
                                                                    (as-str (:id m))) (.build config doc))
                               (.addDocument writer (.build config taxo doc)))))
-                        (if-not no-binlog
-                          (binlog-append writer {:action "store"
-                                                 :index index
-                                                 :documents documents
-                                                 :analyzer :analyzer
-                                                 :facets facets})))
+                        (binlog-append writer
+                                       force-binlog-stamp
+                                       {:action "store"
+                                        :index index
+                                        :documents documents
+                                        :analyzer :analyzer
+                                        :facets facets}))
                       { index true })))
 
 (defn delete-from-query
-  [index input]
-  (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+  ([index input] (delete-from-query index input nil))
+  ([index input force-binlog-stamp]
+     (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
                       ;; method is deleteDocuments(Query...)
                       (let [query (parse-query input (extract-analyzer nil))]
                         (.deleteDocuments writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [query]))
-                        (binlog-append writer {:action "delete"
-                                               :index index
-                                               :input input})
-                        { index (.toString query) }))))
+                        (binlog-append writer
+                                       force-binlog-stamp
+                                       {:action "delete"
+                                        :index index
+                                        :input input})
+                        { index (.toString query) })))))
 
 (defn delete-all [index]
   (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
@@ -416,22 +420,25 @@
                                         :has-deletions (.hasDeletions reader)})))]))))
 
 (defn binlog
-  [index & {:keys [from to size page]
-                    :or {page 0 size default-size}}]
+  [index & {:keys [from to size page fields]
+                    :or {page 0 size default-size fields nil}}]
   (search :index index
           :hide-binlog false
           :size size
           :page page
+          :fields fields
           :query {:range {:field __binlog__ms_long
                           :min from
                           :max to}}))
 
-(defn binlog-append [^IndexWriter writer data]
+(defn binlog-append [^IndexWriter writer force-binlog-stamp data]
   (.deleteDocuments writer
                     ^"[Lorg.apache.lucene.search.Query;"
                     (into-array Query [(parse-query {:range {:field __binlog__ms_long
                                                              :min nil
                                                              :max (- (time-ms) (* 24 3600 1000))}}
                                                     (extract-analyzer nil))]))
-  (.addDocument writer (map->document {__binlog__ms_long (time-ms)
+  (.addDocument writer (map->document {__binlog__ms_long (if force-binlog-stamp
+                                                           force-binlog-stamp
+                                                           (time-ms))
                                        __binlog__data_no_index (json/write-str data)})))

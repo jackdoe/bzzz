@@ -79,7 +79,7 @@
 
   (testing "put-partial"
     (refresh-search-managers)
-    (dotimes [n 3];; (* 4 (count (flatten hosts)))]
+    (dotimes [n 3]
       (let [should-be (+ 1 n)
             r (send-put-request true should-be 10 hosts-bad true)
             cnt (* 4 (count (flatten hosts)))]

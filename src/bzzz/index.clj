@@ -158,7 +158,7 @@
     (try
       (callback reader)
       (finally (if reader
-                 (.close reader))))))
+                 (.close ^DirectoryTaxonomyReader reader))))))
 
 (defn use-searcher [index callback]
   (let [manager (get-search-manager index)

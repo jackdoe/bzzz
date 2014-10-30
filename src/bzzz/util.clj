@@ -150,3 +150,13 @@
                    (func func f2)))
                (clojure.java.io/delete-file f))]
     (func func (clojure.java.io/file fname))))
+
+(defn concat-if [to next]
+  (if next
+    (concat to next)
+    to))
+
+(defn conj-if [to next]
+  (if next
+    (conj to next)
+    to))

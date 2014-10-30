@@ -13,7 +13,7 @@
 (def host "http://localhost:3000/")
 (def id default-identifier)
 (def hosts [id host id id [id id [id id id host [host host id host] [host] [host id] [id host] id id id id id id [id] [id id [id]]]]])
-
+(def hosts-bad [id host id "bzzz-testing-foofoo" id [id id [id id "bzz-testing-foobar" id host [host host "bzzz-testing-barfoo" id host] [host] [host id] [id host] id id id id id id [id] [id id [id "bzzz-testing-barbar"]]]]])
 (def query {:term {:field "name"
                    :value "doe"}})
 
@@ -29,23 +29,26 @@
   {:index test-index-name
    :query query})
 
-(defn put-request [enforce-limit size facet-size]
+(defn put-request [enforce-limit size facet-size h can-return-partial]
   {:index test-index-name
-   :hosts hosts
+   :can-return-partial can-return-partial
+   :hosts h
    :query query
    :size size
    :timeout 10000
    :enforce-limits enforce-limit
    :facets {:name {:size facet-size}}})
 
-(defn send-put-request [enforce-limit size facet-size]
-  (let [{:keys [status headers body error] :as resp}
-        @(http-client/put host {:body (json/write-str (put-request enforce-limit size facet-size))})]
-    (jr body)))
+(defn send-put-request 
+  ([enforce-limit size facet-size] (send-put-request enforce-limit size facet-size hosts false))
+  ([enforce-limit size facet-size h can-return-partial]
+     (let [{:keys [status headers body error] :as resp}
+           @(http-client/put host {:body (json/write-str (put-request enforce-limit size facet-size h can-return-partial))})]
+       (jr body))))
 
 (defn send-get-request [size facet-size]
   (let [{:keys [status headers body error] :as resp}
-        @(http-client/get host {:body (json/write-str (put-request false size facet-size))})]
+        @(http-client/get host {:body (json/write-str (put-request false size facet-size hosts false))})]
     (jr body)))
 
 (defn send-delete-request []
@@ -72,6 +75,19 @@
     (let [{:keys [status headers body error] :as resp}
           @(http-client/post host {:body (json/write-str store-request)})]
       (jr body)))
+
+
+  (testing "put-partial"
+    (refresh-search-managers)
+    (dotimes [n 3];; (* 4 (count (flatten hosts)))]
+      (let [should-be (+ 1 n)
+            r (send-put-request true should-be 10 hosts-bad true)
+            cnt (* 4 (count (flatten hosts)))]
+        (println r)
+        (is (not (= -1 (.indexOf (:exception (send-put-request true should-be 10 hosts-bad false)) "Throwable java.lang.IllegalArgumentException: host is null"))))
+        (is (= (count (:failed r)) 4))
+        (is (= cnt (:total r)))
+        (is (= should-be (count (:hits r)))))))
 
   ;; "Elapsed time: 27907.134538 msecs" - async with httpkit
   ;; "Elapsed time: 83890.603676 msecs" - sync request with async/go per host

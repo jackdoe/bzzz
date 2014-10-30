@@ -132,7 +132,6 @@
 
   (testing "search-match-all"
     (let [ret (search :index test-index-name
-                      :hide-binlog false
                       :query {:match-all {}})
           num-docs (:docs (get (index-stat) test-index-name))]
       (is (= (:total ret) num-docs))
@@ -142,7 +141,6 @@
   (testing "search-random-score-query"
     (let [ret (search :index test-index-name
                       :explain true
-                      :hide-binlog false
                       :query {:bool {:must [{:match-all {}}
                                             {:random-score {:base 100
                                                             :query {:match-all {}}}}]}})
@@ -461,27 +459,24 @@
         (is (= 0 (:total ret))))))
 
   (testing "facets"
-    (let [start (:total (binlog test-index-name :from nil :to nil))]
-      (dotimes [n 1000]
-        (store :index test-index-name
-               :documents [{:name "abc" :name_st "ddd mmm"}
-                           {:name "def 123" :name_st "uuu ooo"}]
-               :facets {:name {}
-                        :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
-               :analyzer {:name {:type "keyword"}
-                          :bzbz-used-only-for-facet {:type "standard"}})
-        (refresh-search-managers)
-        (let [ret (search :index test-index-name
-                          :facets {:name {:size 1}, :name_st {:path ["uuu"]}}
-                          :query {:match-all {}})
-              ret-bin (binlog test-index-name :from nil :to nil)
-              f (:facets ret)
-              nf (:name f)
-              ns (:name_st f)]
-          (is (= (+ 1 n start) (:total ret-bin)))
-          (is (= (count nf) 1))
-          (is (= (count ns) 4))
-          (is (= (+ 1 n) (:count (first nf))))))))
+    (dotimes [n 1000]
+      (store :index test-index-name
+             :documents [{:name "abc" :name_st "ddd mmm"}
+                         {:name "def 123" :name_st "uuu ooo"}]
+             :facets {:name {}
+                      :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
+             :analyzer {:name {:type "keyword"}
+                        :bzbz-used-only-for-facet {:type "standard"}})
+      (refresh-search-managers)
+      (let [ret (search :index test-index-name
+                        :facets {:name {:size 1}, :name_st {:path ["uuu"]}}
+                        :query {:match-all {}})
+            f (:facets ret)
+            nf (:name f)
+            ns (:name_st f)]
+        (is (= (count nf) 1))
+        (is (= (count ns) 4))
+        (is (= (+ 1 n) (:count (first nf)))))))
 
 
 

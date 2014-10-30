@@ -48,7 +48,10 @@
         callback (fn [{:keys [status headers body error]}]
                    (if error
                      (async/>!! c {:exception error})
-                     (async/>!! c (jr body))))
+                     (try
+                       (async/>!! c (jr body))
+                       (catch Throwable e
+                         (async/>!! c {:exception (ex-str e)})))))
         resolved (peer-resolve (first part))]
     (log/debug "<" input "> in part <" part "> to resolved <" resolved ">")
     (try
@@ -125,23 +128,34 @@
                          (keyword k)
                          :count)]))))
 
+
 (defn remote-reducer [sum next]
-  (if (:exception next)
-    (throw (Throwable. (as-str (:exception next)))))
-  (-> sum
-      (update-in [:facets] concat-facets (get next :facets))
-      (update-in [:total] + (get next :total))
-      (update-in [:hits] concat (get next :hits))))
+  (let [ex (if (:exception next)
+             (if-not (:can-return-partial sum)
+               (throw (Throwable. (as-str (:exception next))))
+               (do
+                 (log/info (str "will send partial response: " (as-str (:exception next))))
+                 (as-str (:exception next))))
+             nil)]
+    (-> sum
+        (update-in [:failed] conj-if ex)
+        (update-in [:failed] concat-if (:failed next))
+        (update-in [:facets] concat-facets (default-to (:facets next) {}))
+        (update-in [:total] + (default-to (:total next) 0))
+        (update-in [:hits] concat (default-to (:hits next) [])))))
 
 (defn search-many [hosts input]
   (let [c (async/chan)
         ms-start (time-ms)]
-
     (doseq [part hosts]
       (search-remote part input c))
     (let [collected (into [] (for [part hosts] (async/<!! c)))
           result (reduce remote-reducer
-                         { :total 0, :hits [], :took -1 }
+                         {:total 0
+                          :hits []
+                          :took -1
+                          :failed []
+                          :can-return-partial (default-to (:can-return-partial input) false)}
                          collected)
           fixed-result (assoc-in (merge-and-limit-facets input result)
                                  [:took]
@@ -195,8 +209,8 @@
       (let [ex (ex-str e)]
         (log/warn request "->" ex)
         {:status 500
-         :headers {"Content-Type" "text/plain"}
-         :body ex}))))
+         :headers {"Content-Type" "application/json"}
+         :body (json/write-str {:exception ex})}))))
 
 (defn update-discovery-state [host c]
   (try

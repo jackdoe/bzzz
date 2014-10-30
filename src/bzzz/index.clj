@@ -26,9 +26,6 @@
                                      TopDocsCollector MultiCollector FieldValueFilter)
            (org.apache.lucene.store NIOFSDirectory Directory)))
 
-(declare binlog)
-(declare binlog-append)
-
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def mapping* (atom {}))
@@ -253,8 +250,8 @@
     (add-facet-field-single doc dim val)))
 
 (defn store
-  [& {:keys [index documents analyzer facets force-binlog-stamp]
-      :or {analyzer nil facets {} force-binlog-stamp nil}}]
+  [& {:keys [index documents analyzer facets]
+      :or {analyzer nil facets {}}}]
   (if analyzer
     (reset! analyzer* (parse-analyzer analyzer)))
   (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
@@ -267,29 +264,16 @@
                             (if (:id m)
                               (.updateDocument writer ^Term (Term. ^String id-field
                                                                    (as-str (:id m))) (.build config doc))
-                              (.addDocument writer (.build config taxo doc)))))
-                        (binlog-append writer
-                                       force-binlog-stamp
-                                       {:action "store"
-                                        :index index
-                                        :documents documents
-                                        :analyzer :analyzer
-                                        :facets facets}))
+                              (.addDocument writer (.build config taxo doc))))))
                       { index true })))
 
 (defn delete-from-query
-  ([index input] (delete-from-query index input nil))
-  ([index input force-binlog-stamp]
-     (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+  [index input]
+  (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
                       ;; method is deleteDocuments(Query...)
                       (let [query (parse-query input (extract-analyzer nil))]
                         (.deleteDocuments writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [query]))
-                        (binlog-append writer
-                                       force-binlog-stamp
-                                       {:action "delete"
-                                        :index index
-                                        :input input})
-                        { index (.toString query) })))))
+                        { index (.toString query) }))))
 
 (defn delete-all [index]
   (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
@@ -341,11 +325,10 @@
   (TopScoreDocCollector/create pq-size true))
 
 (defn search
-  [& {:keys [index query page size explain refresh highlight analyzer facets fields hide-binlog sort]
+  [& {:keys [index query page size explain refresh highlight analyzer facets fields sort]
       :or {page 0, size default-size, explain false,
            refresh false, analyzer nil, facets nil,
-           fields nil, hide-binlog true
-           sort nil}}]
+           fields nil sort nil}}]
   (if refresh
     (refresh-search-managers))
   (use-searcher index
@@ -365,9 +348,7 @@
                                            facet-collector]))]
                     (.search searcher
                              query
-                             (if hide-binlog
-                               (FieldValueFilter. (as-str __binlog__ms_long) true)
-                               nil)
+                             nil
                              wrap)
                     {:total (.getTotalHits score-collector)
                      :facets (if taxo-reader
@@ -418,27 +399,3 @@
                                        {:docs (.numDocs reader)
                                         :sample sample
                                         :has-deletions (.hasDeletions reader)})))]))))
-
-(defn binlog
-  [index & {:keys [from to size page fields]
-                    :or {page 0 size default-size fields nil}}]
-  (search :index index
-          :hide-binlog false
-          :size size
-          :page page
-          :fields fields
-          :query {:range {:field __binlog__ms_long
-                          :min from
-                          :max to}}))
-
-(defn binlog-append [^IndexWriter writer force-binlog-stamp data]
-  (.deleteDocuments writer
-                    ^"[Lorg.apache.lucene.search.Query;"
-                    (into-array Query [(parse-query {:range {:field __binlog__ms_long
-                                                             :min nil
-                                                             :max (- (time-ms) (* 24 3600 1000))}}
-                                                    (extract-analyzer nil))]))
-  (.addDocument writer (map->document {__binlog__ms_long (if force-binlog-stamp
-                                                           force-binlog-stamp
-                                                           (time-ms))
-                                       __binlog__data_no_index (json/write-str data)})))

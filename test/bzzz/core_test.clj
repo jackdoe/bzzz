@@ -1,19 +1,37 @@
 (ns bzzz.core-test
-  (:import (java.io File))
+  (:require [clojure.java.io :as io])
   (:use clojure.test
         bzzz.core
+        bzzz.util
         bzzz.const
         bzzz.index))
 
-(def test-index-name "lein-test-testing-index")
+(def test-index-name "__lein-test-testing-index")
+(def moved-index-name "__lein-moved-test-testing-index")
 
-(defn should-work []
-  (let [ret (search :index test-index-name
-                    :query {:query-parser {:query "john doe"
+(defn should-work [name expected]
+  (let [ret (search :index name
+                    :query {:query-parser {:query "aaa bbb ccc"
                                            :default-operator :and
-                                           :default-field "name"}})]
-    (is (= 1 (:total ret)))
-    (is (= "john doe" (:name (first (:hits ret)))))))
+                                           :default-field "name_st_again"}})]
+    (is (= expected (:total ret)))
+    (is (= "zzz" (:name (first (:hits ret)))))))
+
+(defn get-path [p]
+  (io/file (as-str default-root) (as-str default-identifier) (as-str p)))
+
+(defn store-something [name]
+  (store :index name
+         :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"}
+                     {:name "lll" :name_st_again "bbb@aaa"}]
+         :facets {:name {}
+                  :name_st_again {:use-analyzer "bzbz-used-only-for-facet"}}
+         :analyzer {:name_st_again {:type "standard"}
+                    :bzbz-used-only-for-facet {:type "standard"}}))
+
+(defn rename [from to]
+  (.renameTo (get-path from)
+             (get-path to)))
 
 (deftest test-app
   (testing "cleanup"
@@ -457,5 +475,33 @@
           (is (= (count ns) 4))
           (is (= (+ 1 n) (:count (first nf))))))))
 
+
+
+  (testing "rename-the-index-refresh-manager"
+    (store-something test-index-name)
+    (refresh-search-managers)
+    (should-work test-index-name 1)
+
+    (rename test-index-name moved-index-name)
+    (should-work moved-index-name 1)
+
+    (store-something moved-index-name)
+    (refresh-search-managers)
+
+    (should-work moved-index-name 2)
+
+    (rename moved-index-name test-index-name)
+
+    (should-work test-index-name 2)
+
+    (store-something test-index-name)
+    (refresh-search-managers)
+    (should-work test-index-name 3))
+
   (testing "teardown"
-    (shutdown)))
+    (shutdown)
+    (try
+      (do
+        (delete-recursively (get-path test-index-name))
+        (delete-recursively (get-path moved-index-name)))
+      (catch Exception e))))

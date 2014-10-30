@@ -1,5 +1,6 @@
 (ns bzzz.util
   (:require [clojure.data.json :as json])
+  (:import (java.io File))
   (use bzzz.const)
   (use [clojure.repl :only (pst)])
   (use [clojure.string :only (split join)]))
@@ -141,3 +142,11 @@
     (Float/parseFloat x)))
   
 (defn indexed [coll] (map-indexed vector coll))
+
+(defn delete-recursively [fname]
+  (let [func (fn [func ^File f]
+               (when (.isDirectory f)
+                 (doseq [f2 (.listFiles f)]
+                   (func func f2)))
+               (clojure.java.io/delete-file f))]
+    (func func (clojure.java.io/file fname))))

@@ -7,6 +7,7 @@
   (use [clojure.string :only (join)])
   (:require [clojure.tools.logging :as log])
   (:require [clojure.data.json :as json])
+  (:require [clojure.java.io :as io])
   (:import (java.io StringReader File)
            (java.lang OutOfMemoryError)
            (org.apache.lucene.analysis.tokenattributes CharTermAttribute)
@@ -24,8 +25,10 @@
                                      Explanation Collector TopScoreDocCollector
                                      TopDocsCollector MultiCollector FieldValueFilter)
            (org.apache.lucene.store NIOFSDirectory Directory)))
+
 (declare binlog)
 (declare binlog-append)
+
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def mapping* (atom {}))
@@ -34,33 +37,29 @@
   (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
 
 (defn root-identifier-path ^File []
-  (File. ^File (File. (as-str @root*)) (as-str @identifier*)))
+  (io/file (as-str @root*) (as-str @identifier*)))
 
-(defn new-index-directory ^Directory [name]
-  (let [path ^File (root-identifier-path)]
-    (try
-      (.mkdir path))
-    (NIOFSDirectory. (File. path (as-str (acceptable-index-name name))))))
+(defn new-index-directory ^Directory [^File path-prefix name]
+  (try
+    (.mkdir path-prefix))
+  (NIOFSDirectory. (io/file path-prefix (as-str (acceptable-index-name name)))))
 
 (defn new-index-writer ^IndexWriter [name]
-  (IndexWriter. (new-index-directory name)
+  (IndexWriter. (new-index-directory (root-identifier-path) name)
                 (IndexWriterConfig. *version* @analyzer*)))
 
-(def taxo-prefix "__taxo-")
-
-(defn taxo-dir-name [name]
-  (str taxo-prefix (as-str name)))
+(defn taxo-dir-prefix ^File [name]
+  (io/file (root-identifier-path) (as-str name)))
 
 (defn new-taxo-writer ^DirectoryTaxonomyWriter [name]
-  (DirectoryTaxonomyWriter. (new-index-directory (taxo-dir-name name))))
+  (DirectoryTaxonomyWriter. (new-index-directory (taxo-dir-prefix name) "__taxo__")))
 
 (defn new-taxo-reader ^DirectoryTaxonomyReader [name]
-  (DirectoryTaxonomyReader. (new-index-directory (taxo-dir-name name))))
+  (DirectoryTaxonomyReader. (new-index-directory (taxo-dir-prefix name) "__taxo__")))
 
 (defn new-index-reader ^IndexReader [name]
   (with-open [writer (new-index-writer name)]
     (DirectoryReader/open ^IndexWriter writer false)))
-
 
 (defn text-field [^Field$Store stored ^String key value]
   (Field. key (as-str value)
@@ -128,7 +127,7 @@
 (defn get-search-manager ^SearcherManager [index]
   (locking mapping*
     (when (nil? (@mapping* index))
-      (swap! mapping* assoc index (SearcherManager. (new-index-directory index)
+      (swap! mapping* assoc index (SearcherManager. (new-index-directory (root-identifier-path) index)
                                                     nil)))
     (@mapping* index)))
 
@@ -153,10 +152,16 @@
 
 (defn use-taxo-reader [index callback]
   ;; FIXME: reuse
-  (let [reader (new-taxo-reader index)]
+  (let [reader (try
+                 (new-taxo-reader index)
+                 (catch Throwable e
+                   (do
+                     (log/warn (ex-str e))
+                     nil)))]
     (try
       (callback reader)
-      (finally (.close reader)))))
+      (finally (if reader
+                 (.close reader))))))
 
 (defn use-searcher [index callback]
   (let [manager (get-search-manager index)
@@ -217,8 +222,7 @@
           (safe-close-writer writer))))))
 
 (defn bootstrap-indexes []
-  (doseq [f (filter (fn [x] (= (.indexOf (.getName ^File x) (as-str taxo-prefix)) -1))
-                    (.listFiles (root-identifier-path)))]
+  (doseq [f (.listFiles (root-identifier-path))]
     (if (.isDirectory ^File f)
       (let [name (.getName ^File f)]
         (use-writer name (fn [writer taxo]
@@ -362,25 +366,28 @@
                                nil)
                              wrap)
                     {:total (.getTotalHits score-collector)
-                     :facets (try (let [fc (FastTaxonomyFacetCounts. taxo-reader
-                                                                     facet-config
-                                                                     facet-collector)]
-                                    (into {} (for [[k v] facets]
-                                               (if-let [fr (.getTopChildren fc
-                                                                            (default-to (:size v) default-size)
-                                                                            (as-str k)
-                                                                            ^"[Ljava.lang.String;" (into-array
-                                                                                                    String []))]
-                                                 [(keyword (.dim fr))
-                                                  (into [] (for [^LabelAndValue lv (.labelValues fr)]
-                                                             {:label (.label lv)
-                                                              :count (.value lv)}))]))))
-                                  (catch Throwable e
-                                    (let [ex (ex-str e)]
-                                      (log/warn (ex-str e))
-                                      {}))) ;; do not send the error back,
-                                            ;; even though we might fake a facet result
-                                            ;; it could really surprise the client
+                     :facets (if taxo-reader
+                               (try
+                                 (let [fc (FastTaxonomyFacetCounts. taxo-reader
+                                                                    facet-config
+                                                                    facet-collector)]
+                                   (into {} (for [[k v] facets]
+                                              (if-let [fr (.getTopChildren fc
+                                                                           (default-to (:size v) default-size)
+                                                                           (as-str k)
+                                                                           ^"[Ljava.lang.String;" (into-array
+                                                                                                   String []))]
+                                                [(keyword (.dim fr))
+                                                 (into [] (for [^LabelAndValue lv (.labelValues fr)]
+                                                            {:label (.label lv)
+                                                             :count (.value lv)}))]))))
+                                 (catch Throwable e
+                                   (let [ex (ex-str e)]
+                                     (log/warn (ex-str e))
+                                     {}))) ;; do not send the error back,
+                               {}) ;; no taxo reader, probably problem with open, exception is thrown
+                     ;; even though we might fake a facet result
+                     ;; it could really surprise the client
                      :hits (into []
                                  (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
                                    (document->map (.doc searcher (.doc hit))

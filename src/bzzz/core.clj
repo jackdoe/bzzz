@@ -3,7 +3,6 @@
   (use bzzz.util)
   (use bzzz.const)
   (use [clojure.string :only (split join)])
-
   (use [overtone.at-at :only (every mk-pool)])
   (:require [bzzz.const :as const])
   (:require [bzzz.index :as index])

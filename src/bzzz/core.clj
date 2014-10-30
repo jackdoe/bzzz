@@ -60,106 +60,13 @@
       (catch Throwable e
         (async/>!! c {:exception (ex-str e)})))))
 
-(defn limit [input result field-key sort-key]
-  (if-let [hits (field-key result)]
-    (let [size (default-to (:size input) default-size)
-          sorted (sort-by sort-key #(compare %2 %1) hits)]
-      (assoc result field-key (if (and  (> (count hits) size)
-                                        (default-to (:enforce-limits input) true))
-                                (subvec (vec sorted) 0 size)
-                                sorted)))
-    result))
-
-(defn concat-facets [big small]
-  (if (not big)
-    small ;; initial reduce
-    (into big
-          (for [[k v] small]
-            (if-let [big-list (get big k)]
-              [k (concat v big-list)]
-              [k v])))))
-
-(defn input-facet-settings [input dim]
-  (let [global-ef (default-to (:enforce-limits input) true)]
-    (if-let [config (get-in [:facets (keyword dim)] input)]
-      (if (contains? config :enforce-limits)
-        config
-        (assoc config :enforce-limits global-ef))
-      {:enforce-limits global-ef})))
-
-(defn merge-facets [result]
-  ;; produces not-sorted output
-  (into {}
-        (for [[k v] (default-to result {})]
-          [k (vals (reduce (fn [sum next]
-                             (let [l (:label next)]
-                               (if (contains? sum l)
-                                 (update-in sum [l :count] + (:count next))
-                                 (assoc sum l next))))
-                           {}
-                           v))])))
-
-(defn merge-and-limit-facets [input result]
-  (assoc result
-    :facets
-    (into {} (for [[k v] (merge-facets (:facets result))]
-               ;; this is broken by design
-               ;; :__shard_2 {:facets {:name [{:label "jack doe"
-               ;;                              :count 100}
-               ;;                             {:label "john doe"
-               ;;                              :count 10}]}}
-               ;;                          ;; -----<cut>-------
-               ;;                          ;; {:label "foo bar"
-               ;;                          ;; :count 8}
-               ;;
-               ;; :__shard_3 {:facets {:name [{:label "foo bar"
-               ;;                              :count 9}]}}}
-               ;;
-               ;; so when the multi-search merge happens
-               ;; with size=2,it will actully return only
-               ;; 'jack doe(100)' and 'john doe(10)' even though
-               ;; the actual count of 'foo bar' is 17, because
-               ;; __shard_2 actually didnt even send 'foo bar'
-               ;; because of the size=2 cut
-
-               [k (limit (input-facet-settings input k)
-                         v
-                         (keyword k)
-                         :count)]))))
-
-
-(defn remote-reducer [sum next]
-  (let [ex (if (:exception next)
-             (if-not (:can-return-partial sum)
-               (throw (Throwable. (as-str (:exception next))))
-               (do
-                 (log/info (str "will send partial response: " (as-str (:exception next))))
-                 (as-str (:exception next))))
-             nil)]
-    (-> sum
-        (update-in [:failed] conj-if ex)
-        (update-in [:failed] concat-if (:failed next))
-        (update-in [:facets] concat-facets (default-to (:facets next) {}))
-        (update-in [:total] + (default-to (:total next) 0))
-        (update-in [:hits] concat (default-to (:hits next) [])))))
-
 (defn search-many [hosts input]
   (let [c (async/chan)
         ms-start (time-ms)]
     (doseq [part hosts]
       (search-remote part input c))
-    (let [collected (into [] (for [part hosts] (async/<!! c)))
-          result (reduce remote-reducer
-                         {:total 0
-                          :hits []
-                          :took -1
-                          :failed []
-                          :can-return-partial (default-to (:can-return-partial input) false)}
-                         collected)
-          fixed-result (assoc-in (merge-and-limit-facets input result)
-                                 [:took]
-                                 (time-took ms-start))]
-      (limit input fixed-result :hits :_score))))
+    (let [collected (into [] (for [part hosts] (async/<!! c)))]
+      (index/reduce-collection collected input ms-start))))
 
 (defn stat []
   {:index (index/index-stat)
@@ -192,7 +99,7 @@
     :get (case uri
            "/_stat" (stat)
            "/favicon.ico" "" ;; XXX
-           (mapply index/search input))
+           (index/search input))
     :put (search-many (:hosts input) (dissoc input :hosts))
     :patch (merge-discover-hosts (default-to (:discover-hosts input) {}))
     (throw (Throwable. "unexpected method" method))))

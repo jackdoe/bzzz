@@ -29,12 +29,30 @@
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def mapping* (atom {}))
+(def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-]"))
+(def shard-suffix "-shard-")
+(def shard-suffix-sre (str ".*" shard-suffix "\\d+"))
+
+(defn index-dir-pattern
+  ([] (re-pattern shard-suffix-sre))
+  ([pre] (re-pattern (str "^" (as-str pre) shard-suffix-sre))))
 
 (defn acceptable-index-name [name]
-  (clojure.string/replace name #"[^a-zA-Z_0-9-]" ""))
+  (clojure.string/replace name acceptable-name-pattern ""))
 
 (defn root-identifier-path ^File []
   (io/file (as-str @root*) (as-str @identifier*)))
+
+(defn sub-directories []
+  (filter #(and (.isDirectory ^File %)
+                (re-matches (index-dir-pattern)
+                            (.getName ^File %)))
+          (.listFiles (root-identifier-path))))
+
+(defn index-name-matching [index]
+  (map #(.getName ^File %)
+       (filter #(not (nil? (re-matches (index-dir-pattern index) (.getName ^File %))))
+               (sub-directories))))
 
 (defn new-index-directory ^Directory [^File path-prefix name]
   (try
@@ -57,6 +75,10 @@
 (defn new-index-reader ^IndexReader [name]
   (with-open [writer (new-index-writer name)]
     (DirectoryReader/open ^IndexWriter writer false)))
+
+(defn sharded [index x-shard]
+  (let [shard (int-or-parse x-shard)]
+    (str (as-str index) shard-suffix (str shard))))
 
 (defn text-field [^Field$Store stored ^String key value]
   (Field. key (as-str value)
@@ -218,14 +240,16 @@
           (safe-close-taxo taxo)
           (safe-close-writer writer))))))
 
+(defn use-writer-all [index callback]
+  (doseq [name (index-name-matching index)]
+    (use-writer name callback)))
+
 (defn bootstrap-indexes []
-  (doseq [f (.listFiles (root-identifier-path))]
-    (if (.isDirectory ^File f)
-      (let [name (.getName ^File f)]
-        (use-writer name (fn [writer taxo]
-                           ;; do nothing, just open/close the taxo directory
-                           ))
-        (get-search-manager name)))))
+  (doseq [name (sub-directories)]
+    (use-writer name (fn [writer taxo]
+                       ;; do nothing, just open/close the taxo directory
+                       ))
+    (get-search-manager name)))
 
 (defn get-facet-config ^FacetsConfig [facets]
   (let [config (FacetsConfig.)]
@@ -250,33 +274,34 @@
     (add-facet-field-single doc dim val)))
 
 (defn store
-  [& {:keys [index documents analyzer facets]
-      :or {analyzer nil facets {}}}]
+  [& {:keys [index documents analyzer facets shard]
+      :or {analyzer nil facets {} shard 0}}]
   (if analyzer
     (reset! analyzer* (parse-analyzer analyzer)))
-  (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
-                      (let [config (get-facet-config facets)]
-                        (doseq [m documents]
-                          (let [doc (map->document m)]
-                            (doseq [[dim f-info] facets]
-                              (if-let [f-val ((keyword dim) m)]
-                                (add-facet-field doc dim f-val f-info @analyzer*)))
-                            (if (:id m)
-                              (.updateDocument writer ^Term (Term. ^String id-field
-                                                                   (as-str (:id m))) (.build config doc))
-                              (.addDocument writer (.build config taxo doc))))))
-                      { index true })))
+  (use-writer (sharded index shard) (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+                                      (let [config (get-facet-config facets)]
+                                        (doseq [m documents]
+                                          (let [doc (map->document m)]
+                                            (doseq [[dim f-info] facets]
+                                              (if-let [f-val ((keyword dim) m)]
+                                                (add-facet-field doc dim f-val f-info @analyzer*)))
+                                            (if (:id m)
+                                              (.updateDocument writer ^Term (Term. ^String id-field
+                                                                                   (as-str (:id m))) (.build config doc))
+                                              (.addDocument writer (.build config taxo doc))))))
+                                      { index true })))
 
 (defn delete-from-query
   [index input]
-  (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
-                      ;; method is deleteDocuments(Query...)
-                      (let [query (parse-query input (extract-analyzer nil))]
-                        (.deleteDocuments writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [query]))
-                        { index (.toString query) }))))
+  (let [query (parse-query input (extract-analyzer nil))]
+    (use-writer-all index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+                            (.deleteDocuments writer
+                                              ^"[Lorg.apache.lucene.search.Query;"
+                                              (into-array Query [query]))))
+    {index (.toString query)}))
 
 (defn delete-all [index]
-  (use-writer index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
+  (use-writer-all index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
 
 (defn fragment->map [^TextFragment fragment fidx]
   {:text (.toString fragment)
@@ -295,6 +320,7 @@
                               ^String str
                               true
                               (int max-fragments))))
+
 (defn make-highlighter
   [^Query query ^IndexSearcher searcher config analyzer]
   (if config
@@ -324,64 +350,184 @@
 (defn get-score-collector ^TopDocsCollector [sort pq-size]
   (TopScoreDocCollector/create pq-size true))
 
-(defn search
-  [& {:keys [index query page size explain refresh highlight analyzer facets fields sort]
+(defn limit [input hits sort-key]
+  (let [size (default-to (:size input) default-size)
+        sorted (sort-by sort-key #(compare %2 %1) hits)]
+    (if (and  (> (count hits) size)
+              (default-to (:enforce-limits input) true))
+      (subvec (vec sorted) 0 size)
+      sorted)))
+
+(defn concat-facets [big small]
+  (if (not big)
+    small ;; initial reduce
+    (into big
+          (for [[k v] small]
+            (if-let [big-list (get big k)]
+              [k (concat v big-list)]
+              [k v])))))
+
+(defn input-facet-settings [input dim]
+  (let [global-ef (default-to (:enforce-limits input) true)]
+    (if-let [config (get-in [:facets (keyword dim)] input)]
+      (if (contains? config :enforce-limits)
+        config
+        (assoc config :enforce-limits global-ef))
+      {:enforce-limits global-ef})))
+
+(defn merge-facets [facets]
+  ;; produces not-sorted output
+  (into {}
+        (for [[k v] (default-to facets {})]
+          [(keyword k) (vals (reduce (fn [sum next]
+                                       (let [l (:label next)]
+                                         (if (contains? sum l)
+                                           (update-in sum [l :count] + (:count next))
+                                           (assoc sum l next))))
+                                     {}
+                                     v))])))
+
+(defn merge-and-limit-facets [input facets]
+  (into {} (for [[k v] (merge-facets facets)]
+             ;; this is broken by design
+             ;; :__shard_2 {:facets {:name [{:label "jack doe"
+             ;;                              :count 100}
+             ;;                             {:label "john doe"
+             ;;                              :count 10}]}}
+             ;;                          ;; -----<cut>-------
+             ;;                          ;; {:label "foo bar"
+             ;;                          ;; :count 8}
+             ;;
+             ;; :__shard_3 {:facets {:name [{:label "foo bar"
+             ;;                              :count 9}]}}}
+             ;;
+             ;; so when the multi-search merge happens
+             ;; with size=2,it will actully return only
+             ;; 'jack doe(100)' and 'john doe(10)' even though
+             ;; the actual count of 'foo bar' is 17, because
+             ;; __shard_2 actually didnt even send 'foo bar'
+             ;; because of the size=2 cut
+             [k (limit (input-facet-settings input (keyword k))
+                       v
+                       :count)])))
+
+
+(defn result-reducer [sum next]
+  (let [next (if (future? next)
+               (try
+                 @next
+                 (catch Throwable e
+                   {:exception (as-str e)}))
+               next)
+        ex (if (:exception next)
+             (if-not (:can-return-partial sum)
+               (throw (Throwable. (as-str (:exception next))))
+               (do
+                 (log/info (str "will send partial response: " (as-str (:exception next))))
+                 (as-str (:exception next))))
+             nil)]
+    (-> sum
+        (update-in [:failed] conj-if ex)
+        (update-in [:failed] concat-if (:failed next))
+        (update-in [:facets] concat-facets (default-to (:facets next) {}))
+        (update-in [:total] + (default-to (:total next) 0))
+        (update-in [:hits] concat (default-to (:hits next) [])))))
+
+(defn reduce-collection [collection input ms-start]
+  (let [result (reduce result-reducer
+                       {:total 0
+                        :hits []
+                        :facets {}
+                        :took -1
+                        :failed []
+                        :can-return-partial (default-to (:can-return-partial input) false)}
+                       collection)]
+    (-> result
+        (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))
+        (assoc-in [:hits] (limit input (:hits result) :_score))
+        (assoc-in [:took] (time-took ms-start)))))
+
+(defn shard-search
+  [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader
+             ^Query query ^Analyzer analyzer
+             page size explain highlight facets fields facet-config]
       :or {page 0, size default-size, explain false,
-           refresh false, analyzer nil, facets nil,
-           fields nil sort nil}}]
-  (if refresh
-    (refresh-search-managers))
-  (use-searcher index
-                (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
-                  (let [ms-start (time-ms)
-                        analyzer (extract-analyzer analyzer)
-                        query (parse-query query analyzer)
-                        highlighter (make-highlighter query searcher highlight analyzer)
-                        pq-size (+ (* page size) size)
-                        score-collector (get-score-collector sort pq-size)
-                        facet-collector (FacetsCollector.)
-                        facet-config (get-facet-config facets)
-                        wrap (MultiCollector/wrap
-                              ^"[Lorg.apache.lucene.search.Collector;"
-                              (into-array Collector
-                                          [score-collector
-                                           facet-collector]))]
-                    (.search searcher
-                             query
-                             nil
-                             wrap)
-                    {:total (.getTotalHits score-collector)
-                     :facets (if taxo-reader
-                               (try
-                                 (let [fc (FastTaxonomyFacetCounts. taxo-reader
-                                                                    facet-config
-                                                                    facet-collector)]
-                                   (into {} (for [[k v] facets]
-                                              (if-let [fr (.getTopChildren fc
-                                                                           (default-to (:size v) default-size)
-                                                                           (as-str k)
-                                                                           ^"[Ljava.lang.String;" (into-array
-                                                                                                   String []))]
-                                                [(keyword (.dim fr))
-                                                 (into [] (for [^LabelAndValue lv (.labelValues fr)]
-                                                            {:label (.label lv)
-                                                             :count (.value lv)}))]))))
-                                 (catch Throwable e
-                                   (let [ex (ex-str e)]
-                                     (log/warn (ex-str e))
-                                     {}))) ;; do not send the error back,
-                               {}) ;; no taxo reader, probably problem with open, exception is thrown
-                     ;; even though we might fake a facet result
-                     ;; it could really surprise the client
-                     :hits (into []
-                                 (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
-                                   (document->map (.doc searcher (.doc hit))
-                                                  fields
-                                                  (.score hit)
-                                                  highlighter
-                                                  (when explain
-                                                    (.explain searcher query (.doc hit))))))
-                     :took (time-took ms-start)}))))
+           analyzer nil, facets nil, fields nil}}]
+  (let [ms-start (time-ms)
+        highlighter (make-highlighter query searcher highlight analyzer)
+        pq-size (+ (* page size) size)
+        score-collector (get-score-collector sort pq-size)
+        facet-collector (FacetsCollector.)
+
+        wrap (MultiCollector/wrap
+              ^"[Lorg.apache.lucene.search.Collector;"
+              (into-array Collector
+                          [score-collector
+                           facet-collector]))]
+    (.search searcher
+             query
+             nil
+             wrap)
+    {:total (.getTotalHits score-collector)
+     :facets (if taxo-reader
+               (try
+                 (let [fc (FastTaxonomyFacetCounts. taxo-reader
+                                                    facet-config
+                                                    facet-collector)]
+                   (into {} (for [[k v] facets]
+                              (if-let [fr (.getTopChildren fc
+                                                           (default-to (:size v) default-size)
+                                                           (as-str k)
+                                                           ^"[Ljava.lang.String;" (into-array
+                                                                                   String []))]
+                                [(keyword (.dim fr))
+                                 (into [] (for [^LabelAndValue lv (.labelValues fr)]
+                                            {:label (.label lv)
+                                             :count (.value lv)}))]))))
+                 (catch Throwable e
+                   (let [ex (ex-str e)]
+                     (log/warn (ex-str e))
+                     {}))) ;; do not send the error back,
+               {}) ;; no taxo reader, probably problem with open, exception is thrown
+     ;; even though we might fake a facet result
+     ;; it could really surprise the client
+     :hits (into []
+                 (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
+                   (document->map (.doc searcher (.doc hit))
+                                  fields
+                                  (.score hit)
+                                  highlighter
+                                  (when explain
+                                    (.explain searcher query (.doc hit))))))
+     :took (time-took ms-start)}))
+
+(defn search [input]
+  (let [ms-start (time-ms)
+        index (need :index input "need index")
+        page (default-to (:page input) 0)
+        size (default-to (:size input) default-size)
+        explain (default-to (:explain input) false)
+        highlight (:highlight input)
+        fields (:fields input)
+        analyzer (extract-analyzer (:analyzer input))
+        query (parse-query (:query input) analyzer)
+        facets (:facets input)
+        facet-config (get-facet-config facets)
+        futures (into [] (for [shard (index-name-matching index)]
+                           (future (use-searcher shard
+                                                 (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
+                                                   (shard-search :searcher searcher
+                                                                 :taxo-reader taxo-reader
+                                                                 :analyzer analyzer
+                                                                 :facet-config facet-config
+                                                                 :highlight highlight
+                                                                 :query query
+                                                                 :page page
+                                                                 :size size
+                                                                 :facets facets
+                                                                 :explain explain
+                                                                 :fields fields))))))]
+    (reduce-collection futures input ms-start)))
 
 (defn shutdown []
   (locking mapping*
@@ -391,8 +537,8 @@
 
 (defn index-stat []
   (into {} (for [[name searcher] @mapping*]
-             (let [sample (search :index name
-                                  :query {:random-score {:query {:match-all {}}}})]
+             (let [sample (search {:index name
+                                   :query {:random-score {:query {:match-all {}}}}})]
                [name (use-searcher name
                                    (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                      (let [reader (.getIndexReader searcher)]

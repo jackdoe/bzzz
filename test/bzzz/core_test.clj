@@ -11,18 +11,20 @@
 (def moved-index-name "__lein-moved-test-testing-index")
 
 (defn should-work [name expected]
-  (let [ret (search :index name
-                    :query {:query-parser {:query "aaa bbb ccc"
-                                           :default-operator :and
-                                           :default-field "name_st_again"}})]
+  (let [ret (search {:index name
+                     :query {:query-parser {:query "aaa bbb ccc"
+                                            :default-operator :and
+                                            :default-field "name_st_again"}}})]
     (is (= expected (:total ret)))
-    (is (= "zzz" (:name (first (:hits ret)))))))
+    (if-not (= 0 expected)
+      (is (= "zzz" (:name (first (:hits ret))))))))
 
-(defn get-path ^File [p]
-  (io/file (as-str default-root) (as-str default-identifier) (as-str p)))
+(defn get-path ^File [p shard]
+  (io/file (as-str default-root) (as-str default-identifier) (str (as-str p) "-shard-" (int-or-parse shard))))
 
-(defn store-something [name]
+(defn store-something [name shard]
   (store :index name
+         :shard shard
          :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"}
                      {:name "lll" :name_st_again "bbb@aaa"}]
          :facets {:name {}
@@ -30,14 +32,22 @@
          :analyzer {:name_st_again {:type "standard"}
                     :bzbz-used-only-for-facet {:type "standard"}}))
 
-(defn rename [from to]
-  (.renameTo (get-path from)
-             (get-path to)))
+(defn cleanup []
+  (delete-all test-index-name)
+  (refresh-search-managers)
+  (let [ret (search {:index test-index-name
+                     :default-field "name"
+                     :query "doe"})]
+    (is (= 0 (:total ret)))
+    (refresh-search-managers)))
+
+(defn rename [from to shard]
+  (.renameTo (get-path from shard)
+             (get-path to shard)))
 
 (deftest test-app
   (testing "cleanup"
-    (delete-all test-index-name)
-    (refresh-search-managers))
+    (cleanup))
 
   (testing "store"
     (let [ret-0 (store :index test-index-name
@@ -106,128 +116,128 @@
       (is (= true (ret-1 test-index-name)))))
 
   (testing "search-bool"
-    (let [ret (search :index test-index-name
-                      :query {:bool {:must [{:term {:field "id", :value "baz bar"}}]}})]
+    (let [ret (search {:index test-index-name
+                       :query {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}})]
       (is (= 1 (:total ret)))
       (is (nil? (:name_no_store (first (:hits ret)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))
 
   (testing "search-filter-query"
-    (let [ret (search :index test-index-name
-                      :query {:filtered {:filter {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}
-                                         :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}})
-          ret-2 (search :index test-index-name
-                        :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}})]
+    (let [ret (search {:index test-index-name
+                       :query {:filtered {:filter {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}
+                                          :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}}})
+          ret-2 (search {:index test-index-name
+                         :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}})]
       (is (= 1 (:total ret)))
       (is (= 2 (:total ret-2)))
       (is (= (:_score (first (:hits ret))) (:_score (first (:hits ret-2)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))
 
   (testing "search-constant-score-query"
-    (let [ret (search :index test-index-name
-                      :query {:constant-score {:boost 10
-                                               :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}})]
+    (let [ret (search {:index test-index-name
+                       :query {:constant-score {:boost 10
+                                                :query {:bool {:must [{:term {:field "name", :value "duplicate"}}]}}}}})]
       (is (= 2 (:total ret)))
       (is (= (= (:_score (first (:hits ret))) (:_score (last (:hits ret))))) 10)))
 
   (testing "search-match-all"
-    (let [ret (search :index test-index-name
-                      :query {:match-all {}})
-          num-docs (:docs (get (index-stat) test-index-name))]
+    (let [ret (search {:index test-index-name
+                       :query {:match-all {}}})
+          num-docs (:docs (get (index-stat) (sharded test-index-name 0)))]
       (is (= (:total ret) num-docs))
       (is (> num-docs 0))))
 
 
   (testing "search-random-score-query"
-    (let [ret (search :index test-index-name
-                      :explain true
-                      :query {:bool {:must [{:match-all {}}
-                                            {:random-score {:base 100
-                                                            :query {:match-all {}}}}]}})
-          num-docs (:docs (get (index-stat) test-index-name))]
+    (let [ret (search {:index test-index-name
+                       :explain true
+                       :query {:bool {:must [{:match-all {}}
+                                             {:random-score {:base 100
+                                                             :query {:match-all {}}}}]}}})
+          num-docs (:docs (get (index-stat) (sharded test-index-name 0)))]
       (is (= (:total ret) num-docs))
       (is (> (:_score (first (:hits ret))) 100))
       (is (not (= (:_score (first (:hits ret))) 100))) ;; well.. :D
       (is (> num-docs 0))))
 
   (testing "search-no-html"
-    (let [ret (search :index test-index-name
-                      :query {:bool {:must [{:term {:field "name_no_html_no_norms", :value "bzbzZZ<br>"}}]
-                                     :must-not [{:term {:field "name_no_html_no_norms", :value "bzbzZZ<br><html>"}}]}})]
+    (let [ret (search {:index test-index-name
+                       :query {:bool {:must [{:term {:field "name_no_html_no_norms", :value "bzbzZZ<br>"}}]
+                                      :must-not [{:term {:field "name_no_html_no_norms", :value "bzbzZZ<br><html>"}}]}}})]
       (is (= 1 (:total ret)))
       (is (= "bzbzXX<br><html>" (:name_no_html_no_norms (first (:hits ret)))))))
 
   (testing "search-keyword"
-    (let [ret (search :index test-index-name
-                      :query {:bool {:must [{:term {:field "name_keyword_no_norms", :value "hello worldZZ"}}]
-                                     :must-not [{:term {:field "name_keyword_no_norms", :value "hello worldXX"}}]}})]
+    (let [ret (search {:index test-index-name
+                       :query {:bool {:must [{:term {:field "name_keyword_no_norms", :value "hello worldZZ"}}]
+                                      :must-not [{:term {:field "name_keyword_no_norms", :value "hello worldXX"}}]}}})]
       (is (= 1 (:total ret)))
       (is (= "hello worldXX" (:name_keyword_no_norms (first (:hits ret)))))))
 
   (testing "search-ngram"
-    (let [ret (search :index test-index-name
-                      :query {:bool {:must [{:term {:field "name_ngram_no_norms", :value "an"}}
-                                            {:term {:field "name_ngram_no_norms", :value "and"}}
-                                            {:term {:field "name_ngram_no_norms", :value "andu"}}
-                                            {:term {:field "name_ngram_no_norms", :value "nd"}}
-                                            {:term {:field "name_ngram_no_norms", :value "ndu"}}
-                                            {:term {:field "name_ngram_no_norms", :value "ndur"}}
-                                            {:term {:field "name_ngram_no_norms", :value "du"}}
-                                            {:term {:field "name_ngram_no_norms", :value "dur"}}
-                                            {:term {:field "name_ngram_no_norms", :value "duri"}}
-                                            {:term {:field "name_ngram_no_norms", :value "ur"}}
-                                            {:term {:field "name_ngram_no_norms", :value "uri"}}
-                                            {:term {:field "name_ngram_no_norms", :value "uril"}}
-                                            {:term {:field "name_ngram_no_norms", :value "rilz"}}
-                                            {:term {:field "name_ngram_no_norms", :value "ilzz"}}]
-                                     :must-not [{:term {:field "name_ngram_no_norms", :value "anduril"}}
-                                                {:term {:field "name_ngram_no_norms", :value "andurilxX"}}
-                                                {:term {:field "name_ngram_no_norms", :value "andurilXX"}}]}})]
+    (let [ret (search {:index test-index-name
+                       :query {:bool {:must [{:term {:field "name_ngram_no_norms", :value "an"}}
+                                             {:term {:field "name_ngram_no_norms", :value "and"}}
+                                             {:term {:field "name_ngram_no_norms", :value "andu"}}
+                                             {:term {:field "name_ngram_no_norms", :value "nd"}}
+                                             {:term {:field "name_ngram_no_norms", :value "ndu"}}
+                                             {:term {:field "name_ngram_no_norms", :value "ndur"}}
+                                             {:term {:field "name_ngram_no_norms", :value "du"}}
+                                             {:term {:field "name_ngram_no_norms", :value "dur"}}
+                                             {:term {:field "name_ngram_no_norms", :value "duri"}}
+                                             {:term {:field "name_ngram_no_norms", :value "ur"}}
+                                             {:term {:field "name_ngram_no_norms", :value "uri"}}
+                                             {:term {:field "name_ngram_no_norms", :value "uril"}}
+                                             {:term {:field "name_ngram_no_norms", :value "rilz"}}
+                                             {:term {:field "name_ngram_no_norms", :value "ilzz"}}]
+                                      :must-not [{:term {:field "name_ngram_no_norms", :value "anduril"}}
+                                                 {:term {:field "name_ngram_no_norms", :value "andurilxX"}}
+                                                 {:term {:field "name_ngram_no_norms", :value "andurilXX"}}]}}})]
       (is (= 1 (:total ret)))
       (is (= "andurilxX" (:name_ngram_no_norms (first (:hits ret)))))))
 
 
   (testing "search-edge-ngram"
-    (let [ret (search :index test-index-name
-                      :query {:bool {:must [{:term {:field "name_edge_ngram_no_norms", :value "an"}}
-                                            {:term {:field "name_edge_ngram_no_norms", :value "andurilZ"}}]
-                                     :must-not [{:term {:field "name_edge_ngram_no_norms", :value "andurilZZ"}}
-                                                {:term {:field "name_edge_ngram_no_norms", :value "andurilXX"}}]}})]
+    (let [ret (search { :index test-index-name
+                       :query {:bool {:must [{:term {:field "name_edge_ngram_no_norms", :value "an"}}
+                                             {:term {:field "name_edge_ngram_no_norms", :value "andurilZ"}}]
+                                      :must-not [{:term {:field "name_edge_ngram_no_norms", :value "andurilZZ"}}
+                                                 {:term {:field "name_edge_ngram_no_norms", :value "andurilXX"}}]}}})]
       (is (= 1 (:total ret)))
       (is (= "andurilXX" (:name_edge_ngram_no_norms (first (:hits ret)))))))
 
   (testing "search-changed-analyzer"
-    (let [ret-kw (search :index test-index-name
-                         :query {:term {:field "name_no_norms"
-                                        :value "bar baz"}})
-          ret-ws (search :index test-index-name
-                         :query {:bool {:must [{:term {:field "name_no_norms"
-                                                       :value "bar"}}
-                                               {:term {:field "name_no_norms"
-                                                       :value "baz"}}]}})]
+    (let [ret-kw (search { :index test-index-name
+                          :query {:term {:field "name_no_norms"
+                                         :value "bar baz"}}})
+          ret-ws (search { :index test-index-name
+                          :query {:bool {:must [{:term {:field "name_no_norms"
+                                                        :value "bar"}}
+                                                {:term {:field "name_no_norms"
+                                                        :value "baz"}}]}}})]
       (is (= 1 (:total ret-kw)))
       (is (= 1 (:total ret-ws)))
       (is (= "WS baz bar" (:id (first (:hits ret-ws)))))
       (is (= "baz bar" (:id (first (:hits ret-kw)))))))
 
   (testing "search-bool-auto"
-    (let [ret (search :index test-index-name
-                      :query {:term {:field "id", :value "baz bar"}
-                              :bool {:must ["name_no_store:space",
-                                            {:term {:field "name_no_store", :value "with"}}]}})]
+    (let [ret (search {:index test-index-name
+                       :query {:term {:field "id", :value "baz bar"}
+                               :bool {:must ["name_no_store:space",
+                                             {:term {:field "name_no_store", :value "with"}}]}}})]
       (is (= 1 (:total ret)))
       (is (nil? (:name_no_store (first (:hits ret)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))
 
 
   (testing "search-or-standard-and-highlight"
-    (let [ret (search :index test-index-name
-                      :analyzer {:name {:type "standard"} }
-                      :highlight {:fields ["name"]}
-                      :explain true
-                      :query { :query-parser {:query "john@doe"
-                                              :default-operator "or"
-                                              :default-field "name"}})]
+    (let [ret (search {:index test-index-name
+                       :analyzer {:name {:type "standard"} }
+                       :highlight {:fields ["name"]}
+                       :explain true
+                       :query { :query-parser {:query "john@doe"
+                                               :default-operator "or"
+                                               :default-field "name"}}})]
       (is (= 2 (:total ret)))
       (let [f (first (:hits ret))
             l (last (:hits ret))]
@@ -246,12 +256,12 @@
              :analyzer {:name {:type "standard" }})
 
       (refresh-search-managers)
-      (let [ret (search :index test-index-name
-                        :analyzer {:name {:type "standard"} }
-                        :highlight {:fields ["name"]
-                                    :pre ""
-                                    :post ""}
-                        :query query)]
+      (let [ret (search { :index test-index-name
+                         :analyzer {:name {:type "standard"} }
+                         :highlight {:fields ["name"]
+                                     :pre ""
+                                     :post ""}
+                         :query query})]
         (is (= 1 (:total ret)))
         (let [first-d (first (:hits ret))
               first-f (first (:name (:_highlight first-d)))]
@@ -264,12 +274,12 @@
           (is (= 1375 (:text-end-pos first-f)))
           (let [clean-pos-start (:text-start-pos first-f)
                 clean-pos-end (:text-end-pos first-f)
-                ret (search :index test-index-name
-                            :analyzer {:name {:type "standard"} }
-                            :highlight {:fields ["name"]
-                                        :pre "++"
-                                        :post "++"}
-                            :query query)
+                ret (search { :index test-index-name
+                             :analyzer {:name {:type "standard"} }
+                             :highlight {:fields ["name"]
+                                         :pre "++"
+                                         :post "++"}
+                             :query query})
                 d (first (:hits ret))
                 f (first (:name (:_highlight d)))]
             (is (= (:name d) s))
@@ -279,49 +289,47 @@
 
 
   (testing "search-or-standard-and-highlight-missing-field"
-    (let [ret (search :index test-index-name
-                      :analyzer {:name {:type "standard"} }
-                      :highlight {:fields ["name_should_be_missing"]}
-                      :query { :query-parser {:query "john@doe"
-                                              :default-operator "or"
-                                              :default-field "name"}})]
+    (let [ret (search { :index test-index-name
+                       :analyzer {:name {:type "standard"} }
+                       :highlight {:fields ["name_should_be_missing"]}
+                       :query { :query-parser {:query "john@doe"
+                                               :default-operator "or"
+                                               :default-field "name"}}})]
       (is (= (:name_should_be_missing (:_highlight (first (:hits ret)))) []))))
 
   (testing "search-boost"
-    (let [ret (search :index test-index-name
-                      :explain false
-                      :query { :bool {:should [
-                                               {:bool {:must [
-                                                              {:term {:field "name"
+    (let [ret (search { :index test-index-name
+                       :explain false
+                       :query {:bool {:should [{:bool {:must [{:term {:field "name"
                                                                       :value "john"}}
                                                               {:term {:field "name"
                                                                       :value "doe"}}]}}
                                                {:term {:field "name"
                                                        :value "foo"
-                                                       :boost 10}}]}})]
+                                                       :boost 10}}]}}})]
       (is (= 2 (:total ret)))
       (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (last (:hits ret)))))
       (is (= "jack doe foo" (:name (first (:hits ret)))))))
 
   (testing "search-or-pages"
-    (let [ret-page-0 (search :index test-index-name
-                             :query {:query-parser {:query "john doe"
-                                                    :default-operator :or
-                                                    :default-field "name"}}
-                             :size 1
-                             :page 0)
-          ret-page-1 (search :index test-index-name
-                             :query {:query-parser {:query "john doe"
-                                                    :default-operator :or
-                                                    :default-field "name"}}
-                             :size 1
-                             :page 1)
-          ret-page-2 (search :index test-index-name
-                             :query {:query-parser {:query "john doe"
-                                                    :default-operator :or
-                                                    :default-field "name"}}
-                             :size 1
-                             :page 2)]
+    (let [ret-page-0 (search {:index test-index-name
+                              :query {:query-parser {:query "john doe"
+                                                     :default-operator :or
+                                                     :default-field "name"}}
+                              :size 1
+                              :page 0})
+          ret-page-1 (search {:index test-index-name
+                              :query {:query-parser {:query "john doe"
+                                                     :default-operator :or
+                                                     :default-field "name"}}
+                              :size 1
+                              :page 1})
+          ret-page-2 (search {:index test-index-name
+                              :query {:query-parser {:query "john doe"
+                                                     :default-operator :or
+                                                     :default-field "name"}}
+                              :size 1
+                              :page 2})]
       (is (= 2 (:total ret-page-0)))
       (is (= 2 (:total ret-page-1)))
       (is (= 2 (:total ret-page-2)))
@@ -332,58 +340,58 @@
       (is (= "jack doe foo" (:name (last (:hits ret-page-1)))))))
 
   (testing "search-and"
-    (let [ret (search :index test-index-name
-                      :query {:query-parser {:query "john doe"
-                                             :default-operator :and
-                                             :default-field "name"}})]
+    (let [ret (search { :index test-index-name
+                       :query {:query-parser {:query "john doe"
+                                              :default-operator :and
+                                              :default-field "name"}}})]
       (is (= 1 (:total ret)))
       (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret)))))))
 
   (testing "search-range"
-    (let [ret (search :index test-index-name
-                      :query {:bool {:must [{:range {:field "age_integer"
-                                                     :min "45"
-                                                     :max 47
-                                                     :min-inclusive true
-                                                     :max-inclusive true}}
-                                            {:range {:field "long_long"
-                                                     :min "470"
-                                                     :max 471
-                                                     :min-inclusive true
-                                                     :max-inclusive false}}
-                                            {:range {:field "float_float"
-                                                     :min "47.01"
-                                                     :max "47.99"
-                                                     :min-inclusive false
-                                                     :max-inclusive false}}
-                                            {:range {:field "double_double"
-                                                     :min "470.01"
-                                                     :max "470.99"
-                                                     :min-inclusive false
-                                                     :max-inclusive false}}]}})
-          ret-nil (search :index test-index-name
-                          :query {:range {:field "age_integer"}})
-          ret-ub (search :index test-index-name
-                         :query {:bool {:must [{:range {:field "age_integer"
-                                                        :min "45"
-                                                        :max nil
-                                                        :min-inclusive true
-                                                        :max-inclusive true}}
-                                               {:range {:field "long_long"
-                                                        :min nil
-                                                        :max nil
-                                                        :min-inclusive true
-                                                        :max-inclusive false}}
-                                               {:range {:field "float_float"
-                                                        :min nil
-                                                        :max "47.99"
-                                                        :min-inclusive false
-                                                        :max-inclusive false}}
-                                               {:range {:field "double_double"
-                                                        :min "470.01"
-                                                        :max nil
-                                                        :min-inclusive false
-                                                        :max-inclusive false}}]}})]
+    (let [ret (search { :index test-index-name
+                       :query {:bool {:must [{:range {:field "age_integer"
+                                                      :min "45"
+                                                      :max 47
+                                                      :min-inclusive true
+                                                      :max-inclusive true}}
+                                             {:range {:field "long_long"
+                                                      :min "470"
+                                                      :max 471
+                                                      :min-inclusive true
+                                                      :max-inclusive false}}
+                                             {:range {:field "float_float"
+                                                      :min "47.01"
+                                                      :max "47.99"
+                                                      :min-inclusive false
+                                                      :max-inclusive false}}
+                                             {:range {:field "double_double"
+                                                      :min "470.01"
+                                                      :max "470.99"
+                                                      :min-inclusive false
+                                                      :max-inclusive false}}]}}})
+          ret-nil (search { :index test-index-name
+                           :query {:range {:field "age_integer"}}})
+          ret-ub (search { :index test-index-name
+                          :query {:bool {:must [{:range {:field "age_integer"
+                                                         :min "45"
+                                                         :max nil
+                                                         :min-inclusive true
+                                                         :max-inclusive true}}
+                                                {:range {:field "long_long"
+                                                         :min nil
+                                                         :max nil
+                                                         :min-inclusive true
+                                                         :max-inclusive false}}
+                                                {:range {:field "float_float"
+                                                         :min nil
+                                                         :max "47.99"
+                                                         :min-inclusive false
+                                                         :max-inclusive false}}
+                                                {:range {:field "double_double"
+                                                         :min "470.01"
+                                                         :max nil
+                                                         :min-inclusive false
+                                                         :max-inclusive false}}]}}})]
       (is (= 1 (:total ret)))
       (is (= 3 (:total ret-nil))) ;; all documents containing the age_integer field
       (let [r (first (:hits ret))]
@@ -395,20 +403,20 @@
         (is (= "470" (:long_long r))))))
 
   (testing "search-and"
-    (let [ret (search :index test-index-name
-                      :highlight {:fields ["name","age_integer"]}
-                      :fields {:age_integer true
-                               :name true
-                               :long_long true
-                               :double_double true
-                               :float_float true}
-                      :query {:bool {:must [{:range {:field "age_integer" :min 63 :max 65}}
-                                            {:term {:field "name"
-                                                    :value "highlight"}}
-                                            {:term {:field "name"
-                                                    :value "3"}}
-                                            {:term {:field "name"
-                                                    :value "jack2"}}]}})]
+    (let [ret (search { :index test-index-name
+                       :highlight {:fields ["name","age_integer"]}
+                       :fields {:age_integer true
+                                :name true
+                                :long_long true
+                                :double_double true
+                                :float_float true}
+                       :query {:bool {:must [{:range {:field "age_integer" :min 63 :max 65}}
+                                             {:term {:field "name"
+                                                     :value "highlight"}}
+                                             {:term {:field "name"
+                                                     :value "3"}}
+                                             {:term {:field "name"
+                                                     :value "jack2"}}]}}})]
       (is (= 1 (:total ret)))
       (let [h (first (:hits ret))
             hi (:name (:_highlight h))]
@@ -428,18 +436,13 @@
   (testing "delete-by-query-and-search"
     (delete-from-query test-index-name "name:foo")
     (refresh-search-managers)
-    (let [ret (search :index test-index-name
-                      :query "name:doe")]
+    (let [ret (search { :index test-index-name
+                       :query "name:doe"})]
       (is (= 1 (:total ret)))
       (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret)))))))
 
   (testing "cleanup-and-expect-zero"
-    (delete-all test-index-name)
-    (refresh-search-managers)
-    (let [ret (search :index test-index-name
-                      :default-field "name"
-                      :query "doe")]
-      (is (= 0 (:total ret)))))
+    (cleanup))
 
   (testing "write-exception-rolled-back"
     (dotimes [n 100]
@@ -453,9 +456,9 @@
                           :analyzer {:name {:type "keyword"}
                                      :bzbz-used-only-for-facet {:type "standard"}})))
       (refresh-search-managers)
-      (let [ret (search :index test-index-name
-                        :facets {:name {}, :name_st {}}
-                        :query {:term {:field "name", :value "zzz"}})]
+      (let [ret (search {:index test-index-name
+                         :facets {:name {}, :name_st {}}
+                         :query {:term {:field "name", :value "zzz"}}})]
         (is (= 0 (:total ret))))))
 
   (testing "facets"
@@ -468,9 +471,9 @@
              :analyzer {:name {:type "keyword"}
                         :bzbz-used-only-for-facet {:type "standard"}})
       (refresh-search-managers)
-      (let [ret (search :index test-index-name
-                        :facets {:name {:size 1}, :name_st {:path ["uuu"]}}
-                        :query {:match-all {}})
+      (let [ret (search {:index test-index-name
+                         :facets {:name {:size 1}, :name_st {:path ["uuu"]}}
+                         :query {:match-all {}}})
             f (:facets ret)
             nf (:name f)
             ns (:name_st f)]
@@ -478,33 +481,49 @@
         (is (= (count ns) 4))
         (is (= (+ 1 n) (:count (first nf)))))))
 
-
-
   (testing "rename-the-index-refresh-manager"
-    (store-something test-index-name)
+    (store-something test-index-name 0)
     (refresh-search-managers)
     (should-work test-index-name 1)
 
-    (rename test-index-name moved-index-name)
+    (rename test-index-name moved-index-name 0)
     (should-work moved-index-name 1)
 
-    (store-something moved-index-name)
+    (store-something moved-index-name 0)
     (refresh-search-managers)
 
     (should-work moved-index-name 2)
 
-    (rename moved-index-name test-index-name)
+    (rename moved-index-name test-index-name 0)
 
     (should-work test-index-name 2)
 
-    (store-something test-index-name)
+    (store-something test-index-name 0)
     (refresh-search-managers)
     (should-work test-index-name 3))
+
+  (testing "sharding"
+    (cleanup)
+    (store-something test-index-name 0)
+    (refresh-search-managers)
+    (should-work test-index-name 1)
+    (store-something test-index-name 1)
+    (refresh-search-managers)
+    (should-work test-index-name 2)
+    (refresh-search-managers)
+    (store-something test-index-name 3)
+    (refresh-search-managers)
+    (should-work test-index-name 3)
+    (cleanup)
+    (should-work test-index-name 0))
 
   (testing "teardown"
     (shutdown)
     (try
       (do
-        (delete-recursively (get-path test-index-name))
-        (delete-recursively (get-path moved-index-name)))
+        (delete-recursively (get-path test-index-name 0))
+        (delete-recursively (get-path test-index-name 1))
+        (delete-recursively (get-path test-index-name 2))
+        (delete-recursively (get-path test-index-name 3))
+        (delete-recursively (get-path moved-index-name 0)))
       (catch Exception e))))

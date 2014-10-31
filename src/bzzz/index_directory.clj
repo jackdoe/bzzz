@@ -206,7 +206,6 @@
             (try-close-manager-taxo manager taxo)
             (swap! name->smanager-taxo* dissoc index)))))))
 
-
 (defn shutdown []
   (locking name->smanager-taxo*
     (log/info "executing shutdown hook, current mapping: " @name->smanager-taxo*)

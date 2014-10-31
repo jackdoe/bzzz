@@ -26,6 +26,8 @@
                                      TopDocsCollector MultiCollector FieldValueFilter)
            (org.apache.lucene.store NIOFSDirectory Directory)))
 
+(declare use-searcher)
+(declare bootstrap-indexes)
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def mapping* (atom {}))
@@ -151,6 +153,7 @@
     (@mapping* index)))
 
 (defn refresh-search-managers []
+  (bootstrap-indexes)
   (locking mapping*
     (doseq [[index ^SearcherManager manager] @mapping*]
       (log/debug "refreshing: " index " " manager)
@@ -245,11 +248,14 @@
     (use-writer name callback)))
 
 (defn bootstrap-indexes []
-  (doseq [name (sub-directories)]
-    (use-writer name (fn [writer taxo]
-                       ;; do nothing, just open/close the taxo directory
-                       ))
-    (get-search-manager name)))
+  (try
+    (doseq [dir (sub-directories)]
+      (try
+        (get-search-manager (.getName dir))
+        (catch Exception e
+          (log/warn (ex-str e)))))
+    (catch Exception e
+      (log/warn (ex-str e)))))
 
 (defn get-facet-config ^FacetsConfig [facets]
   (let [config (FacetsConfig.)]
@@ -368,12 +374,11 @@
               [k v])))))
 
 (defn input-facet-settings [input dim]
-  (let [global-ef (default-to (:enforce-limits input) true)]
-    (if-let [config (get-in [:facets (keyword dim)] input)]
-      (if (contains? config :enforce-limits)
-        config
-        (assoc config :enforce-limits global-ef))
-      {:enforce-limits global-ef})))
+  (let [global-ef (get-in input [:enforce-limits] true)
+        config (get-in input [:facets (keyword dim)] {})]
+    (if (contains? config :enforce-limits)
+      config
+      (assoc config :enforce-limits global-ef))))
 
 (defn merge-facets [facets]
   ;; produces not-sorted output
@@ -537,11 +542,8 @@
 
 (defn index-stat []
   (into {} (for [[name searcher] @mapping*]
-             (let [sample (search {:index name
-                                   :query {:random-score {:query {:match-all {}}}}})]
-               [name (use-searcher name
-                                   (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
-                                     (let [reader (.getIndexReader searcher)]
-                                       {:docs (.numDocs reader)
-                                        :sample sample
-                                        :has-deletions (.hasDeletions reader)})))]))))
+             [name (use-searcher name
+                                 (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
+                                   (let [reader (.getIndexReader searcher)]
+                                     {:docs (.numDocs reader)
+                                      :has-deletions (.hasDeletions reader)})))])))

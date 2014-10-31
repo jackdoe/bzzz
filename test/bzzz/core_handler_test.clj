@@ -103,8 +103,9 @@
           cnt (* 4 hcnt)
           nf (get-in r1 [:facets :name])
           ns (get-in r2 [:facets :name])]
-      (is (= 2 (count ns)))
       (is (= (* 2 hcnt) (:count (first nf))))
+      (is (= 2 (count ns)))
+      (is (= (* 2 hcnt) (:count (first ns))))
       (is (= hcnt (:count (last nf))))
       (is (= "jack doe" (:label (first nf))))
       (is (> (:count (first nf)) (:count (last nf))))

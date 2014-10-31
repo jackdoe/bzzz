@@ -4,6 +4,10 @@ if [ $# != 1 ]; then
     exit 1
 fi
 BASE=`basename $1`
+
+#can overwrite everything
+source /etc/bzzz/$BASE
+
 ########
 # from elasticsearch.in.sh
 if [ -x "$JAVA_HOME/bin/java" ]; then
@@ -36,10 +40,6 @@ if [ ! -x "$JAVA" ]; then
     exit 1
 fi
 
-source /etc/bzzz/$BASE
-exec 0>&-
-exec 1>&-
-exec 2>&-
 $JAVA -Dlog4j.configuration=file:/etc/bzzz/log4j.properties $JAVA_OPTS \
       -jar /usr/lib/bzzz/bzzz.jar \
       --directory $BZZZ_DIRECTORY \

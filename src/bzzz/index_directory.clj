@@ -11,20 +11,9 @@
   (:require [clojure.java.io :as io])
   (:import (java.io StringReader File)
            (java.lang OutOfMemoryError)
-           (org.apache.lucene.analysis.tokenattributes CharTermAttribute)
-           (org.apache.lucene.facet FacetsConfig FacetField FacetsCollector LabelAndValue)
-           (org.apache.lucene.facet.taxonomy FastTaxonomyFacetCounts)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
-           (org.apache.lucene.analysis Analyzer TokenStream)
-           (org.apache.lucene.document Document Field Field$Index Field$Store
-                                       IntField LongField FloatField DoubleField)
-           (org.apache.lucene.search.highlight Highlighter QueryScorer
-                                               SimpleHTMLFormatter TextFragment)
-           (org.apache.lucene.index IndexWriter IndexReader Term IndexableField
-                                    IndexWriterConfig DirectoryReader FieldInfo)
-           (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher
-                                     Explanation Collector TopScoreDocCollector
-                                     TopDocsCollector MultiCollector FieldValueFilter)
+           (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
+           (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher)
            (org.apache.lucene.store NIOFSDirectory Directory)))
 
 (declare use-searcher)
@@ -34,7 +23,7 @@
 
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
-(def mapping* (atom {}))
+(def name->smanager* (atom {}))
 
 (def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-]"))
 (def shard-suffix "-shard-")
@@ -88,10 +77,10 @@
     (str (as-str index) shard-suffix (str shard))))
 
 (defn reset-search-managers []
-  (doseq [[name ^SearcherManager manager] @mapping*]
+  (doseq [[name ^SearcherManager manager] @name->smanager*]
     (log/info "\tclosing: " name " " manager)
     (.close manager))
-  (reset! mapping* {}))
+  (reset! name->smanager* {}))
 
 (defn use-taxo-reader [index callback]
   ;; FIXME: reuse
@@ -108,7 +97,7 @@
 
 (defn use-searcher [index callback]
   (let [manager (get-search-manager index)
-        searcher (.acquire manager)]
+        searcher ^IndexSearcher (.acquire manager)]
     (try
       (use-taxo-reader index (fn [^DirectoryTaxonomyReader reader] (callback searcher reader)))
       (finally (.release manager searcher)))))
@@ -179,16 +168,16 @@
       (log/warn (ex-str e)))))
 
 (defn get-search-manager ^SearcherManager [index]
-  (locking mapping*
-    (when (nil? (@mapping* index))
-      (swap! mapping* assoc index (SearcherManager. (new-index-directory (root-identifier-path) index)
+  (locking name->smanager*
+    (when (nil? (@name->smanager* index))
+      (swap! name->smanager* assoc index (SearcherManager. (new-index-directory (root-identifier-path) index)
                                                     nil)))
-    (@mapping* index)))
+    (@name->smanager* index)))
 
 (defn refresh-search-managers []
   (bootstrap-indexes)
-  (locking mapping*
-    (doseq [[index ^SearcherManager manager] @mapping*]
+  (locking name->smanager*
+    (doseq [[index ^SearcherManager manager] @name->smanager*]
       (log/debug "refreshing: " index " " manager)
       ;; FIXME - reopen cached taxo readers
       (try
@@ -197,16 +186,16 @@
           (do
             (log/info (str index " maybeRefresh exception, closing it. Exception: " (ex-str e)))
             (.close manager)
-            (swap! mapping* dissoc index)))))))
+            (swap! name->smanager* dissoc index)))))))
 
 (defn shutdown []
-  (locking mapping*
-    (log/info "executing shutdown hook, current mapping: " @mapping*)
+  (locking name->smanager*
+    (log/info "executing shutdown hook, current mapping: " @name->smanager*)
     (reset-search-managers)
-    (log/info "mapping after cleanup: " @mapping*)))
+    (log/info "mapping after cleanup: " @name->smanager*)))
 
 (defn index-stat []
-  (into {} (for [[name searcher] @mapping*]
+  (into {} (for [[name searcher] @name->smanager*]
              [name (use-searcher name
                                  (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                    (let [reader (.getIndexReader searcher)]

@@ -149,7 +149,6 @@
   (locking peers*
     (swap! peers*
            assoc-in [@index/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
-  (Thread/sleep (* (int (rand 20)) 1000))
   (let [c (async/chan)
         hosts @discover-hosts*
         str-state (json/write-str {:discover-hosts @discover-hosts*})]
@@ -203,7 +202,7 @@
   (log/info "starting bzzz --identifier" (as-str @index/identifier*) "--port" @port* "--directory" @index/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
   (every 5000 #(index/refresh-search-managers) (mk-pool) :desc "search refresher")
   (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
-  (every 120000 #(discover) (mk-pool) :desc "periodic discover")
+  (every 30000 #(discover) (mk-pool) :desc "periodic discover")
   (every 10000 #(log/trace "up:" @timer* @index/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
   (repeatedly
    (try

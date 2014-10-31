@@ -14,16 +14,17 @@
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
            (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher)
-           (org.apache.lucene.store NIOFSDirectory Directory)))
+           (org.apache.lucene.store NIOFSDirectory Directory NoSuchDirectoryException)))
 
 (declare use-searcher)
 (declare use-writer)
 (declare bootstrap-indexes)
-(declare get-search-manager)
+(declare get-smanager-taxo)
+(declare try-close-manager-taxo)
 
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
-(def name->smanager* (atom {}))
+(def name->smanager-taxo* (atom {}))
 
 (def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-]"))
 (def shard-suffix "-shard-")
@@ -68,38 +69,40 @@
 (defn new-taxo-reader ^DirectoryTaxonomyReader [name]
   (DirectoryTaxonomyReader. (new-index-directory (taxo-dir-prefix name) "__taxo__")))
 
+(defn try-new-taxo-reader ^DirectoryTaxonomyReader [name]
+  (try
+    (new-taxo-reader name)
+    (catch Exception e
+      (if (instance? NoSuchDirectoryException e)
+        (do
+          (log/warn (ex-str e))
+          (let [writer ^DirectoryTaxonomyWriter (new-taxo-writer name)]
+            (.commit writer)
+            (.close writer))
+          (new-taxo-reader name))))))
+
 (defn new-index-reader ^IndexReader [name]
   (with-open [writer (new-index-writer name)]
     (DirectoryReader/open ^IndexWriter writer false)))
+
+(defn new-searcher-manager ^SearcherManager [name]
+  (SearcherManager. (new-index-directory (root-identifier-path) name) nil))
 
 (defn sharded [index x-shard]
   (let [shard (int-or-parse x-shard)]
     (str (as-str index) shard-suffix (str shard))))
 
 (defn reset-search-managers []
-  (doseq [[name ^SearcherManager manager] @name->smanager*]
+  (doseq [[name [manager taxo]] @name->smanager-taxo*]
     (log/info "\tclosing: " name " " manager)
-    (.close manager))
-  (reset! name->smanager* {}))
-
-(defn use-taxo-reader [index callback]
-  ;; FIXME: reuse
-  (let [reader (try
-                 (new-taxo-reader index)
-                 (catch Throwable e
-                   (do
-                     (log/warn (ex-str e))
-                     nil)))]
-    (try
-      (callback reader)
-      (finally (if reader
-                 (.close ^DirectoryTaxonomyReader reader))))))
+    (try-close-manager-taxo manager taxo))
+  (reset! name->smanager-taxo* {}))
 
 (defn use-searcher [index callback]
-  (let [manager (get-search-manager index)
+  (let [[^SearcherManager manager taxo] (get-smanager-taxo index)
         searcher ^IndexSearcher (.acquire manager)]
     (try
-      (use-taxo-reader index (fn [^DirectoryTaxonomyReader reader] (callback searcher reader)))
+      (callback searcher taxo)
       (finally (.release manager searcher)))))
 
 (defn log-close-err [^Directory dir ^Throwable e]
@@ -107,7 +110,8 @@
              (.toString dir)
              " Got exception while close()ing the writer,and directory is still locked."
              " Unlocking it. "
-             "[ should never happen, there is a race between this IndexWriter/unlock and other process/thread IndexWriter/open ]"
+             "[ should never happen, there is a race between this IndexWriter/unlock "
+             " and other process/thread IndexWriter/open ]"
              " Exception: " (ex-str e))))
 
 (defn safe-close-writer [^IndexWriter writer]
@@ -128,6 +132,18 @@
         (do
           (log-close-err (.getDirectory taxo) e)
           (DirectoryTaxonomyWriter/unlock (.getDirectory taxo)))))))
+
+(defn try-close-manager-taxo [^SearcherManager manager ^DirectoryTaxonomyReader taxo]
+  (try
+    (do
+      (try
+        (.close taxo)
+        (catch Exception e
+          (log/warn (as-str e))))
+      (.close manager))
+    (catch Exception e
+      (log/warn (as-str e)))))
+
 
 (defn use-writer [index callback]
   (let [writer (new-index-writer index)
@@ -161,43 +177,57 @@
   (try
     (doseq [dir (sub-directories)]
       (try
-        (get-search-manager (.getName dir))
+        (get-smanager-taxo (.getName ^File dir))
         (catch Exception e
           (log/warn (ex-str e)))))
     (catch Exception e
       (log/warn (ex-str e)))))
 
-(defn get-search-manager ^SearcherManager [index]
-  (locking name->smanager*
-    (when (nil? (@name->smanager* index))
-      (swap! name->smanager* assoc index (SearcherManager. (new-index-directory (root-identifier-path) index)
-                                                    nil)))
-    (@name->smanager* index)))
+(defn get-smanager-taxo [index]
+  (locking name->smanager-taxo*
+    (when (nil? (@name->smanager-taxo* index))
+      (swap! name->smanager-taxo* assoc index [(new-searcher-manager index)
+                                               (try-new-taxo-reader index)]))
+    (@name->smanager-taxo* index)))
 
 (defn refresh-search-managers []
   (bootstrap-indexes)
-  (locking name->smanager*
-    (doseq [[index ^SearcherManager manager] @name->smanager*]
+  (locking name->smanager-taxo*
+    (doseq [[index [^SearcherManager manager
+                    ^DirectoryTaxonomyReader taxo]] @name->smanager-taxo*]
       (log/debug "refreshing: " index " " manager)
-      ;; FIXME - reopen cached taxo readers
       (try
-        (.maybeRefresh manager)
+        (do
+          (.maybeRefresh manager)
+          (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
+            (swap! name->smanager-taxo* assoc-in [index 1] changed)))
         (catch Throwable e
           (do
-            (log/info (str index " maybeRefresh exception, closing it. Exception: " (ex-str e)))
-            (.close manager)
-            (swap! name->smanager* dissoc index)))))))
+            (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
+            (try-close-manager-taxo manager taxo)
+            (swap! name->smanager-taxo* dissoc index)))))))
+
 
 (defn shutdown []
-  (locking name->smanager*
-    (log/info "executing shutdown hook, current mapping: " @name->smanager*)
+  (locking name->smanager-taxo*
+    (log/info "executing shutdown hook, current mapping: " @name->smanager-taxo*)
     (reset-search-managers)
-    (log/info "mapping after cleanup: " @name->smanager*)))
+    (log/info "mapping after cleanup: " @name->smanager-taxo*)))
 
 (defn index-stat []
-  (into {} (for [[name searcher] @name->smanager*]
+  (into {} (for [[name [manager taxo]] @name->smanager-taxo*]
              [name (use-searcher name
                                  (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                    (let [reader (.getIndexReader searcher)]
                                      {:docs (.numDocs reader)
-                                      :has-deletions (.hasDeletions reader)})))])))
+                                      :searcher {:to-string (.toString searcher)
+                                                 :sim (.toString (.getSimilarity searcher))}
+                                      :manager {:to-string (.toString manager)}
+                                      :reader {:to-string (.toString reader)
+                                               :leaves (count (.leaves reader))
+                                               :refcnt (.getRefCount reader)
+                                               :deleted-docs (.numDeletedDocs reader)
+                                               :has-deletions (.hasDeletions reader)}
+                                      :taxo {:size (.getSize taxo-reader)
+                                             :to-string (.toString taxo-reader)
+                                             :refcnt (.getRefCount taxo-reader)}})))])))

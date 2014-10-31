@@ -357,10 +357,10 @@
   (TopScoreDocCollector/create pq-size true))
 
 (defn limit [input hits sort-key]
-  (let [size (default-to (:size input) default-size)
+  (let [size (get input :size default-size)
         sorted (sort-by sort-key #(compare %2 %1) hits)]
     (if (and  (> (count hits) size)
-              (default-to (:enforce-limits input) true))
+              (get input :enforce-limits true))
       (subvec (vec sorted) 0 size)
       sorted)))
 
@@ -434,9 +434,9 @@
     (-> sum
         (update-in [:failed] conj-if ex)
         (update-in [:failed] concat-if (:failed next))
-        (update-in [:facets] concat-facets (default-to (:facets next) {}))
-        (update-in [:total] + (default-to (:total next) 0))
-        (update-in [:hits] concat (default-to (:hits next) [])))))
+        (update-in [:facets] concat-facets (get next :facets {}))
+        (update-in [:total] + (get next :total 0))
+        (update-in [:hits] concat (get next :hits [])))))
 
 (defn reduce-collection [collection input ms-start]
   (let [result (reduce result-reducer
@@ -445,7 +445,7 @@
                         :facets {}
                         :took -1
                         :failed []
-                        :can-return-partial (default-to (:can-return-partial input) false)}
+                        :can-return-partial (get input :can-return-partial false)}
                        collection)]
     (-> result
         (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))
@@ -481,7 +481,7 @@
                                                     facet-collector)]
                    (into {} (for [[k v] facets]
                               (if-let [fr (.getTopChildren fc
-                                                           (default-to (:size v) default-size)
+                                                           (get v :size default-size)
                                                            (as-str k)
                                                            ^"[Ljava.lang.String;" (into-array
                                                                                    String []))]
@@ -494,8 +494,8 @@
                      (log/warn (ex-str e))
                      {}))) ;; do not send the error back,
                {}) ;; no taxo reader, probably problem with open, exception is thrown
-     ;; even though we might fake a facet result
-     ;; it could really surprise the client
+                   ;; even though we might fake a facet result
+                   ;; it could really surprise the client
      :hits (into []
                  (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
                    (document->map (.doc searcher (.doc hit))
@@ -509,9 +509,9 @@
 (defn search [input]
   (let [ms-start (time-ms)
         index (need :index input "need index")
-        page (default-to (:page input) 0)
-        size (default-to (:size input) default-size)
-        explain (default-to (:explain input) false)
+        page (get input :page 0)
+        size (get input :size default-size)
+        explain (get input :explain false)
         highlight (:highlight input)
         fields (:fields input)
         analyzer (extract-analyzer (:analyzer input))

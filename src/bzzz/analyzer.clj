@@ -44,7 +44,7 @@
       "pattern-replace" (PatternReplaceCharFilter. (Pattern/compile (need :pattern obj "need pattern"))
                                                    (need :replacement obj "need replacement")
                                                    reader)
-      "html-strip" (HTMLStripCharFilter. reader (set (default-to (:escaped-tags obj) []))))))
+      "html-strip" (HTMLStripCharFilter. reader (set (get obj :escaped-tags []))))))
 
 (defn to-char-filter [^Reader reader filters]
   (if (= (count filters) 0)
@@ -53,7 +53,7 @@
 
 (defn to-lucene-tokenizer [name obj ^Reader reader]
   (let [char-filter ^CharFilter (to-char-filter reader
-                                    (default-to (:char-filter obj) []))]
+                                    (get obj :char-filter []))]
     (case (as-str name)
       "whitespace" (WhitespaceTokenizer. *version* char-filter)
       "letter" (LetterTokenizer. *version* char-filter)
@@ -72,11 +72,11 @@
     (case (as-str type)
       "lowercase" (LowerCaseFilter. *version* source)
       "limit" (LimitTokenCountFilter. source (need :max-token-count obj "need max-token-count"))
-      "length" (LengthFilter. (default-to (:enable-position-increment obj) true)
+      "length" (LengthFilter. (get obj :enable-position-increment true)
                               source
                               (int (need :min obj "need min length"))
                               (int (need :max obj "need max length")))
-      "position" (PositionFilter. source (default-to (:position-increment obj) 0))
+      "position" (PositionFilter. source (get obj :position-increment 0))
       "reverse" (ReverseStringFilter. *version* source)
       "edge-ngram" (EdgeNGramTokenFilter. *version*
                                           source
@@ -96,7 +96,7 @@
 ;; bloody hell this is awesome!
 (defn token-filter-chain [obj]
   (let [tokenizer (need :tokenizer obj "need tokenizer: 'ngram|edge-ngram|whitespace|keyword...'")
-        filter (default-to (:filter obj) [])]
+        filter (get obj :filter [])]
     (proxy [Analyzer][]
       (createComponents [^String field ^Reader reader]
         (let [t (to-lucene-tokenizer tokenizer obj reader)]

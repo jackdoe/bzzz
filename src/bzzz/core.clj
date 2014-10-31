@@ -25,7 +25,7 @@
   (< (- @timer* (second than)) @acceptable-discover-time-diff*))
 
 (defn possible-hosts [identifier]
-  (filter rescent? (default-to ((keyword identifier) @peers*) [])))
+  (filter rescent? (get @peers* (keyword identifier) [])))
 
 (defn peer-resolve [identifier]
   (if-let [all-possible ((keyword identifier) @peers*)]
@@ -39,7 +39,7 @@
 (defn search-remote [hosts input c]
   (let [part (if (or (vector? hosts) (list? hosts)) hosts [hosts])
         is-multi (> (count part) 1)
-        args {:timeout (default-to (:timeout input) 1000)
+        args {:timeout (get input :timeout 1000)
               :as :text
               :body (json/write-str (if is-multi
                                       (assoc input :hosts part)
@@ -101,7 +101,7 @@
            "/favicon.ico" "" ;; XXX
            (index/search input))
     :put (search-many (:hosts input) (dissoc input :hosts))
-    :patch (merge-discover-hosts (default-to (:discover-hosts input) {}))
+    :patch (merge-discover-hosts (get input :discover-hosts {}))
     (throw (Throwable. "unexpected method" method))))
 
 (defn handler [request]

@@ -7,13 +7,14 @@
         bzzz.const
         bzzz.util
         ring.adapter.jetty
-        bzzz.index))
+        bzzz.index-directory
+        bzzz.index-search))
 
 (def test-index-name :__lein-testing-handler-index)
 (def host "http://localhost:3000/")
 (def id default-identifier)
 (def hosts [id host id id [id id [id id id host [host host id host] [host] [host id] [id host] id id id id id id [id] [id id [id]]]]])
-(def hosts-bad [id host id "bzzz-testing-foofoo" id [id id [id id "bzz-testing-foobar" id host [host host "bzzz-testing-barfoo" id host] [host] [host id] [id host] id id id id id id [id] [id id [id "bzzz-testing-barbar"]]]]])
+(def hosts-bad [id host id "bzzz-testing-foofoo" id [id id [id id "bzzz-testing-foobar" id host [host host "bzzz-testing-barfoo" id host] [host] [host id] [id host] id id id id id id [id] [id id [id "bzzz-testing-barbar"]]]]])
 (def query {:term {:field "name"
                    :value "doe"}})
 

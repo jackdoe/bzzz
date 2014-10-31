@@ -5,7 +5,9 @@
   (use [clojure.string :only (split join)])
   (use [overtone.at-at :only (every mk-pool)])
   (:require [bzzz.const :as const])
-  (:require [bzzz.index :as index])
+  (:require [bzzz.index-search :as index-search])
+  (:require [bzzz.index-directory :as index-directory])
+  (:require [bzzz.index-store :as index-store])
   (:require [bzzz.analyzer :as analyzer])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
@@ -66,12 +68,12 @@
     (doseq [part hosts]
       (search-remote part input c))
     (let [collected (into [] (for [part hosts] (async/<!! c)))]
-      (index/reduce-collection collected input ms-start))))
+      (index-search/reduce-collection collected input ms-start))))
 
 (defn stat []
-  {:index (index/index-stat)
+  {:index (index-directory/index-stat)
    :analyzer (analyzer/analyzer-stat)
-   :identifier @index/identifier*
+   :identifier @index-directory/identifier*
    :discover-hosts @discover-hosts*
    :peers @peers*
    :timer @timer*})
@@ -88,18 +90,18 @@
                                                 [(validate-discover-url host) true])))))
     (catch Exception e
       (log/warn "merge-discovery-hosts" x (.getMessage e))))
-  {:identifier @index/identifier* :discover-hosts @discover-hosts*})
+  {:identifier @index-directory/identifier* :discover-hosts @discover-hosts*})
 
 (defn work [method uri qs input]
   (log/debug "received request" method input)
   (condp = method
-    :post (mapply index/store input)
-    :delete (index/delete-from-query (:index input)
+    :post (mapply index-store/store input)
+    :delete (index-store/delete-from-query (:index input)
                                      (:query input))
     :get (case uri
            "/_stat" (stat)
            "/favicon.ico" "" ;; XXX
-           (index/search input))
+           (index-search/search input))
     :put (search-many (:hosts input) (dissoc input :hosts))
     :patch (merge-discover-hosts (get input :discover-hosts {}))
     (throw (Throwable. "unexpected method" method))))
@@ -148,7 +150,7 @@
   ;; hackish, just POC
   (locking peers*
     (swap! peers*
-           assoc-in [@index/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
+           assoc-in [@index-directory/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
   (let [c (async/chan)
         hosts @discover-hosts*
         str-state (json/write-str {:discover-hosts @discover-hosts*})]
@@ -193,17 +195,16 @@
                                                       (split (:discover-hosts options) #","))]
                                      [host true])))
     (reset! acceptable-discover-time-diff* (:acceptable-discover-time-diff options))
-    (reset! index/identifier* (keyword (:identifier options)))
-    (reset! index/root* (:directory options))
+    (reset! index-directory/identifier* (keyword (:identifier options)))
+    (reset! index-directory/root* (:directory options))
     (reset! port* (:port options)))
 
-  (index/bootstrap-indexes)
-  (.addShutdownHook (Runtime/getRuntime) (Thread. #(index/shutdown)))
-  (log/info "starting bzzz --identifier" (as-str @index/identifier*) "--port" @port* "--directory" @index/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
-  (every 5000 #(index/refresh-search-managers) (mk-pool) :desc "search refresher")
+  (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
+  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff*)
+  (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
   (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
   (every 30000 #(discover) (mk-pool) :desc "periodic discover")
-  (every 10000 #(log/trace "up:" @timer* @index/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
+  (every 10000 #(log/trace "up:" @timer* @index-directory/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
   (repeatedly
    (try
      (run-jetty handler {:port @port*})

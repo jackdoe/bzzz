@@ -5,7 +5,9 @@
         bzzz.core
         bzzz.util
         bzzz.const
-        bzzz.index))
+        bzzz.index-directory
+        bzzz.index-store
+        bzzz.index-search))
 
 (def test-index-name "__lein-test-testing-index")
 (def moved-index-name "__lein-moved-test-testing-index")

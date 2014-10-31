@@ -25,7 +25,6 @@
 (def root* (atom default-root))
 (def identifier* (atom default-identifier))
 (def name->smanager-taxo* (atom {}))
-
 (def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-]"))
 (def shard-suffix "-shard-")
 (def shard-suffix-sre (str ".*" shard-suffix "\\d+"))
@@ -190,21 +189,23 @@
     (@name->smanager-taxo* index)))
 
 (defn refresh-search-managers []
-  (bootstrap-indexes)
-  (locking name->smanager-taxo*
-    (doseq [[index [^SearcherManager manager
-                    ^DirectoryTaxonomyReader taxo]] @name->smanager-taxo*]
-      (log/debug "refreshing: " index " " manager)
-      (try
-        (do
-          (.maybeRefresh manager)
-          (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
-            (swap! name->smanager-taxo* assoc-in [index 1] changed)))
-        (catch Throwable e
+  (let [start (time-ms)]
+    (bootstrap-indexes)
+    (locking name->smanager-taxo*
+      (doseq [[index [^SearcherManager manager
+                      ^DirectoryTaxonomyReader taxo]] @name->smanager-taxo*]
+        (log/debug "refreshing: " index " " manager)
+        (try
           (do
-            (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
-            (try-close-manager-taxo manager taxo)
-            (swap! name->smanager-taxo* dissoc index)))))))
+            (.maybeRefresh manager)
+            (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
+              (swap! name->smanager-taxo* assoc-in [index 1] changed)))
+          (catch Throwable e
+            (do
+              (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
+              (try-close-manager-taxo manager taxo)
+              (swap! name->smanager-taxo* dissoc index))))))
+    (log/debug "refreshing took" (time-took start))))
 
 (defn shutdown []
   (locking name->smanager-taxo*
@@ -226,6 +227,6 @@
                                                :refcnt (.getRefCount reader)
                                                :deleted-docs (.numDeletedDocs reader)
                                                :has-deletions (.hasDeletions reader)}
-                                      :taxo {:size (.getSize taxo-reader)
-                                             :to-string (.toString taxo-reader)
+                                      :taxo {:to-string (.toString taxo-reader)
+                                             :size (.getSize taxo-reader)
                                              :refcnt (.getRefCount taxo-reader)}})))])))

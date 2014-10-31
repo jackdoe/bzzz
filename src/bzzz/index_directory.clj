@@ -144,7 +144,6 @@
     (catch Exception e
       (log/warn (as-str e)))))
 
-
 (defn use-writer [index callback]
   (let [writer (new-index-writer index)
         taxo (new-taxo-writer index)]

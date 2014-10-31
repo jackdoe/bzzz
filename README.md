@@ -186,12 +186,12 @@ At the moment I am working on adding more and more analyzers/tokenizers/tokenfil
 * have moderately useful (out of the box) network lucene wrapper
 * distribute work
 * should be able to restart frequently
-* _user_ controlled sharding
+* _user_ controlled sharding (there are 2 types, external and internal(within the jvm))
 
 
 BZZZ being extremely simple it can actually scale very well if you know your data, for example if we have 100_000_000 documents and we want to search them, we can just spawn 100BZZZ processess across multiple machines, and just put different pieces of data in different boxes (hash($id) % BOXES). BZZZ supports swarm like queries, so you can ask 1 box, to ask 5 boxes, and each of those 5 boxes can ask 5 more, and actually the _user_ is in control of that.
 
-* multi-searching shard identification and automatic shard resolving
+* multi-searching shard[partition] identification and automatic shard[partition] resolving
 the way BZZZ does this is by simply continuously updating a @discover-hosts* atom map, and every time you a box checks if another box is alive, it also gets its current @discover-hosts* and it merges it, it also gets the box's identifier.
 
 This identifier can be used when a query is construcded like so:
@@ -199,14 +199,14 @@ This identifier can be used when a query is construcded like so:
 PUT:
 {
     "hosts": [
-        "__shard_0",
-        "__shard_1"
+        "__global_partition_0"
+        "__global_partition_1"
     ],
     "index": "example",
     "query": "name:jack",
 }
 ```
-(of course instead of `__shard_0/1` you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the @peers* map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
+(of course instead of `__global_partition_0/1` you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the @peers* map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
 
 In the `hosts` array you can also add arrays like:
 ```
@@ -214,18 +214,18 @@ PUT:
 {
     "hosts": [
         [
-            "__shard_0",
-            "__shard_1"
+            "__global_partition_0",
+            "__global_partition_1"
         ],
         [
-            "__shard_2",
-            "__shard_3"
+            "__global_partition_2",
+            "__global_partition_3"
         ]
     ]
 }
 ```
 
-so in this case, the host that you send the request to, will fire multi-search request to `__shard0`, and ask it for `["__shard_0","__shard_1"]` and another multi-search reques to `__shard_2` and ask it to `["__shard_2","__shard_3"]`, so in the end you will query 1 box, which will query 2 boxes, and each of those will query 2 boxes (including themselves).
+so in this case, the host that you send the request to, will fire multi-search request to `__shard0`, and ask it for `["__global_partition_0","__global_partition_1"]` and another multi-search reques to `__global_partition_2` and ask it to `["__global_partition_2","__global_partition_3"]`, so in the end you will query 1 box, which will query 2 boxes, and each of those will query 2 boxes (including themselves).
 
 This can can become quite hard to grasp `["a","b",["c","d","e",["f,"g","h",["z","x","c"]]]]` for example.
 
@@ -252,6 +252,14 @@ if you want to have field named `name`:
 * not_analyzed
 * and you can combine them.
 
+you can also create numeric fields (used with range queries)
+
+* _integer
+* _long
+* _float
+* _double
+(the range query looks like: `{"query":{"range":{"field":"age_integer","min":40,"max"
+
 so *any* BZZZ process can just start reading/writing into any index, without a care in the world. you can also just copy a bunch of lucene files around, and everything will work, this convension is also very easy to be copied in java, so you can easilly share same index with different lucene writer.
 
 ## directories / writers / searchers
@@ -264,6 +272,22 @@ _every_ write request to BZZZ does the following:
 * write the data
 * optimize the lucene index
 * close the writer
+* one index-name can be mapped to multiple internal shards (you can just send shard number with the store request), and the search action will spawn multiple threads to query all internal shards. Delete operations delete on all internal shards. It is up to you to decide how to shard the data internally, for example:
+
+```
+my @docs = ();
+my $n_internal_shards = 20;
+my @hosts = (....);
+while (<$s>) {
+    push @docs,{ raw => $_ };
+    if (scalar(@docs) > 100) {
+        index($hosts[rand(@hosts)],rand($n_internal_shards),\@docs);
+        @docs = ();
+    }
+}
+```
+
+You can decide if you want to spawn 20 processes to serve global_partitions[external shards] or just have the box serve 1 global partition with 20 internal shards.
 
 Lucene's NIOFSDirectory does file based locking, so you can write to the same files from multiple entry points
 

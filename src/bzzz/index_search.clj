@@ -8,6 +8,8 @@
   (use bzzz.random-score-query)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)
+           (org.apache.lucene.expressions.js JavascriptCompiler)
+           (org.apache.lucene.expressions Expression SimpleBindings)
            (org.apache.lucene.facet FacetsConfig FacetField FacetsCollector LabelAndValue)
            (org.apache.lucene.facet.taxonomy FastTaxonomyFacetCounts)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyReader)
@@ -18,11 +20,15 @@
            (org.apache.lucene.index IndexReader Term IndexableField)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher
                                      Explanation Collector TopScoreDocCollector
-                                     TopDocsCollector MultiCollector FieldValueFilter)))
+                                     TopDocsCollector MultiCollector TopFieldCollector FieldValueFilter
+                                     SortField Sort SortField$Type )))
+
+(declare input->expression-bindings)
 
 (defn document->map
-  [^Document doc only-fields score highlighter ^Explanation explanation]
-  (let [m (into {:_score score }
+  [^Document doc only-fields score abs_position highlighter ^Explanation explanation]
+  (let [m (into {:_score score
+                 :_abs_position abs_position }
                 (for [^IndexableField f (.getFields doc)]
                   (let [str-name (.name f)
                         name (keyword str-name)]
@@ -81,17 +87,76 @@
                       [])]))))
     (constantly nil)))
 
+(defn sort-reverse? [m]
+  (if-let [order (:order m)]
+    (case order
+      "asc" false
+      "desc" true)
+    (bool-or-parse (get m :reverse true))))
 
-(defn get-score-collector ^TopDocsCollector [sort pq-size]
-  (TopScoreDocCollector/create pq-size true))
+(defn name->sort-field ^SortField [name]
+  (if (and (map? name)
+           (:source name))
+    (let [[^Expression expr ^SimpleBindings bindings] (input->expression-bindings name)]
+      (.getSortField expr bindings (sort-reverse? name)))
+    (let [reverse (if (map? name)
+                    (sort-reverse? name)
+                    true)
+          name (if (map? name)
+                 (as-str (need :field name "missing field [{field:...,reverse:true/false}]"))
+                 (as-str name))
+          type (if (= "_score" name)
+                 SortField$Type/SCORE
+                 (if (= "_doc" name)
+                   SortField$Type/DOC
+                   (if (index_integer? name)
+                     SortField$Type/INT
+                     (if (index_long? name)
+                       SortField$Type/LONG
+                       (if (index_float? name)
+                         SortField$Type/FLOAT
+                         (if (index_double? name)
+                           SortField$Type/DOUBLE
+                           SortField$Type/STRING))))))]
+      (SortField. ^String name ^SortField$Type type ^Boolean reverse))))
 
-(defn limit [input hits sort-key]
-  (let [size (get input :size default-size)
-        sorted (sort-by sort-key #(compare %2 %1) hits)]
-    (if (and  (> (count hits) size)
-              (get input :enforce-limits true))
-      (subvec (vec sorted) 0 size)
-      sorted)))
+(defn input->expr ^Expression [input]
+  (JavascriptCompiler/compile (get input :source "")))
+
+(defn input->expression-bindings [input]
+  (let [expr (input->expr input)
+        bindings (SimpleBindings.)]
+    (do
+      (.add bindings (name->sort-field "_score"))
+      (doseq [binding (get input :bindings [])]
+        (.add bindings (name->sort-field binding)))
+      [expr bindings])))
+
+(defn input->sort [input]
+  (let [input (if (vector? input) input [input])]
+    (Sort. ^"[Lorg.apache.lucene.search.SortField;"
+           (into-array SortField (into [] (for [obj input]
+                                            (name->sort-field obj)))))))
+
+(defn get-score-collector ^TopDocsCollector [input pq-size]
+  (if input
+    (TopFieldCollector/create (input->sort input)
+                              pq-size
+                              true
+                              true
+                              true
+                              true)
+    (TopScoreDocCollector/create pq-size true)))
+
+(defn limit
+  ([input hits sort-key] (limit input hits sort-key #(compare %2 %1)))
+  ([input hits sort-key comparator]
+     (let [size (get input :size default-size)
+           sorted (sort-by sort-key comparator hits)]
+       (if (and  (> (count hits) size)
+                 (get input :enforce-limits true))
+         (subvec (vec sorted) 0 size)
+         sorted))))
 
 (defn concat-facets [big small]
   (if (not big)
@@ -178,15 +243,17 @@
                        collection)]
     (-> result
         (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))
-        (assoc-in [:hits] (limit input (:hits result) :_score))
+        (assoc-in [:hits] (if (:sort input)
+                            (limit input (:hits result) :_abs_position #(compare %1 %2))
+                            (limit input (:hits result) :_score)))
         (assoc-in [:took] (time-took ms-start)))))
 
 (defn shard-search
   [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader
              ^Query query ^Analyzer analyzer
-             page size explain highlight facets fields facet-config]
+             page size explain highlight facets fields facet-config sort]
       :or {page 0, size default-size, explain false,
-           analyzer nil, facets nil, fields nil}}]
+           analyzer nil, facets nil, fields nil sort nil}}]
   (let [ms-start (time-ms)
         highlighter (make-highlighter query searcher highlight analyzer)
         pq-size (+ (* page size) size)
@@ -224,40 +291,40 @@
                {}) ;; no taxo reader, probably problem with open, exception is thrown
                    ;; even though we might fake a facet result
                    ;; it could really surprise the client
-     :hits (into []
-                 (for [^ScoreDoc hit (-> (.topDocs score-collector (* page size)) (.scoreDocs))]
-                   (document->map (.doc searcher (.doc hit))
-                                  fields
-                                  (.score hit)
-                                  highlighter
-                                  (when explain
-                                    (.explain searcher query (.doc hit))))))
+     :hits (map-indexed (fn [idx ^ScoreDoc hit]
+                          (document->map (.doc searcher (.doc hit))
+                                         fields
+                                         (.score hit)
+                                         idx
+                                         highlighter
+                                         (when explain
+                                           (.explain searcher query (.doc hit)))))
+                        (->
+                         (.topDocs score-collector (* page size))
+                         (.scoreDocs)))
      :took (time-took ms-start)}))
 
 (defn search [input]
   (let [ms-start (time-ms)
         index (need :index input "need index")
-        page (get input :page 0)
-        size (get input :size default-size)
-        explain (get input :explain false)
-        highlight (:highlight input)
-        fields (:fields input)
-        analyzer (extract-analyzer (:analyzer input))
-        query (parse-query (:query input) analyzer)
         facets (:facets input)
-        facet-config (get-facet-config facets)
+        analyzer (extract-analyzer (:analyzer input)) ;; fixme: are all analyzers thread safe?
+        facet-config (get-facet-config facets)        ;; fixme: check if it is thread safe
         futures (into [] (for [shard (index-name-matching index)]
-                           (future (use-searcher shard
-                                                 (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
-                                                   (shard-search :searcher searcher
-                                                                 :taxo-reader taxo-reader
-                                                                 :analyzer analyzer
-                                                                 :facet-config facet-config
-                                                                 :highlight highlight
-                                                                 :query query
-                                                                 :page page
-                                                                 :size size
-                                                                 :facets facets
-                                                                 :explain explain
-                                                                 :fields fields))))))]
+                           (use-searcher shard
+                                         (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
+                                           (shard-search :searcher searcher
+                                                         :taxo-reader taxo-reader
+                                                         :analyzer analyzer
+                                                         :facet-config facet-config
+                                                         :highlight (:highlight input)
+                                                         :query (parse-query ;; some queries are not thread safe
+                                                                 (:query input)
+                                                                 analyzer)
+                                                         :page (get input :page 0)
+                                                         :size (get input :size default-size)
+                                                         :sort (:sort input)
+                                                         :facets facets
+                                                         :explain (get input :explain false)
+                                                         :fields (:fields input))))))]
     (reduce-collection futures input ms-start)))

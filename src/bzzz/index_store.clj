@@ -32,13 +32,19 @@
             Field$Index/NO)))
 
 (defn numeric-field [^Field$Store stored ^String key ^String value]
-  (if (index_integer? key)
-    (IntField. key (int-or-parse value) stored)
-    (if (index_long? key)
-      (LongField. key (long-or-parse value) stored)
-      (if (index_float? key)
-        (FloatField. key (float-or-parse value) stored)
-        (DoubleField. key (double-or-parse value) stored)))))
+  (try
+    (if (index_integer? key)
+      (IntField. key (int-or-parse value) stored)
+      (if (index_long? key)
+        (LongField. key (long-or-parse value) stored)
+        (if (index_float? key)
+          (FloatField. key (float-or-parse value) stored)
+          (if (index_double? key)
+            (DoubleField. key (double-or-parse value) stored)
+            (throw (Throwable. "bad numeric field name"))))))
+    (catch Exception e
+      (let [ex (str "exception parsing numeric field <" key "> value <" value "> exception: " (ex-str e))]
+        (throw (Throwable. ex))))))
 
 (defn add-field [^Document document key value]
   (let [str-key (as-str key)

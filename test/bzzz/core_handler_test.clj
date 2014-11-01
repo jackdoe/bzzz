@@ -20,10 +20,10 @@
 
 (def store-request
   {:index test-index-name
-   :documents [{:name "jack doe"}
-               {:name "jack doe"}
-               {:name "john doe"}
-               {:name "joe doe"}]
+   :documents [{:name "jack doe" :popularity_double 300000.281}
+               {:name "jack doe" :popularity_double 30000.284}
+               {:name "john doe" :popularity_double 3000.283}
+               {:name "joe doe doe" :popularity_double 1000.281}]
    :facets {:name {}}})
 
 (def delete-request
@@ -34,6 +34,8 @@
   {:index test-index-name
    :can-return-partial can-return-partial
    :hosts h
+   :sort {:source "sqrt(_score) + ln(popularity_double)"
+          :bindings ["popularity_double"]}
    :query query
    :size size
    :timeout 10000
@@ -83,7 +85,6 @@
       (let [should-be (+ 1 n)
             r (send-put-request true should-be 10 hosts-bad true)
             cnt (* 4 (count (flatten hosts)))]
-        (println r)
         (is (not (= -1 (.indexOf ^String (:exception (send-put-request true should-be 10 hosts-bad false)) "Throwable java.lang.IllegalArgumentException: host is null"))))
         (is (= (count (:failed r)) 4))
         (is (= cnt (:total r)))
@@ -112,6 +113,7 @@
       (is (> (:count (first nf)) (:count (last nf))))
       (is (= cnt (:total r1)))
       (is (= hcnt (count (:hits r1))))
+      (is (= (:popularity_double (first (:hits r1))) "300000.281"))
       (is (= cnt (:total r)))
       (is (= cnt (count (:hits r))))))
 

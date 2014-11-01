@@ -79,7 +79,9 @@
     true))
 
 (defn index_integer? [name]
-  (if (substring? "_integer" name)
+  (if (or
+       (substring? "_integer" name)
+       (substring? "_int" name))
     true
     false))
 
@@ -122,24 +124,37 @@
     nil))
 
 (defn int-or-parse ^Integer [x]
-  (if (integer? x)
-    (int x)
-    (Integer/parseInt x)))
+  (if (instance? Integer x)
+    x
+    (if (number? x)
+      (int x)
+      (Integer/parseInt x))))
 
 (defn long-or-parse ^Long [x]
-  (if (integer? x)
-    (long x)
-    (Long/parseLong x)))
+  (if (instance? Long x)
+    x
+    (if (number? x)
+      (long x)
+      (Long/parseLong x))))
 
 (defn double-or-parse ^Double [x]
-  (if (float? x)
-    (double x)
-    (Double/parseDouble x)))
+  (if (instance? Double x)
+    x
+    (if (number? x)
+      (double x)
+      (Double/parseDouble x))))
 
 (defn float-or-parse ^Float [x]
-  (if (float? x)
-    (float x)
-    (Float/parseFloat x)))
+  (if (instance? Float x)
+    x
+    (if (number? x)
+      (float x)
+      (Float/parseFloat x))))
+
+(defn bool-or-parse ^Boolean [x]
+  (if (instance? Boolean x)
+    x
+    (Boolean/parseBoolean x)))
   
 (defn indexed [coll] (map-indexed vector coll))
 

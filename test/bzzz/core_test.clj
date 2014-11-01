@@ -27,8 +27,36 @@
 (defn store-something [name shard]
   (store :index name
          :shard shard
-         :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"}
-                     {:name "lll" :name_st_again "bbb@aaa"}]
+         :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"
+                      :priority_same_integer 1
+                      :priority_integer 1
+                      :priority_long 1
+                      :priority_float 0.1
+                      :priority_double 0.1
+                      :lat_double 40.359011
+                      :lon_double -73.9844722}
+                     {:name "lll" :name_st_again "bbb@aaa"
+                      :priority_same_integer 1
+                      :priority_integer 2
+                      :priority_long 2
+                      :priority_float 0.2
+                      :priority_double 0.2
+                      :lat_double 40.759111
+                      :lon_double -73.9844822}
+                     {:priority_integer 3
+                      :priority_same_integer 1
+                      :priority_long 3
+                      :priority_float 0.3
+                      :priority_double 0.3
+                      :lat_double 40.7143528
+                      :lon_double -74.0059731}
+                     {:priority_integer 4
+                      :priority_same_integer 1
+                      :priority_long 4
+                      :priority_float 0.4
+                      :priority_double 0.4
+                      :lat_double 41.7143528
+                      :lon_double -74.0059731}]
          :facets {:name {}
                   :name_st_again {:use-analyzer "bzbz-used-only-for-facet"}}
          :analyzer {:name_st_again {:type "standard"}
@@ -200,7 +228,7 @@
 
 
   (testing "search-edge-ngram"
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :query {:bool {:must [{:term {:field "name_edge_ngram_no_norms", :value "an"}}
                                              {:term {:field "name_edge_ngram_no_norms", :value "andurilZ"}}]
                                       :must-not [{:term {:field "name_edge_ngram_no_norms", :value "andurilZZ"}}
@@ -209,10 +237,10 @@
       (is (= "andurilXX" (:name_edge_ngram_no_norms (first (:hits ret)))))))
 
   (testing "search-changed-analyzer"
-    (let [ret-kw (search { :index test-index-name
+    (let [ret-kw (search {:index test-index-name
                           :query {:term {:field "name_no_norms"
                                          :value "bar baz"}}})
-          ret-ws (search { :index test-index-name
+          ret-ws (search {:index test-index-name
                           :query {:bool {:must [{:term {:field "name_no_norms"
                                                         :value "bar"}}
                                                 {:term {:field "name_no_norms"
@@ -237,9 +265,9 @@
                        :analyzer {:name {:type "standard"} }
                        :highlight {:fields ["name"]}
                        :explain true
-                       :query { :query-parser {:query "john@doe"
-                                               :default-operator "or"
-                                               :default-field "name"}}})]
+                       :query {:query-parser {:query "john@doe"
+                                              :default-operator "or"
+                                              :default-field "name"}}})]
       (is (= 2 (:total ret)))
       (let [f (first (:hits ret))
             l (last (:hits ret))]
@@ -250,15 +278,15 @@
 
   (testing "search-or-standard-and-highlight-fragments"
     (let [s "zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz XXX YYY zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz"
-          query { :query-parser {:query "xxx@yyy"
-                                 :default-operator "or"
-                                 :default-field "name"}}]
+          query {:query-parser {:query "xxx@yyy"
+                                :default-operator "or"
+                                :default-field "name"}}]
       (store :index test-index-name
              :documents [{:name s}]
              :analyzer {:name {:type "standard" }})
 
       (refresh-search-managers)
-      (let [ret (search { :index test-index-name
+      (let [ret (search {:index test-index-name
                          :analyzer {:name {:type "standard"} }
                          :highlight {:fields ["name"]
                                      :pre ""
@@ -276,7 +304,7 @@
           (is (= 1375 (:text-end-pos first-f)))
           (let [clean-pos-start (:text-start-pos first-f)
                 clean-pos-end (:text-end-pos first-f)
-                ret (search { :index test-index-name
+                ret (search {:index test-index-name
                              :analyzer {:name {:type "standard"} }
                              :highlight {:fields ["name"]
                                          :pre "++"
@@ -291,16 +319,16 @@
 
 
   (testing "search-or-standard-and-highlight-missing-field"
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :analyzer {:name {:type "standard"} }
                        :highlight {:fields ["name_should_be_missing"]}
-                       :query { :query-parser {:query "john@doe"
-                                               :default-operator "or"
-                                               :default-field "name"}}})]
+                       :query {:query-parser {:query "john@doe"
+                                              :default-operator "or"
+                                              :default-field "name"}}})]
       (is (= (:name_should_be_missing (:_highlight (first (:hits ret)))) []))))
 
   (testing "search-boost"
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :explain false
                        :query {:bool {:should [{:bool {:must [{:term {:field "name"
                                                                       :value "john"}}
@@ -342,15 +370,115 @@
       (is (= "jack doe foo" (:name (last (:hits ret-page-1)))))))
 
   (testing "search-and"
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :query {:query-parser {:query "john doe"
                                               :default-operator :and
                                               :default-field "name"}}})]
       (is (= 1 (:total ret)))
       (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret)))))))
 
+  (testing "sorting"
+    (store-something test-index-name 0)
+    (refresh-search-managers)
+    (let [s (fn [sort] (search {:index test-index-name
+                                :query {:match-all {}}
+                                :size 100
+                                :sort sort}))
+          is-nth-eq (fn [res key pos val]
+                      (is (= (key (nth (:hits res) pos)) val)))
+          f-clear #(dissoc (first (:hits %1)) :_abs_position)
+          l-clear #(dissoc (last (:hits %1)) :_abs_position)
+          first-last #(= (f-clear %1) (l-clear %2))
+          r-test-syntax (s ["priority_integer"
+                            {:source "sqrt(_score) + priority_double + priority_float"
+                             :reverse false
+                             :bindings ["priority_float"
+                                        {:field :priority_double}
+                                        ]}
+                            {:field :priority_long
+                             :reverse true}
+                            {:field "_score"
+                             :reverse "false"}
+                            "priority_double"
+                            {:field "priority_double"
+                             :reverse true}
+                            "_doc"
+                            "_score"
+                            {:field "_doc"}])
+          r-same (s :priority_same_integer)
+          r-distance (s [:priority_same_integer
+                         {:source "haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                          :order "asc"
+                          :bindings [:lat_double
+                                     :lon_double]}])
+          r-pop-int (s [:priority_same_integer
+                        :priority_integer])
+          r-pop-int-rev (s [:priority_same_integer
+                            {:field :priority_integer
+                             :order "asc"}])
+
+          r-pop-int-exp (s [:priority_same_integer
+                            {:source "sqrt(_score) + priority_integer"
+                             :bindings [:priority_integer]}])
+
+          r-pop-int-exp-rev (s [:priority_same_integer
+                                {:source "sqrt(_score) + priority_integer"
+                                 :bindings [:priority_integer]
+                                 :order "asc"}])
+
+          r-doc-id-rev (s {:field :_doc :reverse true})
+          r-doc-id (s {:field :_doc :reverse false})
+
+          forward [[0 "1"] [1 "2"] [2 "3"] [3 "4"]]
+          reverse [[0 "4"] [1 "3"] [2 "2"] [3 "1"]]]
+      (is (first-last r-doc-id r-doc-id-rev))
+      (is (= (:priority_integer (nth (:hits r-distance) 0)) "3"))
+      (is (= (:priority_integer (nth (:hits r-distance) 1)) "2"))
+      (is (= (:priority_integer (nth (:hits r-distance) 2)) "1"))
+      (is (= (:priority_integer (nth (:hits r-distance) 3)) "4"))
+
+      (doseq [[pos val] forward]
+        (is (= (:priority_integer (nth (:hits r-same) pos)) val)))
+
+      (doseq [[pos val] reverse]
+        (is (= (:priority_integer (nth (:hits r-pop-int) pos)) val)))
+
+      (doseq [[pos val] reverse]
+        (is (= (:priority_integer (nth (:hits r-pop-int-exp) pos)) val)))
+
+      (doseq [[pos val] forward]
+        (is (= (:priority_integer (nth (:hits r-pop-int-exp-rev) pos)) val)))
+
+      (doseq [field [:priority_integer :priority_long :priority_double :priority_float]]
+        (let [fo (s [:priority_same_integer
+                     {:field field
+                      :order "desc"}])
+              fo-no-order (s [:priority_same_integer
+                              field])
+              exp (s [:priority_same_integer
+                      {:source (str "ln(_score) + " (as-str field))
+                       :bindings [field]
+                       :order "desc"}])
+              exp-rev (s [:priority_same_integer
+                          {:source (str "ln(_score) + " (as-str field))
+                           :bindings [field]
+                           :order "asc"}])
+              rev (s [:priority_same_integer
+                      {:field field
+                       :order "asc"}])]
+          (doseq [[pos val] forward]
+            (is (= (:priority_integer (nth (:hits rev) pos)) val)))
+          (doseq [[pos val] forward]
+            (is (= (:priority_integer (nth (:hits exp-rev) pos)) val)))
+          (doseq [[pos val] reverse]
+            (is (= (:priority_integer (nth (:hits exp) pos)) val)))
+          (doseq [[pos val] reverse]
+            (is (= (:priority_integer (nth (:hits fo-no-order) pos)) val)))
+          (doseq [[pos val] reverse]
+            (is (= (:priority_integer (nth (:hits fo) pos)) val)))))))
+
   (testing "search-range"
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :query {:bool {:must [{:range {:field "age_integer"
                                                       :min "45"
                                                       :max 47
@@ -371,9 +499,9 @@
                                                       :max "470.99"
                                                       :min-inclusive false
                                                       :max-inclusive false}}]}}})
-          ret-nil (search { :index test-index-name
+          ret-nil (search {:index test-index-name
                            :query {:range {:field "age_integer"}}})
-          ret-ub (search { :index test-index-name
+          ret-ub (search {:index test-index-name
                           :query {:bool {:must [{:range {:field "age_integer"
                                                          :min "45"
                                                          :max nil
@@ -405,7 +533,7 @@
         (is (= "470" (:long_long r))))))
 
   (testing "search-and"
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :highlight {:fields ["name","age_integer"]}
                        :fields {:age_integer true
                                 :name true
@@ -438,7 +566,7 @@
   (testing "delete-by-query-and-search"
     (delete-from-query test-index-name "name:foo")
     (refresh-search-managers)
-    (let [ret (search { :index test-index-name
+    (let [ret (search {:index test-index-name
                        :query "name:doe"})]
       (is (= 1 (:total ret)))
       (is (= ["john doe highlight","jack2 doe2 highlight","3","highhlight"] (:name (first (:hits ret)))))))

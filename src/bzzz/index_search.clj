@@ -148,15 +148,25 @@
                               true)
     (TopScoreDocCollector/create pq-size true)))
 
-(defn limit
-  ([input hits sort-key] (limit input hits sort-key #(compare %2 %1)))
-  ([input hits sort-key comparator]
-     (let [size (get input :size default-size)
-           sorted (sort-by sort-key comparator hits)]
-       (if (and  (> (count hits) size)
-                 (get input :enforce-limits true))
-         (subvec (vec sorted) 0 size)
-         sorted))))
+(defn by-score [a b]
+  (compare (:_score b) (:_score a)))
+
+(defn by-count [a b]
+  (compare (:count b) (:count a)))
+
+(defn by-abs-position-score [a b]
+  (let [c (compare (:_abs_position a) (:_abs_position b))]
+    (if (not= c 0)
+      c
+      (by-score a b))))
+
+(defn limit [input hits sorter]
+  (let [size (get input :size default-size)
+        sorted (sort sorter hits)]
+    (if (and  (> (count hits) size)
+              (get input :enforce-limits true))
+      (subvec (vec sorted) 0 size)
+      sorted)))
 
 (defn concat-facets [big small]
   (if (not big)
@@ -208,8 +218,7 @@
              ;; because of the size=2 cut
              [k (limit (input-facet-settings input (keyword k))
                        v
-                       :count)])))
-
+                       by-count)])))
 
 (defn result-reducer [sum next]
   (let [next (if (future? next)
@@ -244,8 +253,8 @@
     (-> result
         (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))
         (assoc-in [:hits] (if (:sort input)
-                            (limit input (:hits result) :_abs_position #(compare %1 %2))
-                            (limit input (:hits result) :_score)))
+                            (limit input (:hits result) by-abs-position-score)
+                            (limit input (:hits result) by-score)))
         (assoc-in [:took] (time-took ms-start)))))
 
 (defn shard-search

@@ -28,6 +28,7 @@
   (store :index name
          :shard shard
          :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"
+                      :find "zzz"
                       :priority_same_integer 1
                       :priority_integer 1
                       :priority_long 1
@@ -36,6 +37,7 @@
                       :lat_double 40.359011
                       :lon_double -73.9844722}
                      {:name "lll" :name_st_again "bbb@aaa"
+                      :find "zzz"
                       :priority_same_integer 1
                       :priority_integer 2
                       :priority_long 2
@@ -44,6 +46,7 @@
                       :lat_double 40.759111
                       :lon_double -73.9844822}
                      {:priority_integer 3
+                      :find "zzz"
                       :priority_same_integer 1
                       :priority_long 3
                       :priority_float 0.3
@@ -51,6 +54,7 @@
                       :lat_double 40.7143528
                       :lon_double -74.0059731}
                      {:priority_integer 4
+                      :find "zzz"
                       :priority_same_integer 1
                       :priority_long 4
                       :priority_float 0.4
@@ -481,7 +485,7 @@
     (let [r (search {:index test-index-name
                      :explain true
                      :query {:custom-score {:query {:range {:field "lat_double"}}
-                                            :function {:source "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                                            :expression {:source "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                                                        :bindings ["lat_double"
                                                                   "lon_double"]}}}})
           h (:hits r)]
@@ -489,6 +493,18 @@
       (is (= (float -2.6472278) (float (:_score (nth h 1)))))
       (is (= (float -19.771275) (float (:_score (nth h 2)))))
       (is (= (float -55.57916) (float (:_score (nth h 3)))))))
+
+  (testing "expr-score"
+    (let [r (search {:index test-index-name
+                     :explain true
+                     :query {:expr-score {:query {:term {:field "find", :value "zzz"}}
+                                          :expression {:source "(_score * 100) - haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                                                       :bindings ["lat_double"
+                                                                  "lon_double"]}}}})
+          h (:hits r)]
+      (println r)
+      (is (= (float 158.77867) (:_score (nth h 0))))))
+
 
   (testing "search-range"
     (let [ret (search {:index test-index-name

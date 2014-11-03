@@ -34,7 +34,7 @@
   {:index test-index-name
    :can-return-partial can-return-partial
    :hosts h
-   :sort {:source "sqrt(_score) + ln(popularity_double)"
+   :sort {:expression "sqrt(_score) + ln(popularity_double)"
           :bindings ["popularity_double"]}
    :query query
    :size size

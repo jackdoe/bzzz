@@ -394,7 +394,7 @@
           l-clear #(dissoc (last (:hits %1)) :_abs_position)
           first-last #(= (f-clear %1) (l-clear %2))
           r-test-syntax (s ["priority_integer"
-                            {:source "sqrt(_score) + priority_double + priority_float"
+                            {:expression "sqrt(_score) + priority_double + priority_float"
                              :reverse false
                              :bindings ["priority_float"
                                         {:field :priority_double}
@@ -411,7 +411,7 @@
                             {:field "_doc"}])
           r-same (s :priority_same_integer)
           r-distance (s [:priority_same_integer
-                         {:source "haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                         {:expression "haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                           :order "asc"
                           :bindings [:lat_double
                                      :lon_double]}])
@@ -422,11 +422,11 @@
                              :order "asc"}])
 
           r-pop-int-exp (s [:priority_same_integer
-                            {:source "sqrt(_score) + priority_integer"
+                            {:expression "sqrt(_score) + priority_integer"
                              :bindings [:priority_integer]}])
 
           r-pop-int-exp-rev (s [:priority_same_integer
-                                {:source "sqrt(_score) + priority_integer"
+                                {:expression "sqrt(_score) + priority_integer"
                                  :bindings [:priority_integer]
                                  :order "asc"}])
 
@@ -460,11 +460,11 @@
               fo-no-order (s [:priority_same_integer
                               field])
               exp (s [:priority_same_integer
-                      {:source (str "ln(_score) + " (as-str field))
+                      {:expression (str "ln(_score) + " (as-str field))
                        :bindings [field]
                        :order "desc"}])
               exp-rev (s [:priority_same_integer
-                          {:source (str "ln(_score) + " (as-str field))
+                          {:expression (str "ln(_score) + " (as-str field))
                            :bindings [field]
                            :order "asc"}])
               rev (s [:priority_same_integer
@@ -485,7 +485,7 @@
     (let [r (search {:index test-index-name
                      :explain true
                      :query {:custom-score {:query {:range {:field "lat_double"}}
-                                            :expression {:source "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                                            :expression {:expression "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                                                        :bindings ["lat_double"
                                                                   "lon_double"]}}}})
           h (:hits r)]
@@ -498,7 +498,7 @@
     (let [r (search {:index test-index-name
                      :explain true
                      :query {:expr-score {:query {:term {:field "find", :value "zzz"}}
-                                          :expression {:source "(_score * 100) - haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                                          :expression {:expression "(_score * 100) - haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                                                        :bindings ["lat_double"
                                                                   "lon_double"]}}}})
           h (:hits r)]

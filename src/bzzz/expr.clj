@@ -16,7 +16,7 @@
 
 (defn name->sort-field ^SortField [name]
   (if (and (map? name)
-           (:source name))
+           (:expression name))
     (let [[^Expression expr ^SimpleBindings bindings] (input->expression-bindings name)]
       (.getSortField expr bindings (sort-reverse? name)))
     (let [reverse (if (map? name)
@@ -41,7 +41,7 @@
       (SortField. ^String name ^SortField$Type type ^Boolean reverse))))
 
 (defn input->expr ^Expression [input]
-  (JavascriptCompiler/compile (get input :source "")))
+  (JavascriptCompiler/compile (get input :expression "")))
 
 (defn input->expression-bindings [input]
   (let [expr (input->expr input)

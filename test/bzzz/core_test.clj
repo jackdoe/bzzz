@@ -477,6 +477,19 @@
           (doseq [[pos val] reverse]
             (is (= (:priority_integer (nth (:hits fo) pos)) val)))))))
 
+  (testing "custom-score"
+    (let [r (search {:index test-index-name
+                     :explain true
+                     :query {:custom-score {:query {:range {:field "lat_double"}}
+                                            :function {:source "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
+                                                       :bindings ["lat_double"
+                                                                  "lon_double"]}}}})
+          h (:hits r)]
+      (is (= -0.0 (:_score (nth h 0))))
+      (is (= (float -2.6472278) (float (:_score (nth h 1)))))
+      (is (= (float -19.771275) (float (:_score (nth h 2)))))
+      (is (= (float -55.57916) (float (:_score (nth h 3)))))))
+
   (testing "search-range"
     (let [ret (search {:index test-index-name
                        :query {:bool {:must [{:range {:field "age_integer"

@@ -1,10 +1,15 @@
 (ns bzzz.query
   (use bzzz.const)
   (use bzzz.util)
+  (use bzzz.expr)
   (use bzzz.analyzer)
   (use bzzz.random-score-query)
+  (use bzzz.expr-score-query)
   (:import (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.index Term)
+           (org.apache.lucene.expressions Expression SimpleBindings)
+           (org.apache.lucene.queries CustomScoreQuery)
+           (org.apache.lucene.queries.function FunctionQuery)
            (org.apache.lucene.search BooleanClause BooleanClause$Occur
                                      BooleanQuery IndexSearcher Query ScoreDoc
                                      Scorer TermQuery SearcherManager
@@ -109,12 +114,23 @@
       (.setBoost q boost)
       q)))
 
+(defn parse-custom-score-query
+  ^Query
+  [analyzer & {:keys [query function boost]
+               :or {query {:match-all {}} boost 1}}]
+  (let [[^Expression expr ^SimpleBindings bindings] (input->expression-bindings function)
+        fq ^FunctionQuery (FunctionQuery. (.getValueSource expr bindings))
+        q (CustomScoreQuery. ^Query (parse-query query analyzer) fq)]
+    (.setBoost q boost)
+    q))
+
 (defn parse-query-fixed ^Query [key val analyzer]
   (case (as-str key)
     "query-parser" (mapply parse-lucene-query-parser analyzer val)
     "term" (mapply parse-term-query analyzer val)
     "filtered" (mapply parse-filtered-query analyzer val)
     "constant-score" (mapply parse-constant-score-query analyzer val)
+    "custom-score" (mapply parse-custom-score-query analyzer val)
     "random-score" (mapply parse-random-score-query analyzer val)
     "range" (mapply parse-numeric-range-query analyzer val)
     "match-all" (MatchAllDocsQuery.)

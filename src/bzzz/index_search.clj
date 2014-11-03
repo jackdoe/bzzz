@@ -3,6 +3,7 @@
   (use bzzz.util)
   (use bzzz.const)
   (use bzzz.query)
+  (use bzzz.expr)
   (use bzzz.index-facet-common)
   (use bzzz.index-directory)
   (use bzzz.random-score-query)
@@ -18,12 +19,10 @@
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexReader Term IndexableField)
-           (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher
+           (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher FieldDoc
                                      Explanation Collector TopScoreDocCollector
                                      TopDocsCollector MultiCollector TopFieldCollector FieldValueFilter
                                      SortField Sort SortField$Type )))
-
-(declare input->expression-bindings)
 
 (defn document->map
   [^Document doc only-fields score abs_position highlighter ^Explanation explanation]
@@ -86,51 +85,6 @@
                                                                    fidx)))))
                       [])]))))
     (constantly nil)))
-
-(defn sort-reverse? [m]
-  (if-let [order (:order m)]
-    (case order
-      "asc" false
-      "desc" true)
-    (bool-or-parse (get m :reverse true))))
-
-(defn name->sort-field ^SortField [name]
-  (if (and (map? name)
-           (:source name))
-    (let [[^Expression expr ^SimpleBindings bindings] (input->expression-bindings name)]
-      (.getSortField expr bindings (sort-reverse? name)))
-    (let [reverse (if (map? name)
-                    (sort-reverse? name)
-                    true)
-          name (if (map? name)
-                 (as-str (need :field name "missing field [{field:...,reverse:true/false}]"))
-                 (as-str name))
-          type (if (= "_score" name)
-                 SortField$Type/SCORE
-                 (if (= "_doc" name)
-                   SortField$Type/DOC
-                   (if (index_integer? name)
-                     SortField$Type/INT
-                     (if (index_long? name)
-                       SortField$Type/LONG
-                       (if (index_float? name)
-                         SortField$Type/FLOAT
-                         (if (index_double? name)
-                           SortField$Type/DOUBLE
-                           SortField$Type/STRING))))))]
-      (SortField. ^String name ^SortField$Type type ^Boolean reverse))))
-
-(defn input->expr ^Expression [input]
-  (JavascriptCompiler/compile (get input :source "")))
-
-(defn input->expression-bindings [input]
-  (let [expr (input->expr input)
-        bindings (SimpleBindings.)]
-    (do
-      (.add bindings (name->sort-field "_score"))
-      (doseq [binding (get input :bindings [])]
-        (.add bindings (name->sort-field binding)))
-      [expr bindings])))
 
 (defn input->sort [input]
   (let [input (if (vector? input) input [input])]
@@ -253,6 +207,15 @@
     (-> result
         (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))
         (assoc-in [:hits] (if (:sort input)
+                            ;; TODO:
+                            ;; in case of custom sort we just resort by
+                            ;; absolute position and score, which of course
+                            ;; is not enough, we must switch to FieldDoc
+                            ;; locally we can use the collector's merge
+                            ;; capabilities, but since we have to do
+                            ;; network based reduce as well, we have to
+                            ;; actually send the sort information within
+                            ;; the document itself
                             (limit input (:hits result) by-abs-position-score)
                             (limit input (:hits result) by-score)))
         (assoc-in [:took] (time-took ms-start)))))
@@ -310,7 +273,8 @@
                                            (.explain searcher query (.doc hit)))))
                         (->
                          (.topDocs score-collector (* page size))
-                         (.scoreDocs)))
+                         (.scoreDocs))) ;; TODO: use TopFieldDocs and FieldDoc
+                                        ;; incase of sort
      :took (time-took ms-start)}))
 
 (defn search [input]

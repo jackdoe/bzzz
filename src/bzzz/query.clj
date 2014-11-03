@@ -4,7 +4,6 @@
   (use bzzz.expr)
   (use bzzz.analyzer)
   (use bzzz.random-score-query)
-  (use bzzz.expr-score-query)
   (:import (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.index Term)
            (org.apache.lucene.expressions Expression SimpleBindings)

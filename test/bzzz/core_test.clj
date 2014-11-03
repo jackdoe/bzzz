@@ -37,7 +37,7 @@
                       :lat_double 40.359011
                       :lon_double -73.9844722}
                      {:name "lll" :name_st_again "bbb@aaa"
-                      :find "zzz"
+                      :find "zzz zzz zzz"
                       :priority_same_integer 1
                       :priority_integer 2
                       :priority_long 2
@@ -390,15 +390,12 @@
                                 :sort sort}))
           is-nth-eq (fn [res key pos val]
                       (is (= (key (nth (:hits res) pos)) val)))
-          f-clear #(dissoc (first (:hits %1)) :_abs_position)
-          l-clear #(dissoc (last (:hits %1)) :_abs_position)
-          first-last #(= (f-clear %1) (l-clear %2))
           r-test-syntax (s ["priority_integer"
                             {:expression "sqrt(_score) + priority_double + priority_float"
                              :reverse false
+                             :explain true
                              :bindings ["priority_float"
-                                        {:field :priority_double}
-                                        ]}
+                                        {:field :priority_double}]}
                             {:field :priority_long
                              :reverse true}
                             {:field "_score"
@@ -410,6 +407,7 @@
                             "_score"
                             {:field "_doc"}])
           r-same (s :priority_same_integer)
+          r-same-score (s [:priority_same_integer :_score])
           r-distance (s [:priority_same_integer
                          {:expression "haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                           :order "asc"
@@ -432,10 +430,16 @@
 
           r-doc-id-rev (s {:field :_doc :reverse true})
           r-doc-id (s {:field :_doc :reverse false})
-
           forward [[0 "1"] [1 "2"] [2 "3"] [3 "4"]]
           reverse [[0 "4"] [1 "3"] [2 "2"] [3 "1"]]]
-      (is (first-last r-doc-id r-doc-id-rev))
+      (let [fs (first (:_sort (first (:hits r-doc-id))))
+            ls (first (:_sort (last (:hits r-doc-id-rev))))]
+        (is (= (count (:hits r-doc-id)) (count (:hits r-doc-id-rev))))
+        (is (> (count (:hits r-doc-id)) 0))
+        (is (= (:value fs) (:value ls)))
+        (is (= (:name fs) "_doc"))
+        (is (= (:name fs) (:name ls)))
+        (is (not= (:reverse fs) (:reverse ls))))
       (is (= (:priority_integer (nth (:hits r-distance) 0)) "3"))
       (is (= (:priority_integer (nth (:hits r-distance) 1)) "2"))
       (is (= (:priority_integer (nth (:hits r-distance) 2)) "1"))
@@ -443,6 +447,9 @@
 
       (doseq [[pos val] forward]
         (is (= (:priority_integer (nth (:hits r-same) pos)) val)))
+
+      (doseq [[pos val] forward]
+        (is (= (:priority_integer (nth (:hits r-same-score) pos)) val)))
 
       (doseq [[pos val] reverse]
         (is (= (:priority_integer (nth (:hits r-pop-int) pos)) val)))
@@ -502,7 +509,6 @@
                                                        :bindings ["lat_double"
                                                                   "lon_double"]}}}})
           h (:hits r)]
-      (println r)
       (is (= (float 158.77867) (:_score (nth h 0))))))
 
 

@@ -19,15 +19,14 @@
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexReader Term IndexableField)
-           (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher FieldDoc
-                                     Explanation Collector TopScoreDocCollector
+           (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher FieldDoc TopFieldDocs
+                                     Explanation Collector TopScoreDocCollector TopDocs
                                      TopDocsCollector MultiCollector TopFieldCollector FieldValueFilter
                                      SortField Sort SortField$Type )))
 
 (defn document->map
-  [^Document doc only-fields score abs_position highlighter ^Explanation explanation]
-  (let [m (into {:_score score
-                 :_abs_position abs_position }
+  [^Document doc only-fields score highlighter ^Explanation explanation]
+  (let [m (into {:_score score}
                 (for [^IndexableField f (.getFields doc)]
                   (let [str-name (.name f)
                         name (keyword str-name)]
@@ -108,8 +107,25 @@
 (defn by-count [a b]
   (compare (:count b) (:count a)))
 
-(defn by-abs-position-score [a b]
-  (let [c (compare (:_abs_position a) (:_abs_position b))]
+(defn compare-array-of-sort-fields [a b]
+  (let [aa (first a)
+        bb (first b)]
+    (if (and (not aa) (not bb))
+      0
+      (if-not aa
+        -1
+        (if-not bb
+          1
+          (let [reverse? (get aa :reverse true)
+                c (if reverse?
+                    (compare (get bb :value nil) (get aa :value nil))
+                    (compare (get aa :value nil) (get bb :value nil)))]
+            (if (or (not= c 0) (and (not aa) (not bb)))
+              c
+              (compare-array-of-sort-fields (rest a) (rest b)))))))))
+
+(defn by-sort-fields [a b]
+  (let [c (compare-array-of-sort-fields (get a :_sort []) (get b :_sort []))]
     (if (not= c 0)
       c
       (by-score a b))))
@@ -207,18 +223,15 @@
     (-> result
         (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))
         (assoc-in [:hits] (if (:sort input)
-                            ;; TODO:
-                            ;; in case of custom sort we just resort by
-                            ;; absolute position and score, which of course
-                            ;; is not enough, we must switch to FieldDoc
-                            ;; locally we can use the collector's merge
-                            ;; capabilities, but since we have to do
-                            ;; network based reduce as well, we have to
-                            ;; actually send the sort information within
-                            ;; the document itself
-                            (limit input (:hits result) by-abs-position-score)
+                            (limit input (:hits result) by-sort-fields)
                             (limit input (:hits result) by-score)))
         (assoc-in [:took] (time-took ms-start)))))
+
+(defn sorted-fields->map [sort-fields fd-fields]
+  (map-indexed (fn [idx ^SortField f]
+                 {:reverse (.getReverse f)
+                  :name (.getField f)
+                  :value (nth fd-fields idx)}) sort-fields))
 
 (defn shard-search
   [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader
@@ -263,18 +276,19 @@
                {}) ;; no taxo reader, probably problem with open, exception is thrown
                    ;; even though we might fake a facet result
                    ;; it could really surprise the client
-     :hits (map-indexed (fn [idx ^ScoreDoc hit]
-                          (document->map (.doc searcher (.doc hit))
-                                         fields
-                                         (.score hit)
-                                         idx
-                                         highlighter
-                                         (when explain
-                                           (.explain searcher query (.doc hit)))))
-                        (->
-                         (.topDocs score-collector (* page size))
-                         (.scoreDocs))) ;; TODO: use TopFieldDocs and FieldDoc
-                                        ;; incase of sort
+
+     :hits (let [top (.topDocs score-collector (* page size))]
+             (into [] (for [^ScoreDoc hit (.scoreDocs top)]
+                        (let [doc (document->map (.doc searcher (.doc hit))
+                                                 fields
+                                                 (.score hit)
+                                                 highlighter
+                                                 (when explain
+                                                   (.explain searcher query (.doc hit))))]
+                          (if sort
+                            (assoc doc :_sort (sorted-fields->map (.fields ^TopFieldDocs top)
+                                                                  (.fields ^FieldDoc hit)))
+                            doc)))))
      :took (time-took ms-start)}))
 
 (defn search [input]

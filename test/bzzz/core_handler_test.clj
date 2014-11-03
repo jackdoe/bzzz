@@ -130,6 +130,14 @@
           (is (> (:count (first nf)) (:count (last nf)))))
         (is (= should-be (count (:hits r)))))))
 
+  (testing "get-check-sort"
+    (refresh-search-managers)
+      (let [r (send-get-request 5 5)
+            nf (get-in r [:facets :name])]
+        (is (< (:_score (first (:hits r))) (:_score (last (:hits r)))))
+        (is (= (:popularity_double (first (:hits r))) "300000.281"))
+        (is (= 4 (:total r)))))
+
   (testing "put-limit"
     (refresh-search-managers)
     (dotimes [n (* 4 (count (flatten hosts)))]

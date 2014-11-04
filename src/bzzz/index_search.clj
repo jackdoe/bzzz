@@ -35,6 +35,11 @@
                       (let [values (.getValues doc str-name)]
                         (if (= (count values) 1)
                           [name (first values)]
+                          ;; we store fake element in all arrays
+                          ;; so if the user stores ["a"], we actually
+                          ;; store ["__array_identifier__","a"]
+                          ;; and now we just have to return everything,
+                          ;; but the first item
                           [name (vec (rest values))]))))))
         highlighted (highlighter m)]
     (conj
@@ -273,8 +278,8 @@
                      (log/warn (ex-str e))
                      {}))) ;; do not send the error back,
                {}) ;; no taxo reader, probably problem with open, exception is thrown
-                   ;; even though we might fake a facet result
-                   ;; it could really surprise the client
+     ;; even though we might fake a facet result
+     ;; it could really surprise the client
 
      :hits (let [top (.topDocs score-collector (* page size))]
              (into [] (for [^ScoreDoc hit (.scoreDocs top)]
@@ -296,7 +301,7 @@
         facets (:facets input)
         analyzer (extract-analyzer (:analyzer input)) ;; fixme: are all analyzers thread safe?
         facet-config (get-facet-config facets)        ;; fixme: check if it is thread safe
-        futures (into [] (for [shard (index-name-matching index)]
+        futures (into [] (for [shard (index-name-matching (resolve-alias index))]
                            (use-searcher shard
                                          (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                            (shard-search :searcher searcher

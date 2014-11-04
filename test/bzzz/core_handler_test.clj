@@ -11,6 +11,7 @@
         bzzz.index-search))
 
 (def test-index-name :__lein-testing-handler-index)
+
 (def host "http://localhost:3000/")
 (def id default-identifier)
 (def hosts [id host id id [id id [id id id host [host host id host] [host] [host id] [id host] id id id id id id [id] [id id [id]]]]])
@@ -42,7 +43,7 @@
    :enforce-limits enforce-limit
    :facets {:name {:size facet-size}}})
 
-(defn send-put-request 
+(defn send-put-request
   ([enforce-limit size facet-size] (send-put-request enforce-limit size facet-size hosts false))
   ([enforce-limit size facet-size h can-return-partial]
      (let [{:keys [status headers body error] :as resp}
@@ -132,11 +133,11 @@
 
   (testing "get-check-sort"
     (refresh-search-managers)
-      (let [r (send-get-request 5 5)
-            nf (get-in r [:facets :name])]
-        (is (< (:_score (first (:hits r))) (:_score (last (:hits r)))))
-        (is (= (:popularity_double (first (:hits r))) "300000.281"))
-        (is (= 4 (:total r)))))
+    (let [r (send-get-request 5 5)
+          nf (get-in r [:facets :name])]
+      (is (< (:_score (first (:hits r))) (:_score (last (:hits r)))))
+      (is (= (:popularity_double (first (:hits r))) "300000.281"))
+      (is (= 4 (:total r)))))
 
   (testing "put-limit"
     (refresh-search-managers)
@@ -153,6 +154,30 @@
     (refresh-search-managers)
     (let [r (send-put-request false 10 10)]
       (is (= 0 (:total r)))))
-  
+
+  (testing "create-alias"
+    (let [r (fn [fn x] (json/read-str (:body @(fn "http://localhost:3000" {:body (json/write-str x)}))))
+          g (fn [x] (dissoc (r http-client/get {:index x
+                                                :query "name:alias"}) "took"))]
+      (is (= 0 (get (g "bzbz") "total")))
+      (r http-client/post {:index test-index-name :alias-set "bzbz"})
+      (r http-client/post {:index "bzbz" :documents [{:name "alias write"}]})
+      (refresh-search-managers)
+      (let [ra (g "bzbz")
+            rb (g test-index-name)]
+        (is (= ra rb))
+        (is (= 1 (get ra "total"))))
+      (r http-client/post {:index test-index-name :alias-del "bzbz"})
+      (is (= 0 (get (g "bzbz") "total")))
+      (r http-client/post {:index test-index-name :alias-set "bzbz"})
+      (is (= 1 (get (g "bzbz") "total")))
+      (r http-client/delete {:index "bzbz" :query {:match-all {}}})
+      (refresh-search-managers)
+      (let [ra (g "bzbz")
+            rb (g test-index-name)]
+        (is (= ra rb))
+        (is (= 0 (get ra "total"))))))
+
+
   (testing "stop"
     (.stop server)))

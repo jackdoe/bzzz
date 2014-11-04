@@ -9,7 +9,7 @@
   (:require [clojure.tools.logging :as log])
   (:require [clojure.data.json :as json])
   (:require [clojure.java.io :as io])
-  (:import (java.io StringReader File)
+  (:import (java.io StringReader File Writer FileNotFoundException)
            (java.lang OutOfMemoryError)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
            (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
@@ -21,8 +21,11 @@
 (declare bootstrap-indexes)
 (declare get-smanager-taxo)
 (declare try-close-manager-taxo)
+(declare try-create-prefix)
+(declare read-alias-file)
 
 (def root* (atom default-root))
+(def alias* (atom {}))
 (def identifier* (atom default-identifier))
 (def name->smanager-taxo* (atom {}))
 (def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-]"))
@@ -45,14 +48,46 @@
                             (.getName ^File %)))
           (.listFiles (root-identifier-path))))
 
+(defn alias-file ^File []
+  (io/file (root-identifier-path) "alias.json"))
+
+(defn initial-read-alias-file []
+  (try
+    (reset! alias* (json/read-str (slurp-or-default (alias-file) "{}")))
+    (catch Exception e
+      (do
+        (if-not (instance? FileNotFoundException e)
+          (log/warn (ex-str e)))
+        (reset! alias* {})))))
+
+(defn replace-alias-file []
+  (try-create-prefix (root-identifier-path))
+  (locking alias*
+    (spit (alias-file) (json/write-str @alias*))))
+
+(defn update-alias [index alias-del alias-set]
+  (if alias-del
+    (swap! alias* dissoc (as-str alias-del)))
+  (if alias-set
+    (swap! alias* assoc (as-str alias-set) (as-str index)))
+  (replace-alias-file))
+
+(defn resolve-alias [name]
+  (if-let [r (get @alias* name)]
+    (keyword r)
+    name))
+
 (defn index-name-matching [index]
   (map #(.getName ^File %)
        (filter #(not (nil? (re-matches (index-dir-pattern index) (.getName ^File %))))
                (sub-directories))))
 
-(defn new-index-directory ^Directory [^File path-prefix name]
+(defn try-create-prefix [^File path-prefix]
   (try
-    (.mkdir path-prefix))
+    (.mkdir path-prefix)))
+
+(defn new-index-directory ^Directory [^File path-prefix name]
+  (try-create-prefix path-prefix)
   (NIOFSDirectory. (io/file path-prefix (as-str (acceptable-index-name name)))))
 
 (defn new-index-writer ^IndexWriter [name]

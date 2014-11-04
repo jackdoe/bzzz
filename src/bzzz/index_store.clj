@@ -87,33 +87,40 @@
     (add-facet-field-single doc dim val)))
 
 (defn store
-  [& {:keys [index documents analyzer facets shard]
-      :or {analyzer nil facets {} shard 0}}]
+  [& {:keys [index documents analyzer facets shard alias-set alias-del]
+      :or {documents [] analyzer nil facets {} shard 0 alias-set nil alias-del nil}}]
+
+  (if (or alias-set alias-del)
+    (update-alias index alias-del alias-set))
+
   (if analyzer
     (reset! analyzer* (parse-analyzer analyzer)))
-  (use-writer (sharded index shard) (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
-                                      (let [config (get-facet-config facets)]
-                                        (doseq [m documents]
-                                          (let [doc (map->document m)]
-                                            (doseq [[dim f-info] facets]
-                                              (if-let [f-val ((keyword dim) m)]
-                                                (add-facet-field doc dim f-val f-info @analyzer*)))
-                                            (if (:id m)
-                                              (.updateDocument writer ^Term (Term. ^String id-field
-                                                                                   (as-str (:id m)))
-                                                               (.build config doc))
-                                              (.addDocument writer (.build config taxo doc))))))
-                                      { index true })))
+
+  (use-writer (sharded (resolve-alias index) shard)
+              (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+                (let [config (get-facet-config facets)]
+                  (doseq [m documents]
+                    (let [doc (map->document m)]
+                      (doseq [[dim f-info] facets]
+                        (if-let [f-val ((keyword dim) m)]
+                          (add-facet-field doc dim f-val f-info @analyzer*)))
+                      (if (:id m)
+                        (.updateDocument writer ^Term (Term. ^String id-field
+                                                             (as-str (:id m)))
+                                         (.build config doc))
+                        (.addDocument writer (.build config taxo doc))))))
+                { index true })))
 
 (defn delete-from-query
   [index input]
   (let [query (parse-query input (extract-analyzer nil))]
-    (use-writer-all index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
-                            (.deleteDocuments writer
-                                              ^"[Lorg.apache.lucene.search.Query;"
-                                              (into-array Query [query]))))
+    (use-writer-all (resolve-alias index) (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+                                            (.deleteDocuments writer
+                                                              ^"[Lorg.apache.lucene.search.Query;"
+                                                              (into-array Query [query]))))
     {index (.toString query)}))
 
 (defn delete-all [index]
-  (use-writer-all index (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
+  (use-writer-all (resolve-alias index)
+                  (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
 

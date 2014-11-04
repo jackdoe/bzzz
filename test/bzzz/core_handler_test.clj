@@ -156,24 +156,25 @@
       (is (= 0 (:total r)))))
 
   (testing "create-alias"
-    (let [r (fn [fn x] (json/read-str (:body @(fn "http://localhost:3000" {:body (json/write-str x)}))))
+    (let [aliased "core-handler-test-alias-testing"
+          r (fn [fn x] (json/read-str (:body @(fn "http://localhost:3000" {:body (json/write-str x)}))))
           g (fn [x] (dissoc (r http-client/get {:index x
                                                 :query "name:alias"}) "took"))]
-      (is (= 0 (get (g "bzbz") "total")))
-      (r http-client/post {:index test-index-name :alias-set "bzbz"})
-      (r http-client/post {:index "bzbz" :documents [{:name "alias write"}]})
+      (is (= 0 (get (g aliased) "total")))
+      (r http-client/post {:index test-index-name :alias-set aliased})
+      (r http-client/post {:index aliased :documents [{:name "alias write"}]})
       (refresh-search-managers)
-      (let [ra (g "bzbz")
+      (let [ra (g aliased)
             rb (g test-index-name)]
         (is (= ra rb))
         (is (= 1 (get ra "total"))))
-      (r http-client/post {:index test-index-name :alias-del "bzbz"})
-      (is (= 0 (get (g "bzbz") "total")))
-      (r http-client/post {:index test-index-name :alias-set "bzbz"})
-      (is (= 1 (get (g "bzbz") "total")))
-      (r http-client/delete {:index "bzbz" :query {:match-all {}}})
+      (r http-client/post {:index test-index-name :alias-del aliased})
+      (is (= 0 (get (g aliased) "total")))
+      (r http-client/post {:index test-index-name :alias-set aliased})
+      (is (= 1 (get (g aliased) "total")))
+      (r http-client/delete {:index aliased :query {:match-all {}}})
       (refresh-search-managers)
-      (let [ra (g "bzbz")
+      (let [ra (g aliased)
             rb (g test-index-name)]
         (is (= ra rb))
         (is (= 0 (get ra "total"))))))

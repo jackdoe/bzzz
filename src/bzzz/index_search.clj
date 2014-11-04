@@ -116,8 +116,7 @@
         -1
         (if-not bb
           1
-          (let [reverse? (get aa :reverse true)
-                c (if reverse?
+          (let [c (if (get aa :reverse true)
                     (compare (get bb :value nil) (get aa :value nil))
                     (compare (get aa :value nil) (get bb :value nil)))]
             (if (or (not= c 0) (and (not aa) (not bb)))

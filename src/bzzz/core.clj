@@ -21,21 +21,32 @@
 (def port* (atom const/default-port))
 (def acceptable-discover-time-diff* (atom const/default-acceptable-discover-time-diff))
 (def discover-interval* (atom const/default-discover-interval))
+(def gc-interval* (atom const/default-gc-interval))
+(def next-gc* (atom 0))
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
 
 (defn rescent? [than]
-  (< (- @timer* (second than)) @acceptable-discover-time-diff*))
+  (< (- @timer* (get (second than) :update 0)) @acceptable-discover-time-diff*))
 
-(defn possible-hosts [identifier]
-  (filter rescent? (get @peers* (keyword identifier) [])))
+(defn not-doing-gc? [than]
+  (let [diff (- @timer* (get (second than) :next-gc-at (+ @timer* 100000)))]
+    (not (< 2 (abs diff))))) ;; regardless if we are 2 seconds before gc
+                             ;; or 2 seconds after, try to skip this host
+
+(defn possible-hosts [list]
+  (let [p (filter #(and (rescent? %1) (not-doing-gc? %1)) list)]
+    (if (= 0 (count p))
+      (let [more (filter rescent? list)]
+        (log/info "found host after ignoring the non gc ones, dump:" list @timer* @discover-hosts* @peers*)
+        (first (rand-nth more)))
+      (first (rand-nth p)))))
 
 (defn peer-resolve [identifier]
   (if-let [all-possible ((keyword identifier) @peers*)]
-    (let [possible (filter rescent? all-possible)]
-      (if (= (count possible) 0)
-        (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier))))
-        (first (rand-nth possible))))
+    (if-let [host (possible-hosts all-possible)]
+      host
+      (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier)))))
     identifier)) ;; nothing matches the identifier
 
 ;; [ "a", ["b","c",["d","e"]]]
@@ -78,7 +89,8 @@
    :identifier @index-directory/identifier*
    :discover-hosts @discover-hosts*
    :peers @peers*
-   :timer @timer*})
+   :timer @timer*
+   :next-gc @next-gc*})
 
 (defn validate-discover-url [x]
   (let [url (URL. ^String (as-str x))]
@@ -92,7 +104,9 @@
                                                 [(validate-discover-url host) true])))))
     (catch Exception e
       (log/warn "merge-discovery-hosts" x (.getMessage e))))
-  {:identifier @index-directory/identifier* :discover-hosts @discover-hosts*})
+  {:identifier @index-directory/identifier*
+   :discover-hosts @discover-hosts*
+   :next-gc @next-gc*})
 
 (defn work [method uri qs input]
   (log/debug "received request" method input)
@@ -136,11 +150,13 @@
                            (log/trace error)
                            (let [info (jr body)
                                  host-identifier (keyword (need :identifier info "need identifier"))
+                                 host-next-gc (+ @timer* (get info :next-gc 1000000))
                                  remote-discover-hosts (:discover-hosts info)]
                              (log/trace "updating" host "with identifier" host-identifier)
                              (locking peers*
                                (swap! peers*
-                                      assoc-in [host-identifier host] @timer*))
+                                      assoc-in [host-identifier host] {:update @timer*
+                                                                       :next-gc-at host-next-gc}))
                              (merge-discover-hosts remote-discover-hosts)))
                          (async/>!! c true)))
     (catch Exception e
@@ -152,7 +168,9 @@
   ;; hackish, just POC
   (locking peers*
     (swap! peers*
-           assoc-in [@index-directory/identifier* (join ":" ["http://localhost" (as-str @port*)]) ] @timer*))
+           assoc-in [@index-directory/identifier*
+                     (join ":" ["http://localhost" (as-str @port*)])] {:update @timer*
+                                                                       :next-gc-at (+ @timer* @next-gc*)}))
   (let [c (async/chan)
         hosts @discover-hosts*
         str-state (json/write-str {:discover-hosts @discover-hosts*})]
@@ -160,6 +178,14 @@
       (update-discovery-state host c str-state))
     (doseq [host hosts]
       (async/<!! c))))
+
+(defn attempt-gc []
+  (if (<= @next-gc* 0)
+    (do
+      (System/gc)
+      (let [half (/ @gc-interval* 2)]
+        (reset! next-gc* (+ half (int (rand half))))))
+    (swap! next-gc* dec)))
 
 (defn port-validator [port]
   (< 0 port 0x10000))
@@ -178,6 +204,11 @@
    ["-r" "--discover-interval NUM-IN-SECONDS" "exchange information with the discover hosts every N seconds"
     :id :discover-interval
     :default const/default-discover-interval
+    :parse-fn #(Integer/parseInt %)
+    :validate [ #(>= % 0) "Must be a number >= 0"]]
+   ["-g" "--gc-interval NUM-IN-SECONDS" "do GC approx every N seconds (it will be N/2 + rand(N/2))"
+    :id :gc-interval
+    :default const/default-gc-interval
     :parse-fn #(Integer/parseInt %)
     :validate [ #(>= % 0) "Must be a number >= 0"]]
    ["-i" "--identifier 'string'" "identifier used for auto-discover and resolving"
@@ -203,15 +234,20 @@
                                      [host true])))
     (reset! acceptable-discover-time-diff* (:acceptable-discover-time-diff options))
     (reset! discover-interval* (:discover-interval options))
+    (reset! gc-interval* (:gc-interval options))
     (reset! index-directory/identifier* (keyword (:identifier options)))
     (reset! index-directory/root* (:directory options))
     (reset! port* (:port options)))
   (index-directory/initial-read-alias-file)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
-  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval*)
+  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval*)
   (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
   (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
-  (every @discover-interval* #(discover) (mk-pool) :desc "periodic discover")
+  (every 1000 #(attempt-gc) (mk-pool) :desc "attempt-gc")
+
+  (discover)
+  (every (* 1000 @discover-interval*) #(discover) (mk-pool) :desc "periodic discover")
+
   (every 10000 #(log/trace "up:" @timer* @index-directory/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
   (repeatedly
    (try

@@ -9,3 +9,4 @@
 (def default-identifier :__global_partition_0)
 (def default-acceptable-discover-time-diff 20)
 (def default-discover-interval 10)
+(def default-gc-interval 1200)

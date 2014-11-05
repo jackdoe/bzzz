@@ -183,7 +183,7 @@ At the moment I am working on adding more and more analyzers/tokenizers/tokenfil
 
 ## why BZZZ
 
-* have moderately useful (out of the box) network lucene wrapper
+* moderately useful (out of the box) network lucene wrapper
 * distribute work
 * should be able to restart frequently
 * _user_ controlled sharding (there are 2 types, external and internal(within the jvm))
@@ -254,7 +254,7 @@ if you want to have field named `name`:
 
 you can also create numeric fields (used with range queries)
 
-* _integer
+* _integer (or _int)
 * _long
 * _float
 * _double
@@ -281,7 +281,7 @@ my @hosts = (....);
 while (<$s>) {
     push @docs,{ raw => $_ };
     if (scalar(@docs) > 100) {
-        index($hosts[rand(@hosts)],rand($n_internal_shards),\@docs);
+        bzzz_index($hosts[rand(@hosts)],rand($n_internal_shards),\@docs);
         @docs = ();
     }
 }
@@ -297,6 +297,14 @@ on startup it will walk thru the `--directory`/`--identifier` and create `Search
 on every _query_ request BZZZ will check if there is already a `SearcherManager` servicing this index, if not it will create new SearcherManager, and then acquire() an IndexSearcher for the current request
 
 _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data changed for example)
+
+
+
+### TODO:
+* write proper documentation
+* more examples
+* some benchmarks
+* try to make (resolve-peer) skip hosts that are about to do GC soon
 
 
 ---------------------

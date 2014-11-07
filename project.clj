@@ -24,7 +24,9 @@
                  [overtone/at-at "1.2.0"]
                  [http-kit.fake "0.2.1"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [redis.clients/jedis "2.6.0"]
                  [ring/ring-core "1.3.1"]
                  [ring/ring-jetty-adapter "1.3.1"]]
+  :java-source-paths ["src/java"]
   :main bzzz.core
   :aot [bzzz.core])

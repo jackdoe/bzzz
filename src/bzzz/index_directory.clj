@@ -11,6 +11,9 @@
   (:require [clojure.java.io :as io])
   (:import (java.io StringReader File Writer FileNotFoundException)
            (java.lang OutOfMemoryError)
+           (bzzz.java.store RedisDirectory)
+           (org.apache.commons.pool2.impl GenericObjectPoolConfig)
+           (redis.clients.jedis JedisShardInfo ShardedJedisPool)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
            (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher)
@@ -26,9 +29,10 @@
 
 (def root* (atom default-root))
 (def alias* (atom {}))
+(def redis* (atom {}))
 (def identifier* (atom default-identifier))
 (def name->smanager-taxo* (atom {}))
-(def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-]"))
+(def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-:]"))
 (def shard-suffix "-shard-")
 (def shard-suffix-sre (str ".*" shard-suffix "\\d+"))
 
@@ -86,9 +90,27 @@
   (try
     (.mkdir path-prefix)))
 
+(defn try-redis [^File path]
+  (locking redis*
+    (if-let [pool (get path @redis*)]
+      pool
+      (let [f (io/file path "redis.conf")]
+        (if (.exists f)
+          (let [conf (jr (slurp f))
+                si (JedisShardInfo. (:host conf) (:port conf))
+                pool (ShardedJedisPool. (GenericObjectPoolConfig.) [si])]
+            (swap! redis* assoc path pool)
+            pool)
+          nil)))))
+
 (defn new-index-directory ^Directory [^File path-prefix name]
   (try-create-prefix path-prefix)
-  (NIOFSDirectory. (io/file path-prefix (as-str (acceptable-index-name name)))))
+  (let [index-name (as-str (acceptable-index-name name))
+        dir (io/file path-prefix name)
+        redis (try-redis dir)]
+    (if redis
+      (RedisDirectory. index-name redis)
+      (NIOFSDirectory. dir))))
 
 (defn new-index-writer ^IndexWriter [name]
   (IndexWriter. (new-index-directory (root-identifier-path) name)
@@ -98,10 +120,10 @@
   (io/file (root-identifier-path) (as-str name)))
 
 (defn new-taxo-writer ^DirectoryTaxonomyWriter [name]
-  (DirectoryTaxonomyWriter. (new-index-directory (taxo-dir-prefix name) "__taxo__")))
+  (DirectoryTaxonomyWriter. (new-index-directory (taxo-dir-prefix name) (str "__" name "_taxo__"))))
 
 (defn new-taxo-reader ^DirectoryTaxonomyReader [name]
-  (DirectoryTaxonomyReader. (new-index-directory (taxo-dir-prefix name) "__taxo__")))
+  (DirectoryTaxonomyReader. (new-index-directory (taxo-dir-prefix name) (str "__" name "_taxo__"))))
 
 (defn try-new-taxo-reader ^DirectoryTaxonomyReader [name]
   (try
@@ -136,7 +158,7 @@
   (let [[^SearcherManager manager taxo] (get-smanager-taxo index)
         searcher ^IndexSearcher (.acquire manager)]
     (try
-      (callback searcher taxo)
+        (callback searcher taxo)
       (finally (.release manager searcher)))))
 
 (defn log-close-err [^Directory dir ^Throwable e]

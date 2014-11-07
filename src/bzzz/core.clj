@@ -108,19 +108,26 @@
    :discover-hosts @discover-hosts*
    :next-gc @next-gc*})
 
-(defn work [method uri qs input]
-  (log/debug "received request" method input)
-  (condp = method
-    :post (mapply index-store/store input)
-    :delete (index-store/delete-from-query (:index input)
-                                     (:query input))
-    :get (case uri
-           "/_stat" (stat)
-           "/favicon.ico" "" ;; XXX
-           (index-search/search input))
-    :put (search-many (:hosts input) (dissoc input :hosts))
-    :patch (merge-discover-hosts (get input :discover-hosts {}))
-    (throw (Throwable. "unexpected method" method))))
+(defn assoc-index [input uri]
+  (let [path (subs uri 1)]
+    (if (= 0 (count path))
+      input
+      (assoc input :index path))))
+
+(defn work [method uri input]
+  (let [input (assoc-index input uri)]
+    (log/debug "received request" method input)
+    (condp = method
+      :post (mapply index-store/store input)
+      :delete (index-store/delete-from-query (:index input)
+                                             (:query input))
+      :get (case uri
+             "/_stat" (stat)
+             "/favicon.ico" "" ;; XXX
+             (index-search/search input))
+      :put (search-many (:hosts input) (dissoc input :hosts))
+      :patch (merge-discover-hosts (get input :discover-hosts {}))
+      (throw (Throwable. "unexpected method" method)))))
 
 (defn handler [request]
   (try
@@ -128,7 +135,6 @@
      :headers {"Content-Type" "application/json"}
      :body (json/write-str (work (:request-method request)
                                  (:uri request)
-                                 (:query-string request)
                                  (json/read-str (slurp-or-default (:body request) "{}") :key-fn keyword)))}
     (catch Throwable e
       (let [ex (ex-str e)]

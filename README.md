@@ -12,30 +12,28 @@ $ lein trampoline run -- --directory /tmp/bzbzbz
 ## store something
 
 ```
-$ curl -XPOST http://localhost:3000/ -d '
+$ curl -XPOST http://localhost:3000/bzbz -d '
 {
     "documents": [
         { "name": "john doe" },
         { "name": "jack doe" }
     ],
-    "index": "bzbz"
 }'
 ```
 
 ## search it
 
 ```
-$ curl -XGET http://localhost:3000/ -d '
+$ curl -XGET http://localhost:3000/bzbz -d '
 {
-    "index": "bzbz",
     "query": "name:doe"
 }'
 ```
 
-## build/install rpm rpm
+## build/install rpm
 
 ```
-$ lein fatrpm # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.noarch.rpm
+$ lein fatrpm      # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.noarch.rpm
 $ yum install binary/bzzz-0.1.0.*.noarch.rpm
 ```
 
@@ -308,6 +306,52 @@ _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data c
 
 ### caveats
 
+#### You have to partition + replicate the data yourself
+
+For me this is a feature not a caveat, but many people are used to automatic resharding and replication, probably because they have never had to recover thrashing cluster.
+
+* use case: log + search
+lets say we have 4 BZZZ boxes, each box has 12 cores, and we have a system that receives 10k log messages per second.
+
+In this case we can create 2 partitions like:
+```
+[ partition 0 ] [ partition 1 ]
+[ partition 0 ] [ partition 1 ]
+```
+
+and a simple application that processes 1000 entries and buffers them up, then it just picks random partition (0 or 1) and stores the documents in all hosts in this partition (assuming we have partition 2 host mapping somewhere).
+
+example pseudo code:
+```
+my $n_partitions = 2;
+my $flush = sub {
+    my ($what) = @_;
+    for my $host(hosts_for_partition(int(rand($n_partitions))) {
+        bzzz_index($host,$what);
+    }
+    @$what = ();
+};
+@docs = ();
+while (<>) {
+    my $document = ... process $_ ...
+    push @docs, $document;
+    $flush->(\@docs) if (@docs > 1000);
+}
+$flush->(\@docs)
+```
+
+but what happens if one host succeeds and one fails? or one just blocks forever etc.., you will have to make decisions about all problems, will you timeout and try to go to the next partition? but how will you rollback the data if it was written only to one host of the partition, or how will you confirm that the data is consistent across all hosts within a partition?
+
+this is the fun part :D
+
+depending on your application, tolerance of data loss, IO requirements and real-time-search requirements, there are different solutions to all of those, few examples:
+
+* use NFS per partition, and write remotely so you have 1 writer and multiple readers
+* have some document batch identifiers, and you can just delete the partial data in the partition in case of failure, and just write it to a different partition
+* just have 1 writer and rsync the indexes a couple of times per day
+* stop processing and just buffer the data on disk until all hosts in the partition are up
+
+
 ### extra
 
 #### aliases
@@ -330,7 +374,7 @@ _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data c
 * more documentation
 * some website with more examples
 * look through some simple replication concepts
-
+* make /NAME requests overwrite the "index" key in the requests (`localhost:3000/index -d '{"query":"name:doe"}'`)
 
 ---------------------
 
@@ -338,7 +382,7 @@ _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data c
 # RAMBLINGS, will be rewritten..
 some more examples.. and random ramblings.
 ```
-$ curl -XPOST http://localhost:3000/ -d '
+$ curl -XPOST http://localhost:3000/bzbz -d '
 {
     "documents": [
         {
@@ -348,7 +392,6 @@ $ curl -XPOST http://localhost:3000/ -d '
             "name_store_index": "jack doe"
         }
     ],
-    "index": "bzbz"
 }'
 $ curl -XGET http://localhost:3000/ -d '
 {

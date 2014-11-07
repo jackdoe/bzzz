@@ -32,6 +32,14 @@ $ curl -XGET http://localhost:3000/ -d '
 }'
 ```
 
+## build/install rpm rpm
+
+```
+$ lein fatrpm # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.noarch.rpm
+$ yum install binary/bzzz-0.1.0.*.noarch.rpm
+```
+
+
 ## \o/
 
 ### Analyzers - "You will find only what you bring in"
@@ -127,7 +135,7 @@ with the search string "JackX", the custom analyzer will produce:
 
 Notice how all terms are `lowercased`, and the `X` in the end is replaced with `z`, also you can see that we made our regex case sensitive, because char-filters are executed before the tokenizer and the token filters.
 
-If we use the same analyzer with lucene's QueryParser and search for 'jackx' it will look like this:
+If we use the same analyzer with lucene's QueryParser and search for `jackx` it will look like this:
 
 ```
 {
@@ -298,13 +306,30 @@ on every _query_ request BZZZ will check if there is already a `SearcherManager`
 
 _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data changed for example)
 
+### caveats
 
+### extra
+
+#### aliases
+
+#### facets
+
+#### sorting
+
+#### javascript expression scoring/sorting
+
+#### clojure custom lucene queries
 
 ### TODO:
 * write proper documentation
 * more examples
 * some benchmarks
-* try to make (resolve-peer) skip hosts that are about to do GC soon
+* geo filtering
+* drilldown queries
+* write go/perl/python/ruby/clojure clients [they should also support the dont-query-the-box-that-is-about-to-do-GC-thing]
+* more documentation
+* some website with more examples
+* look through some simple replication concepts
 
 
 ---------------------

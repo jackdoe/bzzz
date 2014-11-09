@@ -92,9 +92,11 @@
 
 (defn try-redis [^File path]
   (locking redis*
-    (if-let [pool (get path @redis*)]
+    (if-let [pool (get @redis* path)]
       pool
-      (let [f (io/file path "redis.conf")]
+      (let [f (if (.endsWith (.toString path) "_taxo__")
+                (io/file (.getParentFile path) "redis.conf")
+                (io/file path "redis.conf"))]
         (if (.exists f)
           (let [conf (jr (slurp f))
                 si (JedisShardInfo. (:host conf) (:port conf))
@@ -106,7 +108,7 @@
 (defn new-index-directory ^Directory [^File path-prefix name]
   (try-create-prefix path-prefix)
   (let [index-name (as-str (acceptable-index-name name))
-        dir (io/file path-prefix name)
+        dir (io/file path-prefix index-name)
         redis (try-redis dir)]
     (if redis
       (RedisDirectory. index-name redis)

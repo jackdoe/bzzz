@@ -11,7 +11,7 @@ public class RedisInputStream extends IndexInput implements Cloneable {
     public int bufferPosition;
     public int currentBufferIndex;
     public int realBufferLen = 0;
-    public int BUFFER_SIZE = 40000;
+    public int BUFFER_SIZE = 10000;
     private byte[] global_name;
     private byte[] BUFFER = null;
     public final RedisDirectory dir;

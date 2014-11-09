@@ -44,19 +44,17 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     public final String[] listAll() {
         ensureOpen();
         ShardedJedis rds = redisPool.getResource();
-        Set<String> ls = rds.hkeys(dir_name);
-        if( ls == null ){
-            return new String[0];
+        try {
+            Set<String> ls = rds.hkeys(dir_name);
+            if( ls == null ){
+                return new String[0];
+            }
+            String[] ret = new String[ls.size()];
+            ls.toArray(ret);
+            return ret;
+        } finally {
+            redisPool.returnResourceObject(rds);
         }
-        String[] ret = new String[ls.size()];
-        ls.toArray(ret);
-
-//        for (String s : ret) {
-//            System.out.println("listing file " + s + " size: " + fileLength(s));
-//        }
-
-        redisPool.returnResourceObject(rds);
-        return ret;
     }
 
     /** Returns true iff the named file exists in this directory. */
@@ -65,9 +63,11 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
         ensureOpen();
         boolean ret = false;
         ShardedJedis rds = redisPool.getResource();
-        ret = rds.hexists(dir_name_bytes, name.getBytes());
-        redisPool.returnResourceObject(rds);
-        return ret;
+        try {
+            return rds.hexists(dir_name_bytes, name.getBytes());
+        } finally {
+            redisPool.returnResourceObject(rds);
+        }
     }
 
     @Override
@@ -75,15 +75,17 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
         ensureOpen();
 
         ShardedJedis jd = redisPool.getResource();
-
-        long current = 0;
-        byte[] b = jd.hget(dir_name_bytes, name.getBytes());
-        if (b != null)
-            current = ByteBuffer.wrap(b).asLongBuffer().get();
-        else
-            throw new FileNotFoundException(name);
-        redisPool.returnResource(jd);
-        return current;
+        try {
+            long current = 0;
+            byte[] b = jd.hget(dir_name_bytes, name.getBytes());
+            if (b != null)
+                current = ByteBuffer.wrap(b).asLongBuffer().get();
+            else
+                throw new FileNotFoundException(name);
+            return current;
+        } finally {
+            redisPool.returnResource(jd);
+        }
     }
 
     @Override
@@ -96,9 +98,12 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     public void deleteFile(String name) throws IOException {
         ensureOpen();
         ShardedJedis jd = redisPool.getResource();
-        jd.del(get_global_filename_key(name));
-        jd.hdel(dir_name_bytes,name.getBytes());
-        redisPool.returnResource(jd);
+        try {
+            jd.del(get_global_filename_key(name));
+            jd.hdel(dir_name_bytes,name.getBytes());
+        } finally {
+            redisPool.returnResource(jd);
+        }
     }
 
     @Override
@@ -124,18 +129,20 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     @Override
     public void close() {
         ShardedJedis rds = redisPool.getResource();
-        Collection<Jedis> ls = rds.getAllShards();
-        for (Jedis jds: ls) {
-            try {
-                jds.bgsave();
-            } catch(JedisDataException e){
-                System.err.println(e);
-                e.printStackTrace(System.err);
+        try {
+            Collection<Jedis> ls = rds.getAllShards();
+            for (Jedis jds: ls) {
+                try {
+                    jds.bgsave();
+                } catch(JedisDataException e){
+                    System.err.println(e);
+                    e.printStackTrace(System.err);
+                }
             }
+            isOpen = false;
+        }finally {
+            redisPool.returnResourceObject(rds);
         }
-        redisPool.returnResourceObject(rds);
-
-        isOpen = false;
     }
 
     public byte[] get_global_filename_key(String name) {

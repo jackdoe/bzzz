@@ -99,7 +99,7 @@
                 (io/file path "redis.conf"))]
         (if (.exists f)
           (let [conf (jr (slurp f))
-                si (JedisShardInfo. (:host conf) (:port conf))
+                si (JedisShardInfo. ^String (:host conf) (int-or-parse (:port conf)))
                 pool (ShardedJedisPool. (GenericObjectPoolConfig.) [si])]
             (swap! redis* assoc path pool)
             pool)

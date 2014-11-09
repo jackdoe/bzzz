@@ -16,9 +16,11 @@ public class RedisLock extends Lock {
     @Override
     public boolean isLocked() throws IOException {
         ShardedJedis jds = pool.getResource();
-        boolean ret = jds.exists(name);
-        pool.returnResource(jds);
-        return ret;
+        try {
+            return jds.exists(name);
+        } finally {
+            pool.returnResource(jds);
+        }
     }
 
     @Override
@@ -26,15 +28,20 @@ public class RedisLock extends Lock {
         if( isLocked() )
             return false;
         ShardedJedis jds = pool.getResource();
-        String ret = jds.set(name, "1");
-        pool.returnResource(jds);
-        return ret != null;
+        try {
+            return jds.set(name, "1") != null;
+        } finally {
+            pool.returnResource(jds);
+        }
     }
 
     @Override
     public void close() throws IOException {
         ShardedJedis jds = pool.getResource();
-        jds.del(name);
-        pool.returnResource(jds);
+        try {
+            jds.del(name);
+        } finally {
+            pool.returnResource(jds);
+        }
     }
 }

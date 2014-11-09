@@ -11,7 +11,7 @@ public class RedisInputStream extends IndexInput implements Cloneable {
     public int bufferPosition;
     public int currentBufferIndex;
     public int realBufferLen = 0;
-    public int BUFFER_SIZE = 10240;
+    public int BUFFER_SIZE = 40000;
     private byte[] global_name;
     private byte[] BUFFER = null;
     public final RedisDirectory dir;
@@ -31,11 +31,17 @@ public class RedisInputStream extends IndexInput implements Cloneable {
     }
 
     public void setPosition(long pos) throws IOException {
-        currentBufferIndex = (int) (pos / BUFFER_SIZE);
+        int updatedBufferIndex = (int) (pos / BUFFER_SIZE);
         bufferPosition = (int) (pos % BUFFER_SIZE);
-        ShardedJedis jd = dir.redisPool.getResource();
-        refreshBuffer(jd);
-        dir.redisPool.returnResource(jd);
+        if (BUFFER == null || updatedBufferIndex != currentBufferIndex) {
+            currentBufferIndex = updatedBufferIndex;
+            ShardedJedis jd = dir.redisPool.getResource();
+            try {
+                refreshBuffer(jd);
+            } finally {
+                dir.redisPool.returnResource(jd);
+            }
+        }
     }
 
     @Override
@@ -53,21 +59,26 @@ public class RedisInputStream extends IndexInput implements Cloneable {
     @Override
     public void readBytes(byte[] b, int offset, int len) throws IOException {
         ShardedJedis jd = dir.redisPool.getResource();
-        while (len > 0) {
-            if (bufferPosition >= BUFFER.length) {
-                currentBufferIndex++;
-                bufferPosition = 0;
-                refreshBuffer(jd);
-            }
+        try {
+            while (len > 0) {
+                if (bufferPosition >= BUFFER.length) {
+                    currentBufferIndex++;
+                    bufferPosition = 0;
+                    refreshBuffer(jd);
+                }
 
-            int remainInBuffer = BUFFER.length - bufferPosition;
-            int bytesToCopy = len < remainInBuffer ? len : remainInBuffer;
-            System.arraycopy(BUFFER, bufferPosition, b, offset, bytesToCopy);
-            offset += bytesToCopy;
-            len -= bytesToCopy;
-            bufferPosition += bytesToCopy;
+                int remainInBuffer = BUFFER.length - bufferPosition;
+                if (remainInBuffer <= 0)
+                    throw new IOException("remainInBuffer <= 0, current BUFFER.length: " + BUFFER.length + " bufferPosition: " + bufferPosition);
+                int bytesToCopy = len < remainInBuffer ? len : remainInBuffer;
+                System.arraycopy(BUFFER, bufferPosition, b, offset, bytesToCopy);
+                offset += bytesToCopy;
+                len -= bytesToCopy;
+                bufferPosition += bytesToCopy;
+            }
+        } finally {
+            dir.redisPool.returnResource(jd);
         }
-        dir.redisPool.returnResource(jd);
     }
 
     public int absolutePosition(long n) {
@@ -98,9 +109,6 @@ public class RedisInputStream extends IndexInput implements Cloneable {
 
     @Override
     public IndexInput slice(String sliceDescription, final long offset, final long length) throws IOException {
-        if (offset < 0 || length < 0 || offset + length > this.length()) {
-            throw new IllegalArgumentException("slice() " + sliceDescription + " out of bounds: "  + this);
-        }
         return new RedisInputStream(name, dir, offset) {
             @Override
             public void seek(long pos) throws IOException {

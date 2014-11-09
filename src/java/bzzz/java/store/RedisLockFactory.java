@@ -16,8 +16,11 @@ public class RedisLockFactory extends LockFactory {
     @Override
     public void clearLock(String name) throws IOException {
         ShardedJedis jds = pool.getResource();
-        jds.del(root + name);
-        pool.returnResource(jds);
+        try {
+            jds.del(root + name);
+        } finally {
+            pool.returnResource(jds);
+        }
     }
 
     @Override

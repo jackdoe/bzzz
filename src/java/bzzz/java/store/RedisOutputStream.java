@@ -49,11 +49,13 @@ public class RedisOutputStream extends IndexOutput implements Accountable {
         byte[] copy = Arrays.copyOfRange(b, offset, (int) (offset + len));
 
         ShardedJedis jd = dir.redisPool.getResource();
-
-        long l = jd.setrange(global_name,bufferPosition,copy);
-        dir.setFileLength(name,l,jd);
-        bufferPosition += len;
-        dir.redisPool.returnResource(jd);
+        try {
+            long l = jd.setrange(global_name,bufferPosition,copy);
+            dir.setFileLength(name,l,jd);
+            bufferPosition += len;
+        } finally {
+            dir.redisPool.returnResource(jd);
+        }
     }
 
     @Override
@@ -73,5 +75,13 @@ public class RedisOutputStream extends IndexOutput implements Accountable {
     @Override
     public long getChecksum() throws IOException {
         return crc.getValue();
+    }
+
+    public String toString() {
+        try {
+            return new String(global_name, "UTF-8") + "@" + getFilePointer();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

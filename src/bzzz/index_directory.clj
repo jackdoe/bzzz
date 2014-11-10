@@ -12,8 +12,7 @@
   (:import (java.io StringReader File Writer FileNotFoundException)
            (java.lang OutOfMemoryError)
            (bzzz.java.store RedisDirectory)
-           (org.apache.commons.pool2.impl GenericObjectPoolConfig)
-           (redis.clients.jedis JedisShardInfo ShardedJedisPool)
+           (redis.clients.jedis JedisPool)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
            (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher)
@@ -99,8 +98,7 @@
                 (io/file path "redis.conf"))]
         (if (.exists f)
           (let [conf (jr (slurp f))
-                si (JedisShardInfo. ^String (:host conf) (int-or-parse (:port conf)))
-                pool (ShardedJedisPool. (GenericObjectPoolConfig.) [si])]
+                pool (JedisPool. ^String (:host conf) (int-or-parse (:port conf)))]
             (swap! redis* assoc path pool)
             pool)
           nil)))))

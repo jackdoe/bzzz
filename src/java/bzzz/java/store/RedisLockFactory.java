@@ -2,20 +2,20 @@ package bzzz.java.store;
 import java.io.IOException;
 import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.LockFactory;
-import redis.clients.jedis.ShardedJedis;
-import redis.clients.jedis.ShardedJedisPool;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class RedisLockFactory extends LockFactory {
-    protected ShardedJedisPool pool;
+    protected JedisPool pool;
     String root;
-    public RedisLockFactory(String root, ShardedJedisPool pl) {
+    public RedisLockFactory(String root, JedisPool pl) {
         pool = pl;
         this.root = root;
     }
 
     @Override
     public void clearLock(String name) throws IOException {
-        ShardedJedis jds = pool.getResource();
+        Jedis jds = pool.getResource();
         try {
             jds.del(root + name);
         } finally {

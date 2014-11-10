@@ -3,8 +3,7 @@ import java.io.IOException;
 import java.io.EOFException;
 import org.apache.lucene.store.*;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.ShardedJedis;
-import redis.clients.jedis.ShardedJedisPool;
+import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisDataException;
 
 public class RedisInputStream extends IndexInput implements Cloneable {
@@ -35,7 +34,7 @@ public class RedisInputStream extends IndexInput implements Cloneable {
         bufferPosition = (int) (pos % BUFFER_SIZE);
         if (BUFFER == null || updatedBufferIndex != currentBufferIndex) {
             currentBufferIndex = updatedBufferIndex;
-            ShardedJedis jd = dir.redisPool.getResource();
+            Jedis jd = dir.redisPool.getResource();
             try {
                 refreshBuffer(jd);
             } finally {
@@ -51,14 +50,14 @@ public class RedisInputStream extends IndexInput implements Cloneable {
         return b[0];
     }
 
-    public void refreshBuffer(ShardedJedis jd) throws IOException {
+    public void refreshBuffer(Jedis jd) throws IOException {
         int from = absolutePosition(0);
         BUFFER = jd.getrange(global_name, from, from + BUFFER_SIZE - 1);
     }
 
     @Override
     public void readBytes(byte[] b, int offset, int len) throws IOException {
-        ShardedJedis jd = dir.redisPool.getResource();
+        Jedis jd = dir.redisPool.getResource();
         try {
             while (len > 0) {
                 if (bufferPosition >= BUFFER.length) {

@@ -1,21 +1,21 @@
 package bzzz.java.store;
 import java.io.IOException;
 import org.apache.lucene.store.Lock;
-import redis.clients.jedis.ShardedJedis;
-import redis.clients.jedis.ShardedJedisPool;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class RedisLock extends Lock {
     String name;
-    ShardedJedisPool pool;
+    JedisPool pool;
 	
-    public RedisLock(String nm, ShardedJedisPool pl) {
+    public RedisLock(String nm, JedisPool pl) {
         name = nm;
         pool = pl;
     }
 
     @Override
     public boolean isLocked() throws IOException {
-        ShardedJedis jds = pool.getResource();
+        Jedis jds = pool.getResource();
         try {
             return jds.exists(name);
         } finally {
@@ -27,7 +27,7 @@ public class RedisLock extends Lock {
     public boolean obtain() throws IOException {
         if( isLocked() )
             return false;
-        ShardedJedis jds = pool.getResource();
+        Jedis jds = pool.getResource();
         try {
             return jds.set(name, "1") != null;
         } finally {
@@ -37,7 +37,7 @@ public class RedisLock extends Lock {
 
     @Override
     public void close() throws IOException {
-        ShardedJedis jds = pool.getResource();
+        Jedis jds = pool.getResource();
         try {
             jds.del(name);
         } finally {

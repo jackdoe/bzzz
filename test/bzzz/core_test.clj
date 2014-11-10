@@ -1,6 +1,7 @@
 (ns bzzz.core-test
   (:import (java.io StringReader File))
   (:require [clojure.java.io :as io])
+  (:require [clojure.data.json :as json])
   (:use clojure.test
         bzzz.core
         bzzz.util
@@ -14,10 +15,12 @@
 
 (defn should-work [name expected]
   (let [ret (search {:index name
+                     :facets {:find {}}
                      :query {:query-parser {:query "aaa bbb ccc"
                                             :default-operator :and
                                             :default-field "name_st_again"}}})]
     (is (= expected (:total ret)))
+
     (if-not (= 0 expected)
       (is (= "zzz" (:name (first (:hits ret))))))))
 
@@ -682,11 +685,29 @@
     (cleanup)
     (should-work test-index-name 0))
 
+  (testing "redis"
+    (cleanup)
+    (store-something test-index-name 0)
+    (refresh-search-managers)
+    (should-work test-index-name 1)
+    (try-create-prefix (get-path test-index-name 10))
+    (spit (io/file (get-path test-index-name 10) "redis.conf")
+          (json/write-str {:host "localhost"
+                           :port 6379}))
+    (refresh-search-managers)
+    (store-something test-index-name 10)
+    (refresh-search-managers)
+    (is (= 2 (count (file-seq (get-path test-index-name 10)))))
+    (should-work test-index-name 2)
+    (cleanup)
+    (should-work test-index-name 0))
+
   (testing "teardown"
     (shutdown)
     (try
       (do
         (delete-recursively (get-path test-index-name 0))
+        (delete-recursively (get-path test-index-name 10))
         (delete-recursively (get-path test-index-name 1))
         (delete-recursively (get-path test-index-name 2))
         (delete-recursively (get-path test-index-name 3))

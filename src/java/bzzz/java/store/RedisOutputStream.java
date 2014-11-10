@@ -7,8 +7,7 @@ import java.util.Arrays;
 import org.apache.lucene.store.*;
 import org.apache.lucene.util.Accountable;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.ShardedJedis;
-import redis.clients.jedis.ShardedJedisPool;
+import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisDataException;
 
 public class RedisOutputStream extends IndexOutput implements Accountable {
@@ -48,7 +47,7 @@ public class RedisOutputStream extends IndexOutput implements Accountable {
 
         byte[] copy = Arrays.copyOfRange(b, offset, (int) (offset + len));
 
-        ShardedJedis jd = dir.redisPool.getResource();
+        Jedis jd = dir.redisPool.getResource();
         try {
             long l = jd.setrange(global_name,bufferPosition,copy);
             dir.setFileLength(name,l,jd);

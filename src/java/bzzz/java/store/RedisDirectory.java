@@ -12,19 +12,18 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.lucene.store.*;
 import org.apache.lucene.util.Accountable;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.ShardedJedis;
-import redis.clients.jedis.ShardedJedisPool;
+import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisDataException;
 
 
 public class RedisDirectory extends BaseDirectory implements Accountable {
     int BLOCK_SIZE = 10240;
-    public ShardedJedisPool redisPool;
+    public JedisPool redisPool;
     public String dir_name;
     public byte[] dir_name_bytes;
     public LockFactory lf;
 
-    public RedisDirectory(String name, ShardedJedisPool pool) {
+    public RedisDirectory(String name, JedisPool pool) {
         redisPool = pool;
         dir_name = name;
         dir_name_bytes = name.getBytes();
@@ -43,7 +42,7 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     @Override
     public final String[] listAll() {
         ensureOpen();
-        ShardedJedis rds = redisPool.getResource();
+        Jedis rds = redisPool.getResource();
         try {
             Set<String> ls = rds.hkeys(dir_name);
             if( ls == null ){
@@ -62,7 +61,7 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     public final boolean fileExists(String name) {
         ensureOpen();
         boolean ret = false;
-        ShardedJedis rds = redisPool.getResource();
+        Jedis rds = redisPool.getResource();
         try {
             return rds.hexists(dir_name_bytes, name.getBytes());
         } finally {
@@ -74,7 +73,7 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     public final long fileLength(String name) throws IOException {
         ensureOpen();
 
-        ShardedJedis jd = redisPool.getResource();
+        Jedis jd = redisPool.getResource();
         try {
             long current = 0;
             byte[] b = jd.hget(dir_name_bytes, name.getBytes());
@@ -97,7 +96,7 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
     @Override
     public void deleteFile(String name) throws IOException {
         ensureOpen();
-        ShardedJedis jd = redisPool.getResource();
+        Jedis jd = redisPool.getResource();
         try {
             jd.del(get_global_filename_key(name));
             jd.hdel(dir_name_bytes,name.getBytes());
@@ -128,20 +127,12 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
 
     @Override
     public void close() {
-        ShardedJedis rds = redisPool.getResource();
+        Jedis jds = redisPool.getResource();
         try {
-            Collection<Jedis> ls = rds.getAllShards();
-            for (Jedis jds: ls) {
-                try {
-                    jds.bgsave();
-                } catch(JedisDataException e){
-                    System.err.println(e);
-                    e.printStackTrace(System.err);
-                }
-            }
+            jds.bgsave();
             isOpen = false;
         }finally {
-            redisPool.returnResourceObject(rds);
+            redisPool.returnResourceObject(jds);
         }
     }
 
@@ -149,7 +140,7 @@ public class RedisDirectory extends BaseDirectory implements Accountable {
         return String.format("@%s:%s", dir_name, name).getBytes();
     }
 
-    public void setFileLength(String name, long l, ShardedJedis jd) {
+    public void setFileLength(String name, long l, Jedis jd) {
         jd.hset(dir_name_bytes, name.getBytes(), ByteBuffer.allocate(Long.SIZE).putLong(l).array());
     }
 }

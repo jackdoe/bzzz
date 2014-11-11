@@ -330,7 +330,7 @@ on every _query_ request BZZZ will check if there is already a `SearcherManager`
 
 _every_ 5 seconds all SearcherManagers are asked to refresh if needed (if data changed for example)
 
-### caveats
+## caveats
 
 #### You have to partition + replicate the data yourself
 
@@ -376,7 +376,8 @@ depending on your application, tolerance of data loss, IO requirements and real-
 * have some document batch identifiers, and you can just delete the partial data in the partition in case of failure, and just write it to a different partition
 * just have 1 writer and rsync the indexes a couple of times per day
 * stop processing and just buffer the data on disk until all hosts in the partition are up
-
+* use experimental lucene storage backend (like the `redis` support included in `bzzz`)
+* ...
 
 ### extra
 

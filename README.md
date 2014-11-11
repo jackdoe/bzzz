@@ -5,10 +5,7 @@
 [![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
 
 ## requirements
-* [leiningen](http://leiningen.org/)
-
-at the moment building/running require, if you build rpm you can distribute it without the leiningen dependency.
-
+* [leiningen](http://leiningen.org/) - at the moment building/running require, if you build rpm you can distribute it without the leiningen dependency.
 * java 1.7
 
 ## run

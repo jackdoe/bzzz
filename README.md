@@ -6,6 +6,7 @@
 
 ## requirements
 * [leiningen](http://leiningen.org/)
+
 at the moment building/running require, if you build rpm you can distribute it without the leiningen dependency.
 
 * java 1.7

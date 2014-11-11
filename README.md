@@ -1,11 +1,14 @@
 # bzzz
 
-*work in progress* stateless (clojure + lucene-4.10.1 + jetty + ring) search service
+*work in progress* stateless (clojure + lucene-4.10.2 + jetty + ring) search service
 
 [![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
 
 ## requirements
-at the moment building/running require [leiningen](http://leiningen.org/), if you build rpm you can distribute it without the leiningen dependency.
+* [leiningen](http://leiningen.org/)
+at the moment building/running require, if you build rpm you can distribute it without the leiningen dependency.
+
+* java 1.7
 
 ## run
 
@@ -21,7 +24,7 @@ $ curl -XPOST http://localhost:3000/bzbz -d '
     "documents": [
         { "name": "john doe" },
         { "name": "jack doe" }
-    ],
+    ]
 }'
 ```
 
@@ -51,21 +54,13 @@ this will just do `lein uberjar` and will create tar archive containing it, plus
 
 ```
 jazz:bzzz jack$ tar -tf binary/bzzz-0.1.0.20141*.tar.gz
-./
-./etc/
-./usr/
-./var/
-./var/lib/
-./var/log/
 ./var/log/bzzz/
 ./var/lib/bzzz/
-./usr/lib/
-./usr/lib/bzzz/
 ./usr/lib/bzzz/bzzz.jar
 ./usr/lib/bzzz/start.sh
-./etc/bzzz/
 ./etc/bzzz/bzzz-0.config
 ./etc/bzzz/log4j.properties
+...
 ```
 
 so you can just `tar -xf binary/*.tar.gz -C /` and then run `/usr/lib/bzzz/start.sh bzzz-0.config`
@@ -407,7 +402,7 @@ depending on your application, tolerance of data loss, IO requirements and real-
 * more documentation
 * some website with more examples
 * look through some simple replication concepts
-* make /NAME requests overwrite the "index" key in the requests (`localhost:3000/index -d '{"query":"name:doe"}'`)
+
 
 ---------------------
 

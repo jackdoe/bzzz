@@ -45,7 +45,7 @@ $ yum install binary/bzzz-0.1.0.*.noarch.rpm
 ## build tar
 
 ```
-$ lein tar      # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.tar.gz
+$ lein tar         # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.tar.gz
 ```
 
 this will just do `lein uberjar` and will create tar archive containing it, plus example configs and a start.sh file.

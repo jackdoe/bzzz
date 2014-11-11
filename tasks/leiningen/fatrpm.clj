@@ -35,7 +35,7 @@
 
 (defn get-version
   [project]
-  (let [df   (SimpleDateFormat. ".yyyyMMdd.HHmmss")]
+  (let [df (SimpleDateFormat. ".yyyyMMdd.HHmmss")]
     (replace (:version project) #"-SNAPSHOT" (.format df (Date.)))))
 
 (defn set-mojo!

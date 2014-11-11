@@ -4,7 +4,11 @@
 
 [![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
 
+## requirements
+at the moment building/running require [leiningen](http://leiningen.org/), if you build rpm you can distribute it without the leiningen dependency.
+
 ## run
+
 ```
 $ lein trampoline run -- --directory /tmp/bzbzbz
 ```
@@ -36,6 +40,35 @@ $ curl -XGET http://localhost:3000/bzbz -d '
 $ lein fatrpm      # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.noarch.rpm
 $ yum install binary/bzzz-0.1.0.*.noarch.rpm
 ```
+
+## build tar
+
+```
+$ lein tar      # will create binary/bzzz-0.1.0.yyyyMMdd.HHmmss.tar.gz
+```
+
+this will just do `lein uberjar` and will create tar archive containing it, plus example configs and a start.sh file.
+
+```
+jazz:bzzz jack$ tar -tf binary/bzzz-0.1.0.20141*.tar.gz
+./
+./etc/
+./usr/
+./var/
+./var/lib/
+./var/log/
+./var/log/bzzz/
+./var/lib/bzzz/
+./usr/lib/
+./usr/lib/bzzz/
+./usr/lib/bzzz/bzzz.jar
+./usr/lib/bzzz/start.sh
+./etc/bzzz/
+./etc/bzzz/bzzz-0.config
+./etc/bzzz/log4j.properties
+```
+
+so you can just `tar -xf binary/*.tar.gz -C /` and then run `/usr/lib/bzzz/start.sh bzzz-0.config`
 
 
 ## \o/

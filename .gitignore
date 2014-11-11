@@ -2,6 +2,7 @@
 /classes
 /checkouts
 /binary/*.rpm
+/binary/*.tar.gz
 /binary/*.md5
 /binary/*.sh
 /binary/*.pl

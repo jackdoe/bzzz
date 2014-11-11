@@ -8,10 +8,6 @@
   (:import java.util.Date
            java.text.SimpleDateFormat))
 
-(defn normalize-path [root path]
-  (let [f (io/file path)]
-    (.getAbsolutePath (if (.isAbsolute f) f (io/file root path)))))
-
 (defn workarea
   [project]
   (io/file (:root project) "target" "tar"))

@@ -17,7 +17,7 @@ $ lein trampoline run -- --directory /tmp/bzbzbz
 ## store something
 
 ```
-$ curl -XPOST http://localhost:3000/bzbz -d '
+curl -XPOST http://localhost:3000/bzbz -d '
 {
     "documents": [
         { "name": "john doe" },
@@ -28,8 +28,10 @@ $ curl -XPOST http://localhost:3000/bzbz -d '
 
 ## search it
 
+(the new data will be searchable within 5 seconds)
+
 ```
-$ curl -XGET http://localhost:3000/bzbz -d '
+curl -XGET http://localhost:3000/bzbz -d '
 {
     "query": "name:doe"
 }'

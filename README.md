@@ -171,7 +171,7 @@ If we use the same analyzer with lucene's QueryParser and search for `jackx` it 
                   "default-operator":"and" 
               } 
             },
-   analyzer... (same sa above)
+   analyzer... (same as above)
 }
 
 internally this will be turned into:
@@ -217,18 +217,20 @@ At the moment I am working on adding more and more analyzers/tokenizers/tokenfil
 
 ## why BZZZ
 
-* moderately useful (out of the box) network lucene wrapper
-* distribute work
+* stateless
+* can distribute work
+* exposes some very handy Lucene features: js expression sort/score; facets; aliases; custom analyzers; highlighting .. etc
+* easy to repair/move/migrate etc
+* has *some* GC predictability (avoids talking to other boxes that are about to do GC, and you also know in how much time will someone do GC)
 * should be able to restart frequently
-* _user_ controlled sharding (there are 2 types, external and internal(within the jvm))
+* *user* controlled sharding (there are 2 types, external and internal(within the jvm))
 
-
-BZZZ being extremely simple it can actually scale very well if you know your data, for example if we have 100_000_000 documents and we want to search them, we can just spawn 100BZZZ processess across multiple machines, and just put different pieces of data in different boxes (hash($id) % BOXES). BZZZ supports swarm like queries, so you can ask 1 box, to ask 5 boxes, and each of those 5 boxes can ask 5 more, and actually the _user_ is in control of that.
+BZZZ being extremely simple it can actually scale very well if you know your data, for example if we have 100_000_000 documents and we want to search them, we can just spawn 100 BZZZ processess across multiple machines, and just put different pieces of data in different boxes `(hash($id) % BOXES)`. BZZZ supports swarm like queries, so you can ask 1 box, to ask 5 boxes, and each of those 5 boxes can ask 5 more, and actually the _user_ is in control of that.
 
 * multi-searching shard[partition] identification and automatic shard[partition] resolving
-the way BZZZ does this is by simply continuously updating a @discover-hosts* atom map, and every time you a box checks if another box is alive, it also gets its current @discover-hosts* and it merges it, it also gets the box's identifier.
+the way BZZZ does this is by simply continuously updating a `@discover-hosts*` atom map, and every time you a box checks if another box is alive, it also gets its current @discover-hosts* and it merges it, it also gets the box's identifier.
 
-This identifier can be used when a query is construcded like so:
+This identifier can be used when a query is constructed like so:
 ```
 PUT:
 {
@@ -240,7 +242,7 @@ PUT:
     "query": "name:jack",
 }
 ```
-(of course instead of `__global_partition_0/1` you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the @peers* map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
+(of course instead of `__global_partition_0/1` you can have `http://host.example.com:3000`, but everything you put in the hosts array, BZZZ will try to resolve from the `@peers*` map, and see if there are any boxes that were alive within the last `acceptable-discover-time-diff*` (by default 10) second and randomly picks one.
 
 In the `hosts` array you can also add arrays like:
 ```
@@ -265,8 +267,7 @@ This can can become quite hard to grasp `["a","b",["c","d","e",["f,"g","h",["z",
 
 All those examples with `hosts` keys are actually a `mutli-search` requests, and the only difference between a regular search request and a multi-search request is the fact that it is sent using the `HTTP PUT` method, and has a `hosts` key
 
-* you specify the identifier of a process by using the `--identifier` startup parameter, there is _no_ disk stored state for it, so you can switch processess that were serving identifier `a` to start serving `b` (of course you have to be careful if the shard served from A is also the same as B, or just change the --directory of the processto read from shard A's data)
-
+* you specify the identifier of a process by using the `--identifier` startup parameter, there is _no_ disk stored state for it, so you can switch processes that were serving identifier `a` to start serving `b` (of course you have to be careful if the shard served from A is also the same as B, or just change the --directory of the process to read from shard A's data)
 
 ## state / schema / mappings
 

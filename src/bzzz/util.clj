@@ -182,3 +182,8 @@
                              "abs requires a number"))
    (neg? n) (- n)
    :else n))
+
+(defn call [^String nm & args]
+  (if-let [fun (ns-resolve *ns* (symbol nm))]
+    (apply fun args)
+    (throw (IllegalArgumentException. (str "unable to resolve " nm)))))

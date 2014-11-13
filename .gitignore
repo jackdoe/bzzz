@@ -1,6 +1,7 @@
 /target
 /classes
 /checkouts
+/src/bzzz/custom/*.clj
 /binary/*.rpm
 /binary/*.tar.gz
 /binary/*.md5

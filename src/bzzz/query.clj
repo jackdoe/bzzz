@@ -1,7 +1,7 @@
 (ns bzzz.query
   (use bzzz.util)
   (use bzzz.analyzer)
-  (use [clojure.string :only (replace)])
+  (require clojure.string)
   (require bzzz.queries.match-all)
   (require bzzz.queries.bool)
   (require bzzz.queries.range)
@@ -34,6 +34,6 @@
         top))))
 
 (defn resolve-and-call [key val analyzer]
-  (let [sanitized (replace (as-str key) unacceptable-method-pattern "")
+  (let [sanitized (clojure.string/replace (as-str key) unacceptable-method-pattern "")
         method (str "bzzz.queries." sanitized "/parse")]
     (call method parse-query val analyzer)))

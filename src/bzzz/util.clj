@@ -187,3 +187,6 @@
   (if-let [fun (ns-resolve *ns* (symbol nm))]
     (apply fun args)
     (throw (IllegalArgumentException. (str "unable to resolve " nm)))))
+
+(defn sanitize ^String [s unacceptable-pattern]
+  (clojure.string/replace (as-str s) unacceptable-pattern ""))

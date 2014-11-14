@@ -39,7 +39,7 @@
   ([pre] (re-pattern (str "^" (as-str pre) shard-suffix-sre))))
 
 (defn acceptable-index-name [name]
-  (clojure.string/replace name unacceptable-name-pattern ""))
+  (sanitize name unacceptable-name-pattern))
 
 (defn root-identifier-path ^File []
   (io/file (as-str @root*) (as-str @identifier*)))
@@ -104,7 +104,7 @@
 
 (defn new-index-directory ^Directory [^File path-prefix name]
   (try-create-prefix path-prefix)
-  (let [index-name (as-str (acceptable-index-name name))
+  (let [index-name (acceptable-index-name name)
         dir (io/file path-prefix index-name)
         redis (try-redis dir)]
     (if redis

@@ -34,6 +34,6 @@
         top))))
 
 (defn resolve-and-call [key val analyzer]
-  (let [sanitized (clojure.string/replace (as-str key) unacceptable-method-pattern "")
+  (let [sanitized (sanitize key unacceptable-method-pattern)
         method (str "bzzz.queries." sanitized "/parse")]
     (call method parse-query val analyzer)))

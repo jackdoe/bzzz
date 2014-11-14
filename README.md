@@ -4,7 +4,7 @@
 
 *thin* lucene(4.10.2) wrapper, providing *some* help to do scatter/gather, without cluster state and distributed consensus (pitfalls included :D )
 
-[![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)p
+[![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
 
 ## requirements
 * [leiningen](http://leiningen.org/) - at the moment building/running require, if you build rpm you can distribute it without the leiningen dependency.
@@ -748,6 +748,7 @@ thanks to
 * looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
 * http://lucene.apache.org/core/4_9_1/core/overview-summary.html
 * http://clojuredocs.org/
+* logo: sofialonfonmoskva.com
 
 ## License
 

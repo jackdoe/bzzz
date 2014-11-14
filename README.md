@@ -1,6 +1,8 @@
 # bzzz
 
-*work in progress* stateless (clojure + lucene-4.10.2 + jetty + ring) search service
+*work in progress*
+
+*thin* jetty lucene(4.10.2) wrapper, providing *some* help to do scatter/gather, without cluster state and distributed consensus
 
 [![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
 

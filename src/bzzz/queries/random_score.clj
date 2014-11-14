@@ -1,4 +1,4 @@
-(ns bzzz.random-score-query
+(ns bzzz.queries.random-score
   (:import (org.apache.lucene.search Query IndexSearcher Weight Scorer Explanation ComplexExplanation)
            (org.apache.lucene.index AtomicReaderContext)
            (org.apache.lucene.util Bits)))
@@ -36,4 +36,8 @@
                 (docID [] (.docID sub-scorer))
                 (score [] (+ base (rand)))))))))))
 
-
+(defn parse
+  [generic input analyzer]
+  (let [{:keys [query base]
+         :or {base 100}} input]
+    (random-score-query (generic query analyzer) base)))

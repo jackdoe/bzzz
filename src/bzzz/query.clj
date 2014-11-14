@@ -1,152 +1,21 @@
 (ns bzzz.query
-  (use bzzz.const)
   (use bzzz.util)
-  (use bzzz.expr)
   (use bzzz.analyzer)
-  (use bzzz.random-score-query)
-  (use bzzz.expr-score-query)
-  (:import (org.apache.lucene.queryparser.classic QueryParser)
-           (org.apache.lucene.index Term)
-           (org.apache.lucene.expressions Expression SimpleBindings)
-           (org.apache.lucene.queries CustomScoreQuery)
-           (org.apache.lucene.queries.function FunctionQuery)
-           (org.apache.lucene.search BooleanClause BooleanClause$Occur
-                                     BooleanQuery IndexSearcher Query ScoreDoc
-                                     Scorer TermQuery SearcherManager
-                                     Explanation ComplexExplanation
-                                     NumericRangeQuery
-                                     MatchAllDocsQuery
-                                     FilteredQuery QueryWrapperFilter
-                                     ConstantScoreQuery
-                                     Collector TopScoreDocCollector TopDocsCollector)))
-(declare parse-query)
+  (use [clojure.string :only (replace)])
+  (require bzzz.queries.match-all)
+  (require bzzz.queries.bool)
+  (require bzzz.queries.range)
+  (require bzzz.queries.random-score)
+  (require bzzz.queries.expr-score)
+  (require bzzz.queries.custom-score)
+  (require bzzz.queries.constant-score)
+  (require bzzz.queries.term)
+  (require bzzz.queries.filtered)
+  (require bzzz.queries.query-parser)
+  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)))
 
-(defn parse-lucene-query-parser
-  ^Query
-  [analyzer & {:keys [query default-field default-operator boost]
-               :or {default-field "_default_", default-operator "and" boost 1}}]
-  (let [parser (doto
-                   (QueryParser. *version* (as-str default-field) analyzer)
-                 (.setDefaultOperator (case (as-str default-operator)
-                                        "and" QueryParser/AND_OPERATOR
-                                        "or"  QueryParser/OR_OPERATOR)))
-        query (.parse parser query)]
-    (.setBoost query boost)
-    query))
-
-(defn parse-filtered-query
-  ^Query
-  [analyzer & {:keys [query filter boost]
-               :or {boost 1}}]
-  (let [q (FilteredQuery. (parse-query query analyzer)
-                          (QueryWrapperFilter. (parse-query filter analyzer)))]
-    (.setBoost q boost)
-    q))
-
-(defn parse-random-score-query
-  ^Query
-  [analyzer & {:keys [query base]
-               :or {base 100}}]
-  (random-score-query (parse-query query analyzer) base))
-
-(defn parse-constant-score-query
-  ^Query
-  [analyzer & {:keys [query boost]
-               :or {boost 1}}]
-  (let [q (ConstantScoreQuery. ^Query (parse-query query analyzer))]
-    (.setBoost q boost)
-    q))
-
-(defn parse-bool-query
-  ^Query
-  [analyzer & {:keys [must must-not should minimum-should-match boost]
-               :or {minimum-should-match 0 should [] must [] must-not [] boost 1}}]
-  (let [top ^BooleanQuery (BooleanQuery. true)]
-    (doseq [q must]
-      (.add top (parse-query q analyzer) BooleanClause$Occur/MUST))
-    (doseq [q must-not]
-      (.add top (parse-query q analyzer) BooleanClause$Occur/MUST_NOT))
-    (doseq [q should]
-      (.add top (parse-query q analyzer) BooleanClause$Occur/SHOULD))
-    (.setMinimumNumberShouldMatch top minimum-should-match)
-    (.setBoost top boost)
-    top))
-
-(defn parse-term-query
-  ^Query
-  [analyzer & {:keys [field value boost]
-               :or {boost 1}}]
-  (let [q (TermQuery. (Term. ^String field ^String value))]
-    (.setBoost q boost)
-    q))
-
-(defn parse-numeric-range-query
-  ^Query
-  [analyzer & {:keys [^String field min max ^Boolean min-inclusive ^Boolean max-inclusive boost]
-               :or {min nil max nil min-inclusive true max-inclusive false boost 1}}]
-  (let [str-field (as-str field)]
-    (if (not (numeric? str-field))
-      (throw (Throwable. (str field " is not numeric (need to have _integer|_float|_double|_long in the name"))))
-    (let [q (if (index_integer? str-field)
-              (NumericRangeQuery/newIntRange str-field
-                                             (is-parse-nil min #(int-or-parse %))
-                                             (is-parse-nil max #(int-or-parse %))
-                                             min-inclusive
-                                             max-inclusive)
-              (if (index_long? str-field)
-                (NumericRangeQuery/newLongRange str-field
-                                                (is-parse-nil min #(long-or-parse %))
-                                                (is-parse-nil max #(long-or-parse %))
-                                                min-inclusive
-                                                max-inclusive)
-
-                (if (index_float? str-field)
-                  (NumericRangeQuery/newFloatRange str-field
-                                                   (is-parse-nil min #(float-or-parse %))
-                                                   (is-parse-nil max #(float-or-parse %))
-                                                   min-inclusive
-                                                   max-inclusive)
-                  (NumericRangeQuery/newDoubleRange str-field
-                                                    (is-parse-nil min #(double-or-parse %))
-                                                    (is-parse-nil max #(double-or-parse %))
-                                                    min-inclusive
-                                                    max-inclusive))))]
-      (.setBoost q boost)
-      q)))
-
-(defn parse-custom-score-query
-  ^Query
-  [analyzer & {:keys [query expression boost]
-               :or {query {:match-all {}} boost 1}}]
-  (let [[^Expression expr ^SimpleBindings bindings] (input->expression-bindings expression)
-        fq ^FunctionQuery (FunctionQuery. (.getValueSource expr bindings))
-        q (CustomScoreQuery. ^Query (parse-query query analyzer) fq)]
-    (.setBoost q boost)
-    q))
-
-(defn parse-expr-score-query
-  ^Query
-  [analyzer & {:keys [query expression boost]
-               :or {query {:match-all {}} boost 1}}]
-  (let [[^Expression expr ^SimpleBindings bindings] (input->expression-bindings expression)
-        subq ^Query (parse-query query analyzer)
-        vs (.getValueSource expr bindings)
-        q ^Query (expr-score-query subq vs)]
-    (.setBoost q boost)
-    q))
-
-(defn parse-query-fixed ^Query [key val analyzer]
-  (case (as-str key)
-    "query-parser" (mapply parse-lucene-query-parser analyzer val)
-    "term" (mapply parse-term-query analyzer val)
-    "filtered" (mapply parse-filtered-query analyzer val)
-    "constant-score" (mapply parse-constant-score-query analyzer val)
-    "custom-score" (mapply parse-custom-score-query analyzer val)
-    "expr-score" (mapply parse-expr-score-query analyzer val)
-    "random-score" (mapply parse-random-score-query analyzer val)
-    "range" (mapply parse-numeric-range-query analyzer val)
-    "match-all" (MatchAllDocsQuery.)
-    "bool" (mapply parse-bool-query analyzer val)))
+(declare resolve-and-call)
+(def unacceptable-method-pattern (re-pattern "[^a-z\\.-]"))
 
 (defn extract-analyzer [a]
   (if (nil? a)
@@ -155,11 +24,16 @@
 
 (defn parse-query ^Query [input analyzer]
   (if (string? input)
-    (mapply parse-lucene-query-parser analyzer {:query input})
+    (resolve-and-call "query-parser" {:query input} analyzer)
     (if (= (count input) 1)
       (let [[key val] (first input)]
-        (parse-query-fixed key val analyzer))
+        (resolve-and-call key val analyzer))
       (let [top (BooleanQuery. false)]
         (doseq [[key val] input]
-          (.add top (parse-query-fixed key val analyzer) BooleanClause$Occur/MUST))
+          (.add top (resolve-and-call key val analyzer) BooleanClause$Occur/MUST))
         top))))
+
+(defn resolve-and-call [key val analyzer]
+  (let [sanitized (replace (as-str key) unacceptable-method-pattern "")
+        method (str "bzzz.queries." sanitized "/parse")]
+    (call method parse-query val analyzer)))

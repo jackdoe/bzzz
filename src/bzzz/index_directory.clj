@@ -31,7 +31,7 @@
 (def redis* (atom {}))
 (def identifier* (atom default-identifier))
 (def name->smanager-taxo* (atom {}))
-(def acceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-:]"))
+(def unacceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-:]"))
 (def shard-suffix "-shard-")
 (def shard-suffix-sre (str ".*" shard-suffix "\\d+"))
 
@@ -40,7 +40,7 @@
   ([pre] (re-pattern (str "^" (as-str pre) shard-suffix-sre))))
 
 (defn acceptable-index-name [name]
-  (clojure.string/replace name acceptable-name-pattern ""))
+  (clojure.string/replace name unacceptable-name-pattern ""))
 
 (defn root-identifier-path ^File []
   (io/file (as-str @root*) (as-str @identifier*)))

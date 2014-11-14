@@ -1,4 +1,5 @@
-(ns bzzz.expr-score-query
+(ns bzzz.queries.expr-score
+  (use bzzz.expr)
   (:import (org.apache.lucene.search Query IndexSearcher Weight Scorer Explanation ComplexExplanation)
            (org.apache.lucene.queries.function ValueSource FunctionValues)
            (org.apache.lucene.expressions Expression SimpleBindings)
@@ -23,7 +24,7 @@
           (explain [^AtomicReaderContext reader-ctx doc]
             (let [[^Scorer sub-scorer
                    ^FunctionValues expr-values] (new-scorer reader-ctx (.getLiveDocs (.reader reader-ctx)))
-                  sub-explain (.explain sub-weight reader-ctx doc)]
+                   sub-explain (.explain sub-weight reader-ctx doc)]
               (if (= (.advance sub-scorer doc) doc)
                 (let [top (Explanation. (.doubleVal expr-values (.docID sub-scorer))
                                         (str "overwriting query score with expression's score - " (.toString vs)))]
@@ -46,3 +47,14 @@
                   (freq [] (.freq sub-scorer))
                   (docID [] (.docID sub-scorer))
                   (score [] (.doubleVal expr-values (.docID sub-scorer))))))))))))
+
+(defn parse
+  [generic input analyzer]
+  (let [{:keys [query expression boost]
+         :or {query {:match-all {}} boost 1}} input
+         [^Expression expr ^SimpleBindings bindings] (input->expression-bindings expression)
+         subq ^Query (generic query analyzer)
+         vs (.getValueSource expr bindings)
+         q ^Query (expr-score-query subq vs)]
+    (.setBoost q boost)
+    q))

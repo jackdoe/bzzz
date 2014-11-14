@@ -1,4 +1,4 @@
-[![bzzz](https://raw.githubusercontent.com/jackdoe/bzzz/master/logo/bzzz-b.png)](https://github.com/jackdoe/bzzz)
+<img src="https://raw.githubusercontent.com/jackdoe/bzzz/master/logo/bzzz-b.png" alt="bzzz" style="height: 200px;">
 
 *work in progress*
 

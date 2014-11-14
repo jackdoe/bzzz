@@ -1,10 +1,10 @@
-# bzzz
+[![bzzz](https://raw.githubusercontent.com/jackdoe/bzzz/master/logo/bzzz-b-200.png)](https://github.com/jackdoe/bzzz)
 
 *work in progress*
 
 *thin* lucene(4.10.2) wrapper, providing *some* help to do scatter/gather, without cluster state and distributed consensus (pitfalls included :D )
 
-[![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)
+[![Build Status](https://travis-ci.org/jackdoe/bzzz.png)](https://travis-ci.org/jackdoe/bzzz)p
 
 ## requirements
 * [leiningen](http://leiningen.org/) - at the moment building/running require, if you build rpm you can distribute it without the leiningen dependency.

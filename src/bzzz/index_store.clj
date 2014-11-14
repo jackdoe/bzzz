@@ -4,7 +4,6 @@
   (use bzzz.const)
   (use bzzz.query)
   (use bzzz.index-directory)
-  (use bzzz.random-score-query)
   (use bzzz.index-facet-common)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)

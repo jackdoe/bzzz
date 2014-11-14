@@ -4,7 +4,6 @@
   (use bzzz.const)
   (use bzzz.query)
   (use bzzz.index-directory)
-  (use bzzz.random-score-query)
   (use [clojure.string :only (join)])
   (:require [clojure.tools.logging :as log])
   (:require [clojure.data.json :as json])

@@ -6,7 +6,6 @@
   (use bzzz.expr)
   (use bzzz.index-facet-common)
   (use bzzz.index-directory)
-  (use bzzz.random-score-query)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)
            (org.apache.lucene.expressions.js JavascriptCompiler)

@@ -1,4 +1,4 @@
-[[ https://raw.githubusercontent.com/jackdoe/bzzz/master/logo/bzzz-b.png | height = 200px ]](https://github.com/jackdoe/bzzz)
+[![bzzz](https://raw.githubusercontent.com/jackdoe/bzzz/master/logo/bzzz-b.png)](https://github.com/jackdoe/bzzz)
 
 *work in progress*
 

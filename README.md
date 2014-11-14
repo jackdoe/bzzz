@@ -748,7 +748,7 @@ thanks to
 * looked at https://github.com/weavejester/clucy/blob/master/src/clucy/core.clj for inspiration
 * http://lucene.apache.org/core/4_9_1/core/overview-summary.html
 * http://clojuredocs.org/
-* logo: http://sofialonfonmoskva.com
+* logo: http://sofialondonmoskva.com
 
 ## License
 

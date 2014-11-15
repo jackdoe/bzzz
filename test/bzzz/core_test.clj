@@ -159,6 +159,20 @@
       (is (nil? (:name_no_store (first (:hits ret)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))
 
+  (testing "search-dis-max"
+    (let [ret (search {:index test-index-name
+                       :explain true
+                       :query {:dis-max {:queries [{:constant-score {:query {:term {:field "id", :value "baz bar"}}
+                                                                     :boost 10}}
+                                                   {:constant-score {:query {:term {:field "id", :value "baz bar"}}
+                                                                     :boost 10}}]
+                                         :tie-breaker "0.5"}}})]
+      (is (= 1 (:total ret)))
+      (is (nil? (:name_no_store (first (:hits ret)))))
+      (is (= "baz bar" (:id (first (:hits ret)))))
+      ;; FIXME create no norm similarity to test actual scores
+      (is (not= (.indexOf (:_explain (first (:hits ret))) "max plus 0.5") -1))))
+
   (testing "search-filter-query"
     (let [ret (search {:index test-index-name
                        :query {:filtered {:filter {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}

@@ -12,6 +12,7 @@
   (require bzzz.queries.term)
   (require bzzz.queries.filtered)
   (require bzzz.queries.query-parser)
+  (require bzzz.queries.dis-max)
   (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)))
 
 (declare resolve-and-call)

@@ -407,6 +407,7 @@ depending on your application, tolerance of data loss, IO requirements and real-
 * some website with more examples
 * look through some simple replication concepts
 * add support for p2p index copy
+* add more lucene queries (span/regex/*/phrase etc)
 
 ---------------------
 

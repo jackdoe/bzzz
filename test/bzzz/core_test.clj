@@ -173,6 +173,17 @@
       ;; FIXME create no norm similarity to test actual scores
       (is (not= (.indexOf (:_explain (first (:hits ret))) "max plus 0.5") -1))))
 
+  (testing "search-wildcard"
+    (let [r0 (search {:index test-index-name
+                       :query {:wildcard {:field "id",
+                                          :value "*baz*"}}})
+          r1 (search {:index test-index-name
+                       :query {:wildcard {:field "id",
+                                          :value "*W? baz bar*"}}})]
+      (is (= 2 (:total r0)))
+      (is (= 1 (:total r1)))
+      (is (= "WS baz bar" (:id (first (:hits r1)))))))
+
   (testing "search-filter-query"
     (let [ret (search {:index test-index-name
                        :query {:filtered {:filter {:bool {:must [{:term {:field "id", :value "baz bar"}}]}}

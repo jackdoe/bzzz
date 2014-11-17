@@ -175,14 +175,25 @@
 
   (testing "search-wildcard"
     (let [r0 (search {:index test-index-name
-                       :query {:wildcard {:field "id",
-                                          :value "*baz*"}}})
+                      :query {:wildcard {:field "id",
+                                         :value "*baz*"}}})
           r1 (search {:index test-index-name
-                       :query {:wildcard {:field "id",
-                                          :value "*W? baz bar*"}}})]
+                      :query {:wildcard {:field "id",
+                                         :value "*W? baz bar*"}}})]
       (is (= 2 (:total r0)))
       (is (= 1 (:total r1)))
       (is (= "WS baz bar" (:id (first (:hits r1)))))))
+
+  (testing "search-fuzzy"
+    (let [r0 (search {:index test-index-name
+                      :query {:fuzzy {:field "id",
+                                      :value "WS baz baz"}}})
+          r1 (search {:index test-index-name
+                      :query {:fuzzy {:field "id",
+                                      :prefix-len 10
+                                      :value "WS baz baz"}}})]
+      (is (= 1 (:total r0)))
+      (is (= 0 (:total r1)))))
 
   (testing "search-filter-query"
     (let [ret (search {:index test-index-name

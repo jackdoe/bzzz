@@ -106,7 +106,7 @@
                       (if (:id m)
                         (.updateDocument writer ^Term (Term. ^String id-field
                                                              (as-str (:id m)))
-                                         (.build config doc))
+                                         (.build config taxo doc))
                         (.addDocument writer (.build config taxo doc))))))
                 { index true })))
 

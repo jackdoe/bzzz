@@ -652,7 +652,7 @@
     (dotimes [n 100]
       (is (thrown? Throwable
                    (store :index test-index-name
-                          :documents [{:name "zzz" :name_st "aaa@bbb"}
+                          :documents [{:id "_aaa_" :name "zzz" :name_st "aaa@bbb"}
                                       {:name "lll" :name_st "bbb@aaa"}
                                       {:name_no_store_no_index "exception"}]
                           :facets {:name {}

@@ -1,5 +1,5 @@
 (ns bzzz.core
-  (use org.httpkit.server)
+  (use ring.adapter.jetty)
   (use bzzz.util)
   (use bzzz.const)
   (use [clojure.string :only (split join)])
@@ -22,7 +22,6 @@
 (def acceptable-discover-time-diff* (atom const/default-acceptable-discover-time-diff))
 (def discover-interval* (atom const/default-discover-interval))
 (def gc-interval* (atom const/default-gc-interval))
-(def http-threads* (atom const/default-http-threads))
 (def next-gc* (atom 0))
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
@@ -218,11 +217,6 @@
     :default const/default-gc-interval
     :parse-fn #(Integer/parseInt %)
     :validate [ #(>= % 0) "Must be a number >= 0"]]
-   ["-t" "--http-threads NUM-THREADS" "number of http threads"
-    :id :http-threads
-    :default const/default-http-threads
-    :parse-fn #(Integer/parseInt %)
-    :validate [ #(> % 0) "Must be a number > 0"]]
    ["-i" "--identifier 'string'" "identifier used for auto-discover and resolving"
     :id :identifier
     :default const/default-identifier]
@@ -247,13 +241,12 @@
     (reset! acceptable-discover-time-diff* (:acceptable-discover-time-diff options))
     (reset! discover-interval* (:discover-interval options))
     (reset! gc-interval* (:gc-interval options))
-    (reset! http-threads* (:http-threads options))
     (reset! index-directory/identifier* (keyword (:identifier options)))
     (reset! index-directory/root* (:directory options))
     (reset! port* (:port options)))
   (index-directory/initial-read-alias-file)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
-  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--http-threads" @http-threads*)
+  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval*)
   (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
   (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
   (every 1000 #(attempt-gc) (mk-pool) :desc "attempt-gc")
@@ -264,7 +257,7 @@
   (every 10000 #(log/trace "up:" @timer* @index-directory/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
   (repeatedly
    (try
-     (run-server handler {:port @port* :threads @http-threads*})
+     (run-jetty handler {:port @port*})
      (catch Throwable e
        (do
          (log/warn (ex-str e))

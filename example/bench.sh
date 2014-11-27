@@ -14,7 +14,7 @@ curl -XGET -d '{
     "index": "bzzz-bench"
 }' http://localhost:3000/
 
-boom -n 100000 -m GET -d '{
+boom -n 100000 -c 20 -m GET -d '{
     "query": "name:doe"
     "facets": {"name":{}}
     "index": "bzzz-bench"

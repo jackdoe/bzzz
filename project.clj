@@ -1,5 +1,5 @@
 (defproject bzzz "0.1.0-SNAPSHOT"
-  :description "clojure + lucene + ring"
+  :description "clojure + lucene + ring + jetty"
   :url "http://github.com/jackdoe/bzzz"
   :maintainer {:email "jack@sofialondonmoskva.com"}
   :global-vars {*warn-on-reflection* true}
@@ -26,7 +26,7 @@
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [redis.clients/jedis "2.6.0"]
                  [ring/ring-core "1.3.1"]
-                 [netty-ring-adapter "0.4.6"]]
+                 [ring/ring-jetty-adapter "1.3.1"]]
   :java-source-paths ["src/java"]
   :main bzzz.core
   :aot [bzzz.core])

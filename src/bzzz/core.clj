@@ -30,15 +30,15 @@
   (< (- @timer* (get (second than) :update 0)) @acceptable-discover-time-diff*))
 
 (defn not-doing-gc? [than]
-  (let [diff (- @timer* (get (second than) :next-gc-at (+ @timer* 100000)))]
-    (not (< 2 (abs diff))))) ;; regardless if we are 2 seconds before gc
+  (let [diff (- (get (second than) :next-gc-at (+ @timer* 100000)) @timer*)]
+    (not (< (abs diff) 2)))) ;; regardless if we are 2 seconds before gc
                              ;; or 2 seconds after, try to skip this host
 
 (defn possible-hosts [list]
   (let [p (filter #(and (rescent? %1) (not-doing-gc? %1)) list)]
     (if (= 0 (count p))
       (let [more (filter rescent? list)]
-        (log/info "found host after ignoring the non gc ones, dump:" list @timer* @discover-hosts* @peers*)
+        (log/info "found host after ignoring the gcing ones, dump:" list @timer* @discover-hosts* @peers*)
         (first (rand-nth more)))
       (first (rand-nth p)))))
 

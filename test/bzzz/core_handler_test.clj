@@ -6,7 +6,7 @@
         bzzz.core
         bzzz.const
         bzzz.util
-        ring.adapter.jetty
+        org.httpkit.server
         bzzz.index-directory
         bzzz.index-search))
 
@@ -60,13 +60,17 @@
         @(http-client/delete host {:body (json/write-str delete-request)})]
     (jr body)))
 
-(defonce server
-  (run-jetty handler {:port 3000
-                      :join? false}))
+(defonce server (atom nil))
+
+(defn stop-server []
+  (when-not (nil? @server)
+    (@server :timeout 100)
+    (reset! server nil)))
 
 (deftest handle-test
-  (testing "start"
-    (.start server))
+  (testing "start-server"
+    (reset! server (run-server handler {:port 3000 :thread 100}))
+    (println @server))
 
   (testing "discover"
     (discover))
@@ -181,4 +185,4 @@
 
 
   (testing "stop"
-    (.stop server)))
+    (stop-server)))

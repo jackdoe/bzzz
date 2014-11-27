@@ -24,10 +24,12 @@
        (str s#))))
 
 (defn slurp-or-default [io default]
-  (let [s (slurp io)]
-    (if (= (count s) 0)
-      default
-      s)))
+  (if-not io
+    default
+    (let [s (slurp io)]
+      (if (= (count s) 0)
+        default
+        s))))
 
 (defn default-to [x val]
   (if (nil? x)

@@ -257,7 +257,7 @@
              nil
              wrap)
     {:total (.getTotalHits score-collector)
-     :facets (if taxo-reader
+     :facets (if (and taxo-reader (> (count facets) 0))
                (try
                  (let [fc (FastTaxonomyFacetCounts. taxo-reader
                                                     facet-config

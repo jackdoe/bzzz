@@ -38,7 +38,7 @@
   (let [p (filter #(and (rescent? %1) (not-doing-gc? %1)) list)]
     (if (= 0 (count p))
       (let [more (filter rescent? list)]
-        (log/info "found host after ignoring the gcing ones, dump:" list @timer* @discover-hosts* @peers*)
+        (log/debug "found host after ignoring the gcing ones, dump:" list @timer* @discover-hosts* @peers*)
         (first (rand-nth more)))
       (first (rand-nth p)))))
 

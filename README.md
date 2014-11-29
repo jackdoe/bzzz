@@ -396,6 +396,47 @@ depending on your application, tolerance of data loss, IO requirements and real-
 
 #### clojure custom lucene queries
 
+## query and query settings
+queries will return a set of documents, using the query settings you can controll page offset, size, which fields you want to retrieve, which aggregations(facets) you want to be computed in the resultset, sort order, explain and analyzer.
+
+### query settings
+
+* size `{"query":{...}, "size":10 }`
+* page `{"query":{...}, "page":3 }`
+* fields `{"query":{...},"fields":{"id":true,"name":true} }`
+* highlight `{"query":{...}, "highlight":{"fields":["name"]} }`
+* facets `{"query":{...},"facets":{"author":{ "size": 5 }} ... }`
+* analyzer
+* sort `{"query":{...}, "sort":[ {"field":"custom_order_int","reverse":true}, _score ....}`
+* explain `{"query":{...}, "explain":true }`
+### queries
+
+#### term
+
+#### range
+
+#### filtered
+
+#### bool
+
+#### dis-max
+
+#### query-parser
+
+#### wildcard
+
+#### match-all
+
+#### constant-score
+
+#### custom-score
+
+#### expr-score
+
+#### random-score
+
+#### fuzzy
+
 ### TODO:
 * write proper documentation
 * more examples

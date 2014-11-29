@@ -199,7 +199,7 @@
     (catch Exception e
       (log/warn (as-str e)))))
 
-(defn use-writer [index callback]
+(defn use-writer [index force-merge callback]
   (let [writer (new-index-writer index)
         taxo (new-taxo-writer index)]
     (try
@@ -209,7 +209,8 @@
         (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)]
           (.commit taxo)
           (.commit writer)
-          (.forceMerge writer 1)
+          (if (> force-merge 0)
+            (.forceMerge writer (int-or-parse force-merge)))
           rc))
       (catch Exception e
         (do
@@ -225,7 +226,7 @@
 
 (defn use-writer-all [index callback]
   (doseq [name (index-name-matching index)]
-    (use-writer name callback)))
+    (use-writer name 1 callback)))
 
 (defn bootstrap-indexes []
   (try

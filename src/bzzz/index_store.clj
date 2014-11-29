@@ -86,8 +86,8 @@
     (add-facet-field-single doc dim val)))
 
 (defn store
-  [& {:keys [index documents analyzer facets shard alias-set alias-del]
-      :or {documents [] analyzer nil facets {} shard 0 alias-set nil alias-del nil}}]
+  [& {:keys [index documents analyzer facets shard alias-set alias-del force-merge]
+      :or {documents [] analyzer nil facets {} shard 0 alias-set nil alias-del nil force-merge 0}}]
 
   (if (or alias-set alias-del)
     (update-alias index alias-del alias-set))
@@ -96,6 +96,7 @@
     (reset! analyzer* (parse-analyzer analyzer)))
 
   (use-writer (sharded (resolve-alias index) shard)
+              force-merge
               (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
                 (let [config (get-facet-config facets)]
                   (doseq [m documents]

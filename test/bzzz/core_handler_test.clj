@@ -21,6 +21,7 @@
 
 (def store-request
   {:index test-index-name
+   :force-merge 1
    :documents [{:name "jack doe" :popularity_double 300000.281}
                {:name "jack doe" :popularity_double 30000.284}
                {:name "john doe" :popularity_double 3000.283}

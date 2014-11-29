@@ -206,11 +206,12 @@
       (do
         (.prepareCommit writer)
         (.prepareCommit taxo)
-        (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)]
+        (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)
+              force-merge (int-or-parse force-merge)]
           (.commit taxo)
           (.commit writer)
           (if (> force-merge 0)
-            (.forceMerge writer (int-or-parse force-merge)))
+            (.forceMerge writer force-merge))
           rc))
       (catch Exception e
         (do

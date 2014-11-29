@@ -24,6 +24,9 @@
     (if-not (= 0 expected)
       (is (= "zzz" (:name (first (:hits ret))))))))
 
+(defn leaves []
+  (:leaves (:reader (get (index-stat) (sharded test-index-name 0)))))
+
 (defn get-path ^File [p shard]
   (io/file (as-str default-root) (as-str default-identifier) (str (as-str p) "-shard-" (int-or-parse shard))))
 
@@ -219,7 +222,6 @@
           num-docs (:docs (get (index-stat) (sharded test-index-name 0)))]
       (is (= (:total ret) num-docs))
       (is (> num-docs 0))))
-
 
   (testing "search-random-score-query"
     (let [ret (search {:index test-index-name
@@ -664,6 +666,30 @@
                          :facets {:name {}, :name_st {}}
                          :query {:term {:field "name", :value "zzz"}}})]
         (is (= 0 (:total ret))))))
+
+
+  (testing "leaves"
+    (let [storer (fn [force-merge]
+                   (store :index test-index-name
+                          :documents [{:id "_aaabbb_" :name_leaves "zzz"}
+                                      {:name_leaves "lll"}]
+                          :force-merge force-merge
+                          :facets {:name_leaves {:use-analyzer "bzbz-used-only-for-facet"}}
+                          :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
+                   (refresh-search-managers))]
+
+      (storer 0)
+      (is (= 1 (leaves)))
+      (storer 0)
+      (is (= 2 (leaves)))
+      (storer 0)
+      (is (= 3 (leaves)))
+      (storer 1)
+      (is (= 1 (leaves)))
+      (storer 0)
+      (is (= 2 (leaves)))
+      (storer 1)
+      (is (= 1 (leaves)))))
 
   (testing "facets"
     (dotimes [n 1000]

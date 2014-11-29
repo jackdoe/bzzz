@@ -405,7 +405,7 @@ queries will return a set of documents, using the query settings you can control
 * page `{"query":{...}, "page":3 }`
 * fields `{"query":{...},"fields":{"id":true,"name":true} }`
 * highlight `{"query":{...}, "highlight":{"fields":["name"]} }`
-* facets `{"query":{...},"facets":{"author":{ "size": 5 }} ... }`
+* facets `{"query":{...},"facets":{"author":{ "size": 5 }...} ... }`
 * analyzer
 * sort `{"query":{...}, "sort":[ {"field":"custom_order_int","reverse":true}, _score ....}`
 * explain `{"query":{...}, "explain":true }`

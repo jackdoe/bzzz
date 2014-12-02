@@ -10,4 +10,4 @@
 (def default-acceptable-discover-time-diff 20)
 (def default-discover-interval 10)
 (def default-gc-interval 1200)
-(def location-field "location")
+(def location-field "__location")

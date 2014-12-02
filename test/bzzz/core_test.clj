@@ -694,7 +694,7 @@
   (testing "geo"
     (let [storer (fn [shape]
                    (store :index test-index-name
-                          :documents [{:id (str "_aa_bb_" shape) :name_geo "zzz" :location shape}]
+                          :documents [{:id (str "_aa_bb_" shape) :name_geo "zzz" :__location shape}]
                           :facets {:name_geo {:use-analyzer "bzbz-used-only-for-facet"}}
                           :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
                    (refresh-search-managers))

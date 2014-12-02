@@ -534,8 +534,8 @@
                      :explain true
                      :query {:custom-score {:query {:range {:field "lat_double"}}
                                             :expression {:expression "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
-                                                       :bindings ["lat_double"
-                                                                  "lon_double"]}}}})
+                                                         :bindings ["lat_double"
+                                                                    "lon_double"]}}}})
           h (:hits r)]
       (is (= -0.0 (:_score (nth h 0))))
       (is (= (float -2.6472278) (float (:_score (nth h 1)))))
@@ -690,6 +690,26 @@
       (is (= 2 (leaves)))
       (storer 1)
       (is (= 1 (leaves)))))
+
+  (testing "geo"
+    (let [storer (fn [shape]
+                   (store :index test-index-name
+                          :documents [{:id (str "_aa_bb_" shape) :name_geo "zzz" :location shape}]
+                          :facets {:name_geo {:use-analyzer "bzbz-used-only-for-facet"}}
+                          :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
+                   (refresh-search-managers))
+          searcher (fn [spatial]
+                     (search {:index test-index-name
+                              :facets {:name_geo {}}
+                              :spatial-filter spatial
+                              :query {:term {:field "name_geo", :value "zzz"}}}))]
+      (storer "POINT(60.9289094 -50.7693246)")
+      (storer "POINT(10.9289094 -10.7693246)")
+      (is (= 2 (:total (searcher nil))))
+      (is (= 2 (:count (first (:name_geo (:facets (searcher nil)))))))
+      (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(10 -10),2))"))))
+      (is (= 0 (:total (searcher "Intersects(BUFFER(POINT(10 -10),0))"))))
+      (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(60 -49),10))"))))))
 
   (testing "facets"
     (dotimes [n 1000]

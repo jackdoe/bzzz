@@ -5,6 +5,7 @@
   (use bzzz.query)
   (use bzzz.index-directory)
   (use bzzz.index-facet-common)
+  (use bzzz.index-spatial)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)
            (java.lang OutOfMemoryError)
@@ -64,10 +65,14 @@
           (.add document (generator v))))
       (.add document (generator value)))))
 
-(defn map->document [hmap]
+
+(defn map->document [hmap spatial-strategy]
   (let [document (Document.)]
     (doseq [[key value] hmap]
-      (add-field document (as-str key) value))
+      (let [key (as-str key)]
+        (if (= location-field key)
+          (add-location document value spatial-strategy)
+          (add-field document key value))))
     document))
 
 (defn add-facet-field-single [^Document doc dim val]
@@ -98,9 +103,10 @@
   (use-writer (sharded (resolve-alias index) shard)
               force-merge
               (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
-                (let [config (get-facet-config facets)]
+                (let [config (get-facet-config facets)
+                      spatial-strategy (new-spatial-strategy)]
                   (doseq [m documents]
-                    (let [doc (map->document m)]
+                    (let [doc (map->document m spatial-strategy)]
                       (doseq [[dim f-info] facets]
                         (if-let [f-val ((keyword dim) m)]
                           (add-facet-field doc dim f-val f-info @analyzer*)))

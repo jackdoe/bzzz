@@ -297,6 +297,9 @@ you can also create numeric fields (used with range queries)
 * _double
 (the range query looks like: `{"query":{"range":{"field":"age_integer","min":40,"max"
 
+* "location" - this field name is a bit spatial(pun!), it will try to read shape from it like `POINT(60.9289094 -50.7693246)`
+and so you will be able to do spatial-filter operations when query (at the moment only filtering is supported)
+
 so *any* BZZZ process can just start reading/writing into any index, without a care in the world. you can also just copy a bunch of lucene files around, and everything will work, this convension is also very easy to be copied in java, so you can easilly share same index with different lucene writer.
 
 ## directories / writers / searchers

@@ -6,8 +6,10 @@
   (use bzzz.expr)
   (use bzzz.index-facet-common)
   (use bzzz.index-directory)
+  (use bzzz.index-spatial)
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)
+           (org.apache.lucene.spatial.query SpatialOperation SpatialArgs)
            (org.apache.lucene.expressions.js JavascriptCompiler)
            (org.apache.lucene.expressions Expression SimpleBindings)
            (org.apache.lucene.facet FacetsConfig FacetField FacetsCollector LabelAndValue)
@@ -15,6 +17,7 @@
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyReader)
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.document Document)
+           (org.apache.lucene.search Filter)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexReader Term IndexableField)
@@ -239,14 +242,18 @@
 (defn shard-search
   [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader
              ^Query query ^Analyzer analyzer
-             page size explain highlight facets fields facet-config sort]
+             page size explain highlight facets fields facet-config sort spatial-filter]
       :or {page 0, size default-size, explain false,
-           analyzer nil, facets nil, fields nil sort nil}}]
+           analyzer nil, facets nil, fields nil sort nil
+           spatial-filter nil}}]
   (let [ms-start (time-ms)
         highlighter (make-highlighter query searcher highlight analyzer)
         pq-size (+ (* page size) size)
         score-collector (get-score-collector sort pq-size)
         facet-collector (FacetsCollector.)
+        spatial-filter (if spatial-filter
+                         ^Filter (make-spatial-filter spatial-filter)
+                         nil)
         wrap (MultiCollector/wrap
               ^"[Lorg.apache.lucene.search.Collector;"
               (into-array Collector
@@ -254,7 +261,7 @@
                            facet-collector]))]
     (.search searcher
              query
-             nil
+             spatial-filter
              wrap)
     {:total (.getTotalHits score-collector)
      :facets (if (and taxo-reader (> (count facets) 0))
@@ -314,6 +321,7 @@
                                                          :page (get input :page 0)
                                                          :size (get input :size default-size)
                                                          :sort (:sort input)
+                                                         :spatial-filter (get input :spatial-filter nil)
                                                          :facets facets
                                                          :explain (get input :explain false)
                                                          :fields (:fields input))))))]

@@ -92,15 +92,18 @@
                       [])]))))
     (constantly nil)))
 
-(defn input->sort [input]
+(defn input->sort [input searcher]
   (let [input (if (vector? input) input [input])]
     (Sort. ^"[Lorg.apache.lucene.search.SortField;"
            (into-array SortField (into [] (for [obj input]
-                                            (name->sort-field obj)))))))
+                                            (let [sort (name->sort-field obj)]
+                                              (if (= SortField$Type/REWRITEABLE (.getType sort))
+                                                (.rewrite sort searcher)
+                                                sort))))))))
 
-(defn get-score-collector ^TopDocsCollector [input pq-size]
+(defn get-score-collector ^TopDocsCollector [input pq-size searcher]
   (if input
-    (TopFieldCollector/create (input->sort input)
+    (TopFieldCollector/create (input->sort input searcher)
                               pq-size
                               true
                               true
@@ -249,7 +252,7 @@
   (let [ms-start (time-ms)
         highlighter (make-highlighter query searcher highlight analyzer)
         pq-size (+ (* page size) size)
-        score-collector (get-score-collector sort pq-size)
+        score-collector (get-score-collector sort pq-size searcher)
         facet-collector (FacetsCollector.)
         spatial-filter (if spatial-filter
                          ^Filter (make-spatial-filter spatial-filter)

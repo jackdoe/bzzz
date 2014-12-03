@@ -692,24 +692,49 @@
       (is (= 1 (leaves)))))
 
   (testing "geo"
-    (let [storer (fn [shape]
+    (let [storer (fn [shape int]
                    (store :index test-index-name
-                          :documents [{:id (str "_aa_bb_" shape) :name_geo "zzz" :__location shape}]
+                          :documents [{:id (str "_aa_bb_" shape) :sort_int int :name_geo "zzz" :__location shape}]
                           :facets {:name_geo {:use-analyzer "bzbz-used-only-for-facet"}}
                           :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
                    (refresh-search-managers))
-          searcher (fn [spatial]
+          searcher (fn [spatial reverse]
                      (search {:index test-index-name
+                              :explain true
+                              :sort [{:field "__location",
+                                      :reverse reverse
+                                      :point "POINT(10 -10)"},
+                                     {:field "sort_int"
+                                      :order "asc"},
+                                     "_score"]
                               :facets {:name_geo {}}
                               :spatial-filter spatial
                               :query {:term {:field "name_geo", :value "zzz"}}}))]
-      (storer "POINT(60.9289094 -50.7693246)")
-      (storer "POINT(10.9289094 -10.7693246)")
-      (is (= 2 (:total (searcher nil))))
-      (is (= 2 (:count (first (:name_geo (:facets (searcher nil)))))))
-      (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(10 -10),2))"))))
-      (is (= 0 (:total (searcher "Intersects(BUFFER(POINT(10 -10),0))"))))
-      (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(60 -49),10))"))))))
+      (storer "POINT(60.9289094 -50.7693246)" 0)
+      (storer "POINT(10.9289094 -10.7693246)" 2)
+      (storer "POINT(10.9289094 -10.7693246) " 1)
+      (storer "POINT(11.9289094 -11.7693246)" 10)
+      (is (= 4 (:total (searcher nil false))))
+      (is (= 1.1944379994247891 (:value (first (:_sort (first (:hits (searcher nil false))))))))
+
+      (is (= 4 (:count (first (:name_geo (:facets (searcher nil false)))))))
+      (let [r (searcher "Intersects(BUFFER(POINT(10 -10),10))" false)
+            r1 (searcher "Intersects(BUFFER(POINT(10 -10),10))" true)]
+        (is (= 3 (:total r)))
+        (is (= 3 (:total r1)))
+        (is (= 1.1944379994247891 (:value (first (:_sort (nth (:hits r) 0))))))
+        (is (= 1.1944379994247891 (:value (first (:_sort (nth (:hits r) 1))))))
+        (is (= 2.591949181622539 (:value (first (:_sort (nth (:hits r) 2))))))
+        (is (= 2.591949181622539 (:value (first (:_sort (nth (:hits r1) 0))))))
+        (is (= 1.1944379994247891 (:value (first (:_sort (nth (:hits r1) 1))))))
+        (is (= 1.1944379994247891 (:value (first (:_sort (nth (:hits r1) 2))))))
+
+        (let [fs (:_sort (first (:hits r)))
+              ls (:_sort (first (:hits r1)))]
+          (is (= 1 (:value (second fs))))
+          (is (= 10 (:value (second ls))))))
+      (is (= 0 (:total (searcher "Intersects(BUFFER(POINT(10 -10),0))" false))))
+      (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(60 -49),10))" false))))))
 
   (testing "facets"
     (dotimes [n 1000]

@@ -11,6 +11,7 @@
            (org.apache.lucene.analysis.core KeywordTokenizer WhitespaceTokenizer LetterTokenizer LowerCaseFilter)
            (org.apache.lucene.analysis Analyzer TokenStream CharFilter Analyzer$TokenStreamComponents)
            (org.apache.lucene.analysis.ngram NGramTokenizer NGramTokenFilter EdgeNGramTokenFilter EdgeNGramTokenizer)
+           (org.apache.lucene.analysis.payloads DelimitedPayloadTokenFilter IntegerEncoder)
            (org.apache.lucene.analysis.standard StandardAnalyzer)
            (org.apache.lucene.analysis.miscellaneous PerFieldAnalyzerWrapper)
            (org.apache.lucene.analysis.core WhitespaceAnalyzer KeywordAnalyzer)
@@ -66,7 +67,6 @@
                                char-filter
                                (int (need :min_gram obj "need min_gram"))
                                (int (need :max_gram obj "need max_gram"))))))
-
 (defn gen-token-filter [^TokenStream source obj]
   (let [type (need :type obj "need tokenfilter type: 'custom|whitespace|keyword..'")]
     (case (as-str type)
@@ -78,6 +78,9 @@
                               (int (need :max obj "need max length")))
       "position" (PositionFilter. source (get obj :position-increment 0))
       "reverse" (ReverseStringFilter. *version* source)
+      "delimited-payload" (DelimitedPayloadTokenFilter. source
+                                                        DelimitedPayloadTokenFilter/DEFAULT_DELIMITER
+                                                        (IntegerEncoder.))
       "edge-ngram" (EdgeNGramTokenFilter. *version*
                                           source
                                           (int (need :min_gram obj "need min_gram"))
@@ -91,7 +94,8 @@
 (defn to-lucene-token-filter [source filters]
   (if (= (count filters) 0)
     source
-    (to-lucene-token-filter (gen-token-filter source (first filters)) (next filters))))
+    (to-lucene-token-filter (gen-token-filter source (first filters))
+                            (next filters))))
 
 ;; bloody hell this is awesome!
 (defn token-filter-chain [obj]

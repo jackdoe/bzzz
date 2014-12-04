@@ -9,6 +9,7 @@
   (:require [bzzz.index-directory :as index-directory])
   (:require [bzzz.index-store :as index-store])
   (:require [bzzz.analyzer :as analyzer])
+  (:require [bzzz.query :as query])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
@@ -207,6 +208,9 @@
     :default const/default-acceptable-discover-time-diff
     :parse-fn #(Integer/parseInt %)
     :validate [ #(> % 0) "Must be a number > 0"]]
+   ["-u" "--allow-unsafe-queries" "allow unsafe queries"
+    :id :allow-unsafe-queries
+    :default const/default-allow-unsafe-queries]
    ["-r" "--discover-interval NUM-IN-SECONDS" "exchange information with the discover hosts every N seconds"
     :id :discover-interval
     :default const/default-discover-interval
@@ -242,11 +246,12 @@
     (reset! discover-interval* (:discover-interval options))
     (reset! gc-interval* (:gc-interval options))
     (reset! index-directory/identifier* (keyword (:identifier options)))
+    (reset! query/allow-unsafe-queries* (:allow-unsafe-queries options))
     (reset! index-directory/root* (:directory options))
     (reset! port* (:port options)))
   (index-directory/initial-read-alias-file)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
-  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval*)
+  (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--allow-unsafe-queries" @query/allow-unsafe-queries*)
   (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
   (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
   (every 1000 #(attempt-gc) (mk-pool) :desc "attempt-gc")

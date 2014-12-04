@@ -7,6 +7,7 @@
   (require bzzz.queries.range)
   (require bzzz.queries.random-score)
   (require bzzz.queries.expr-score)
+  (require bzzz.queries.term-payload-clj-score)
   (require bzzz.queries.custom-score)
   (require bzzz.queries.constant-score)
   (require bzzz.queries.term)
@@ -19,6 +20,9 @@
 
 (declare resolve-and-call)
 (def unacceptable-method-pattern (re-pattern "[^a-z\\.-]"))
+(def allow-unsafe-queries* (atom false))
+
+(def unsafe-queries {"term-payload-clj-score" true})
 
 (defn extract-analyzer [a]
   (if (nil? a)
@@ -38,5 +42,8 @@
 
 (defn resolve-and-call [key val analyzer]
   (let [sanitized (sanitize key unacceptable-method-pattern)
-        method (str "bzzz.queries." sanitized "/parse")]
-    (call method parse-query val analyzer)))
+        parse-method (str "bzzz.queries." sanitized "/parse")]
+    (if (and (not @allow-unsafe-queries*)
+             (get unsafe-queries sanitized))
+      (throw (Throwable. (str "request for unsafe query <" sanitized ">, run the server with --allow-unsafe-queries to execute it")))
+      (call parse-method parse-query val analyzer))))

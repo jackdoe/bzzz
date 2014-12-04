@@ -2,6 +2,7 @@
   (:import (java.io StringReader File))
   (:require [clojure.java.io :as io])
   (:require [clojure.data.json :as json])
+  (:require [bzzz.query :as query])
   (:use clojure.test
         bzzz.core
         bzzz.util
@@ -20,7 +21,6 @@
                                             :default-operator :and
                                             :default-field "name_st_again"}}})]
     (is (= expected (:total ret)))
-
     (if-not (= 0 expected)
       (is (= "zzz" (:name (first (:hits ret))))))))
 
@@ -705,7 +705,7 @@
                                       :reverse reverse
                                       :point "POINT(10 -10)"},
                                      {:field "sort_int"
-                                      :order "asc"},
+                                      :order "asc"}
                                      "_score"]
                               :facets {:name_geo {}}
                               :spatial-filter spatial
@@ -735,6 +735,31 @@
           (is (= 10 (:value (second ls))))))
       (is (= 0 (:total (searcher "Intersects(BUFFER(POINT(10 -10),0))" false))))
       (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(60 -49),10))" false))))))
+
+  (testing "payload"
+    (let [storer (fn [payload]
+                   (store :index test-index-name
+                          :documents [{:id (str "_aa_bb_" payload) :name_payload (str "zzz|" payload)}]
+                          :facets {:name_payload {:use-analyzer "name_payload"}}
+                          :analyzer {:name_payload {:type "custom"
+                                                    :tokenizer "whitespace"
+                                                    :filter [{:type "delimited-payload"
+                                                              :delimiter "|"}]}})
+                   (refresh-search-managers))
+          searcher (fn []
+                     (search {:index test-index-name
+                              :explain true
+                              :facets {:name_payload {}}
+                              :query {:term-payload-clj-score {:field "name_payload", :value "zzz"
+                                                               :clj-eval "(fn [payload] (+ 10 payload))"}}}))]
+      (storer "255")
+      (storer "1024")
+      (is (thrown? Throwable ;; confirm that throws exception when unsafe queries are disabled
+                   (searcher)))
+      (reset! query/allow-unsafe-queries* true)
+      (let [r (searcher)]
+        (is (= 1034.0 (:_score (first (:hits r)))))
+        (is (= 265.0 (:_score (second (:hits r))))))))
 
   (testing "facets"
     (dotimes [n 1000]

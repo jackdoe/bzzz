@@ -754,12 +754,24 @@
                                                                :clj-eval "(fn [payload] (+ 10 payload))"}}}))]
       (storer "255")
       (storer "1024")
+      (storer "1001")
       (is (thrown? Throwable ;; confirm that throws exception when unsafe queries are disabled
                    (searcher)))
       (reset! query/allow-unsafe-queries* true)
       (let [r (searcher)]
         (is (= 1034.0 (:_score (first (:hits r)))))
-        (is (= 265.0 (:_score (second (:hits r))))))))
+        (is (= 1011.0 (:_score (second (:hits r)))))
+        (is (= 265.0 (:_score (last (:hits r))))))
+      (let [r (search {:index test-index-name
+                       :explain true
+                       :facets {:name_payload {}}
+                       :query {:no-zero-score
+                               {:query {:term-payload-clj-score
+                                        {:field "name_payload", :value "zzz"
+                                         :clj-eval "(fn [payload] (if (> payload 1010) 0 (+ 10 payload)))"}}}}})]
+        (is (= 1011.0 (:_score (first (:hits r)))))
+        (is (= 265.0 (:_score (second (:hits r)))))
+        (is (= 2 (:total r))))))
 
   (testing "facets"
     (dotimes [n 1000]

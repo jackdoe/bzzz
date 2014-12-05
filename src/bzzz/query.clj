@@ -16,6 +16,7 @@
   (require bzzz.queries.dis-max)
   (require bzzz.queries.wildcard)
   (require bzzz.queries.fuzzy)
+  (require bzzz.queries.no-zero-score)
   (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)))
 
 (declare resolve-and-call)

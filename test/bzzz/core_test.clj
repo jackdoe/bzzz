@@ -739,7 +739,7 @@
   (testing "payload"
     (let [storer (fn [payload]
                    (store :index test-index-name
-                          :documents [{:id (str "_aa_bb_" payload) :name_payload (str "zzz|" payload)}]
+                          :documents [{:id (str "_aa_bb_" payload) :name_payload (str "zzzxxx|" payload)}]
                           :facets {:name_payload {:use-analyzer "name_payload"}}
                           :analyzer {:name_payload {:type "custom"
                                                     :tokenizer "whitespace"
@@ -750,7 +750,7 @@
                      (search {:index test-index-name
                               :explain true
                               :facets {:name_payload {}}
-                              :query {:term-payload-clj-score {:field "name_payload", :value "zzz"
+                              :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
                                                                :clj-eval "(fn [payload] (+ 10 payload))"}}}))]
       (storer "255")
       (storer "1024")
@@ -762,13 +762,33 @@
         (is (= 1034.0 (:_score (first (:hits r)))))
         (is (= 1011.0 (:_score (second (:hits r)))))
         (is (= 265.0 (:_score (last (:hits r))))))
-      (let [r (search {:index test-index-name
+
+      (let [clj-score {:term-payload-clj-score
+                       {:field "name_payload", :value "zzzxxx"
+                        :clj-eval "
+;; query eval score expression
+;; also testing for comments
+;; seems to work.
+(fn [payload]
+  (let [max-thresh (fn [x] (> x 1010))]
+    (if (max-thresh payload)
+      0
+      (+ 10 payload))))
+                        "}}
+            r (search {:index test-index-name
                        :explain true
                        :facets {:name_payload {}}
-                       :query {:no-zero-score
-                               {:query {:term-payload-clj-score
-                                        {:field "name_payload", :value "zzz"
-                                         :clj-eval "(fn [payload] (if (> payload 1010) 0 (+ 10 payload)))"}}}}})]
+                       :query {:no-zero-score {:query clj-score}}})
+            r1 (search {:index test-index-name
+                        :explain true
+                        :facets {:name_payload {}}
+                        :query {:bool {:must [{:no-norm {:query {:constant-score {:query {:term {:field "name_payload"
+                                                                                                 :value "zzzxxx"}}
+                                                                                  :boost 5}}}}
+                                              {:no-zero-score {:query clj-score}}]}}})]
+        (is (= 1016.0 (:_score (first (:hits r1)))))
+        (is (= 270.0 (:_score (second (:hits r1)))))
+        (is (= 2 (:total r1)))
         (is (= 1011.0 (:_score (first (:hits r)))))
         (is (= 265.0 (:_score (second (:hits r)))))
         (is (= 2 (:total r))))))

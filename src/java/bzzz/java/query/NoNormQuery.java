@@ -4,22 +4,22 @@ import org.apache.lucene.search.*;
 import org.apache.lucene.util.*;
 import java.io.*;
 
-public class NoZeroQuery extends Query {
+public class NoNormQuery extends Query {
     public Query query;
 
-    public NoZeroQuery(Query query) {
+    public NoNormQuery(Query query) {
         this.query = query;
     }
 
     @Override
-    public String toString(String field) { return "no-zero:" + query.toString(field); }
+    public String toString(String field) { return "no-norm:" + query.toString(field); }
 
     @Override
     public Weight createWeight(IndexSearcher searcher) throws IOException {
         final Weight weight = query.createWeight(searcher);
         return new Weight() {
             @Override
-            public String toString() { return "no-zero:" + weight.toString(); }
+            public String toString() { return "no-norm:" + weight.toString(); }
 
             @Override
             public Query getQuery() { return weight.getQuery(); }
@@ -28,7 +28,7 @@ public class NoZeroQuery extends Query {
             public float getValueForNormalization() throws IOException { return weight.getValueForNormalization(); }
 
             @Override
-            public void normalize(float queryNorm, float topLevelBoost) { weight.normalize(queryNorm,topLevelBoost); }
+            public void normalize(float queryNorm, float topLevelBoost) { weight.normalize(1,topLevelBoost); };
 
             @Override
             public Explanation explain(AtomicReaderContext context, int doc) throws IOException {
@@ -41,7 +41,6 @@ public class NoZeroQuery extends Query {
                 if (scorer == null)
                     return scorer;
                 return new Scorer(weight) {
-                    float current_score = -1f;
                     @Override
                     public int docID() { return scorer.docID(); }
 
@@ -49,36 +48,19 @@ public class NoZeroQuery extends Query {
                     public int freq() throws IOException { return scorer.freq(); }
 
                     @Override
-                    public int nextDoc() throws IOException {
-                        while(true) {
-                            int n = scorer.nextDoc();
-                            if (n == DocIdSetIterator.NO_MORE_DOCS)
-                                return n;
-                            current_score = scorer.score();
-                            if (current_score != 0)
-                                return n;
-                        }
-                    }
-                    @Override
-                    public int advance(int target) throws IOException {
-                        int n = scorer.advance(target);
-                        if (n == DocIdSetIterator.NO_MORE_DOCS)
-                            return n;
-                        current_score = scorer.score();
-                        if (current_score != 0)
-                            return n;
-                        // if the score is 0, we just return the next non-zero next doc
-                        return nextDoc();
-                    }
+                    public int nextDoc() throws IOException { return scorer.nextDoc(); }
 
                     @Override
-                    public float score() throws IOException { return current_score; }
+                    public int advance(int target) throws IOException { return scorer.advance(target); };
+
+                    @Override
+                    public float score() throws IOException { return scorer.score(); }
 
                     @Override
                     public long cost() { return scorer.cost(); }
 
                     @Override
-                    public String toString() { return "no-zero:" + scorer.toString(); }
+                    public String toString() { return "no-norm:" + scorer.toString(); }
                 };
             }
         };

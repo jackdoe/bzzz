@@ -16,9 +16,8 @@ public class NoZeroQuery extends Query {
 
     @Override
     public Weight createWeight(IndexSearcher searcher) throws IOException {
+        final Weight weight = query.createWeight(searcher);
         return new Weight() {
-            final public Weight weight = query.createWeight(searcher);
-
             @Override
             public String toString() { return "no-zero:" + weight.toString(); }
 

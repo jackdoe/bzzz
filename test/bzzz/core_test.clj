@@ -677,7 +677,6 @@
                           :facets {:name_leaves {:use-analyzer "bzbz-used-only-for-facet"}}
                           :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
                    (refresh-search-managers))]
-
       (storer 0)
       (is (= 1 (leaves)))
       (storer 0)
@@ -792,6 +791,27 @@
         (is (= 1011.0 (:_score (first (:hits r)))))
         (is (= 265.0 (:_score (second (:hits r)))))
         (is (= 2 (:total r))))))
+
+  (testing "must-refresh"
+    (let [storer (fn [payload]
+                   (store :index test-index-name
+                          :documents [{:id (str "_must_refresh_aa_bb_" payload) :name_mr_payload (str "mr_zzzxxx|" payload)}]
+
+                          :analyzer {:name_mr_payload {:type "custom"
+                                                       :tokenizer "whitespace"
+                                                       :filter [{:type "delimited-payload"
+                                                                 :delimiter "|"}]}}))
+          searcher (fn [mr]
+                     (search {:index test-index-name
+                              :explain true
+                              :must-refresh mr
+                              :query {:term {:field "name_mr_payload" :value "mr_zzzxxx"}}}))]
+      (storer "255")
+      (is (= 0 (:total (searcher false))))
+      (refresh-search-managers)
+      (is (= 1 (:total (searcher false))))
+      (storer "300")
+      (is (= 2 (:total (searcher true))))))
 
   (testing "facets"
     (dotimes [n 1000]

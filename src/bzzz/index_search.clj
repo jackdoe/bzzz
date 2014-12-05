@@ -312,6 +312,7 @@
         facet-config (get-facet-config facets)        ;; fixme: check if it is thread safe
         futures (into [] (for [shard (index-name-matching (resolve-alias index))]
                            (use-searcher shard
+                                         (get input :must-refresh false)
                                          (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                            (shard-search :searcher searcher
                                                          :taxo-reader taxo-reader

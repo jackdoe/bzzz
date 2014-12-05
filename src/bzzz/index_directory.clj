@@ -24,6 +24,7 @@
 (declare try-close-manager-taxo)
 (declare try-create-prefix)
 (declare read-alias-file)
+(declare refresh-searcher-locked)
 
 (def root* (atom default-root))
 (def alias* (atom {}))
@@ -153,8 +154,8 @@
     (try-close-manager-taxo manager taxo))
   (reset! name->smanager-taxo* {}))
 
-(defn use-searcher [index callback]
-  (let [[^SearcherManager manager taxo] (get-smanager-taxo index)
+(defn use-searcher [index refresh callback]
+  (let [[^SearcherManager manager taxo] (get-smanager-taxo index refresh)
         searcher ^IndexSearcher (.acquire manager)]
     (try
         (callback searcher taxo)
@@ -233,18 +234,35 @@
   (try
     (doseq [dir (sub-directories)]
       (try
-        (get-smanager-taxo (.getName ^File dir))
+        (get-smanager-taxo (.getName ^File dir) false)
         (catch Exception e
           (log/warn (ex-str e)))))
     (catch Exception e
       (log/warn (ex-str e)))))
 
-(defn get-smanager-taxo [index]
+(defn get-smanager-taxo [index refresh]
   (locking name->smanager-taxo*
     (when (nil? (@name->smanager-taxo* index))
       (swap! name->smanager-taxo* assoc index [(new-searcher-manager index)
                                                (try-new-taxo-reader index)]))
-    (@name->smanager-taxo* index)))
+    (let [[manager taxo] (@name->smanager-taxo* index)]
+      (when refresh
+        (do
+          (refresh-searcher-locked index manager taxo)))
+      [manager taxo])))
+
+(defn refresh-searcher-locked [index ^SearcherManager manager ^DirectoryTaxonomyReader taxo]
+  (log/debug "refreshing: " index " " manager " " taxo)
+  (try
+    (do
+      (.maybeRefresh manager)
+      (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
+        (swap! name->smanager-taxo* assoc-in [index 1] changed)))
+    (catch Throwable e
+      (do
+        (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
+        (try-close-manager-taxo manager taxo)
+        (swap! name->smanager-taxo* dissoc index)))))
 
 (defn refresh-search-managers []
   (let [start (time-ms)]
@@ -252,17 +270,7 @@
     (locking name->smanager-taxo*
       (doseq [[index [^SearcherManager manager
                       ^DirectoryTaxonomyReader taxo]] @name->smanager-taxo*]
-        (log/debug "refreshing: " index " " manager)
-        (try
-          (do
-            (.maybeRefresh manager)
-            (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
-              (swap! name->smanager-taxo* assoc-in [index 1] changed)))
-          (catch Throwable e
-            (do
-              (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
-              (try-close-manager-taxo manager taxo)
-              (swap! name->smanager-taxo* dissoc index))))))
+        (refresh-searcher-locked index manager taxo)))
     (log/debug "refreshing took" (time-took start))))
 
 (defn shutdown []
@@ -274,6 +282,7 @@
 (defn index-stat []
   (into {} (for [[name [manager taxo]] @name->smanager-taxo*]
              [name (use-searcher name
+                                 false
                                  (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                    (let [reader (.getIndexReader searcher)]
                                      {:docs (.numDocs reader)

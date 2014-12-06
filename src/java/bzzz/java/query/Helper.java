@@ -20,6 +20,8 @@ public class Helper {
     }
     public static int advance_and_next_position(DocsAndPositionsEnum postings, int target) throws IOException {
         int n = postings.advance(target);
+        // XXX: in case n != target, maybe we should not do nextPosition()
+        //      it will be ignored anyway
         if (n != DocsAndPositionsEnum.NO_MORE_DOCS)
             postings.nextPosition();
         return n;

@@ -22,9 +22,9 @@ curl -XGET -d '{
     "field": "name",
     "value": "doe",
     "clj-eval": "
-     (fn [payload local-state fc doc-id]
-       (get @local-state doc-id)
-;;       (swap! local-state assoc doc-id payload)
+     (fn [payload ^java.util.Map local-state fc doc-id]
+       (.get local-state doc-id)
+       (.put local-state doc-id payload)
        payload)
 "}},
     "index": "bzzz-bench"
@@ -35,9 +35,9 @@ curl -XGET -d '{
     "field": "name",
     "value": "doe",
     "clj-eval": "
-     (fn [payload ^java.util.Map  local-state fc doc-id]
+     (fn [payload ^java.util.Map local-state fc doc-id]
        (.get local-state \"a\")
-       (.put local-state \"a\" doc-id)
+       (.put local-state \"a\" payload)
        payload))
 "}},
     "index": "bzzz-bench"
@@ -56,9 +56,23 @@ boom -n 100000 -c 20 -m GET -d '
     "field": "name",
     "value": "doe",
     "clj-eval": "
-     (fn [payload local-state fc doc-id]
+     (fn [payload ^java.util.Map local-state fc doc-id]
        (.get local-state doc-id)
        (.put local-state doc-id payload)
+       payload)
+"}},
+    "index": "bzzz-bench"
+}' http://localhost:3000/
+
+boom -n 1000 -c 10 -m GET -d '
+{
+    "query": {"term-payload-clj-score": {
+    "field": "name",
+    "value": "doe",
+    "clj-eval": "
+     (fn [payload ^java.util.Map local-state fc doc-id]
+       (.get local-state \"something\")
+       (.put local-state \"something\" payload)
        payload)
 "}},
     "index": "bzzz-bench"

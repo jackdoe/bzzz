@@ -11,4 +11,17 @@ public class Helper {
             return 0;
         return PayloadHelper.decodeInt(p.bytes,p.offset);
     }
+
+    public static int next_doc_and_next_position(DocsAndPositionsEnum postings) throws IOException {
+        int n = postings.nextDoc();
+        if (n != DocsAndPositionsEnum.NO_MORE_DOCS)
+            postings.nextPosition();
+        return n;
+    }
+    public static int advance_and_next_position(DocsAndPositionsEnum postings, int target) throws IOException {
+        int n = postings.advance(target);
+        if (n != DocsAndPositionsEnum.NO_MORE_DOCS)
+            postings.nextPosition();
+        return n;
+    }
 }

@@ -32,14 +32,8 @@
           (if-let [postings (.docsAndPositions terms-enum acceptDocs nil DocsAndPositionsEnum/FLAG_PAYLOADS)]
             (let [fc (fill-field-cache (.reader context) field-cache-req)]
               (proxy [Scorer] [weight]
-                (nextDoc []
-                  (let [n (.nextDoc postings)]
-                    (.nextPosition postings)
-                    n))
-                (advance [target]
-                  (let [n (.advance postings target)]
-                    (.nextPosition postings)
-                    n))
+                (nextDoc [] (Helper/next_doc_and_next_position postings))
+                (advance [target] (Helper/advance_and_next_position postings target))
                 (cost [] (.cost postings))
                 (freq [] (.freq postings))
                 (docID [] (.docID postings))

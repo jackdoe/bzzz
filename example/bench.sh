@@ -23,9 +23,9 @@ curl -XGET -d '{
     "value": "doe",
     "clj-eval": "
      (fn [payload local-state fc doc-id]
-;;       (get @local-state doc-id)
+       (get @local-state doc-id)
 ;;       (swap! local-state assoc doc-id payload)
-       0.0f)
+       payload)
 "}},
     "index": "bzzz-bench"
 }' http://localhost:3000/ | json_xs | grep took

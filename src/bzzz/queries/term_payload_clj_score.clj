@@ -5,6 +5,7 @@
            (org.apache.lucene.search FieldCache FieldCache$Ints FieldCache$Longs FieldCache$Floats FieldCache$Doubles)
            (org.apache.lucene.index AtomicReaderContext AtomicReader IndexReader DocsEnum DocsAndPositionsEnum TermsEnum Term)
            (org.apache.lucene.analysis.payloads PayloadHelper)
+           (bzzz.java.query Helper)
            (org.apache.lucene.util Bits BytesRef)))
 
 (defn field->field-cache ^FieldCache$Ints [^AtomicReader reader name]
@@ -33,24 +34,21 @@
               (proxy [Scorer] [weight]
                 (nextDoc []
                   (let [n (.nextDoc postings)]
-                    (if-not (= DocsEnum/NO_MORE_DOCS n)
-                      (.nextPosition postings))
+                    (.nextPosition postings)
                     n))
                 (advance [target]
                   (let [n (.advance postings target)]
-                    (if-not (= DocsEnum/NO_MORE_DOCS n)
-                      (.nextPosition postings))
+                    (.nextPosition postings)
                     n))
                 (cost [] (.cost postings))
                 (freq [] (.freq postings))
                 (docID [] (.docID postings))
                 (score []
-                  (let [payload (.getPayload postings)
-                        decoded-payload (if payload
-                                          (PayloadHelper/decodeInt (.bytes (.getPayload postings)) (.offset payload))
-                                          0)]
-                    (clj-eval decoded-payload clj-state fc (.docID postings))))))
-              (throw (Throwable. (str (.toString term) " was not indexed with payload data")))))
+                  (clj-eval (Helper/decode_int_payload (.getPayload postings))
+                            ^java.util.Map clj-state
+                            fc
+                            (.docID postings)))))
+            (throw (Throwable. (str (.toString term) " was not indexed with payload data")))))
           nil))
     nil))
 

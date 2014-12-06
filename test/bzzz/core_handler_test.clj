@@ -2,6 +2,7 @@
   (:import (java.io StringReader))
   (:require [clojure.data.json :as json])
   (:require [org.httpkit.client :as http-client])
+  (:require [bzzz.query :as query])
   (:use clojure.test
         bzzz.core
         bzzz.const
@@ -22,11 +23,16 @@
 (def store-request
   {:index test-index-name
    :force-merge 1
-   :documents [{:name "jack doe" :popularity_double 300000.281}
-               {:name "jack doe" :popularity_double 30000.284}
-               {:name "john doe" :popularity_double 3000.283}
-               {:name "joe doe doe" :popularity_double 1000.281}]
-   :facets {:name {}}})
+   :analyzer {:name_payload {:type "custom"
+                             :tokenizer "whitespace"
+                             :filter [{:type "delimited-payload"
+                                       :delimiter "|"}]}}
+   :documents [{:name "jack doe" :popularity_double 300000.281 :name_payload "xxxyyy|1000"}
+               {:name "jack doe" :popularity_double 30000.284 :name_payload "xxxyyy|2000"}
+               {:name "john doe" :popularity_double 3000.283 :name_payload "xxxyyy|3000"}
+               {:name "joe doe doe" :popularity_double 1000.281 :name_payload "xxxyyy|4000"}]
+   :facets {:name {}
+            :name_payload {:use-analyzer "name_payload"}}})
 
 (def delete-request
   {:index test-index-name
@@ -51,10 +57,13 @@
            @(http-client/put host {:body (json/write-str (put-request enforce-limit size facet-size h can-return-partial))})]
        (jr body))))
 
-(defn send-get-request [size facet-size]
+(defn send-generic-get-request [request]
   (let [{:keys [status headers body error] :as resp}
-        @(http-client/get host {:body (json/write-str (put-request false size facet-size hosts false))})]
+        @(http-client/get host {:body (json/write-str request)})]
     (jr body)))
+
+(defn send-get-request [size facet-size]
+  (send-generic-get-request (put-request false size facet-size hosts false)))
 
 (defn send-delete-request []
   (let [{:keys [status headers body error] :as resp}
@@ -148,6 +157,46 @@
             cnt (* 4 (count (flatten hosts)))]
         (is (= cnt (:total r)))
         (is (= should-be (count (:hits r)))))))
+
+  (testing "broken-payload"
+    (let [broken-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
+                                                 :field-cache ["some_integer"]
+                                                 :clj-eval "
+(fn [payload fc doc-id]
+  (+ 10
+     non-existing-thing
+     payload
+     (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))
+"
+                                                 }}
+          good-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
+                                               :field-cache ["some_integer"]
+                                               :clj-eval "
+(fn [payload fc doc-id]
+  (+ 10
+     payload
+     (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))
+"
+                                               }}
+          req-good {:index test-index-name
+                    :explain true
+                    :query good-query}
+          req-bad {:index test-index-name
+                   :explain true
+                   :query broken-query}]
+      (reset! query/allow-unsafe-queries* false)
+      (is (substring? "--allow-unsafe-queries" (:exception (send-generic-get-request req-good))))
+      (reset! query/allow-unsafe-queries* true)
+      (is (nil? (:exception (send-generic-get-request req-good))))
+      (let [r0 (send-generic-get-request req-bad)
+            r1 (send-generic-get-request req-good)]
+        (is (= 4 (:total r1)))
+        (is (= 4010.0 (:_score (nth (:hits r1) 0))))
+        (is (= 3010.0 (:_score (nth (:hits r1) 1))))
+        (is (= 2010.0 (:_score (nth (:hits r1) 2))))
+        (is (= 1010.0 (:_score (nth (:hits r1) 3))))
+        (is (substring? "non-existing-thing in this context" (:exception r0))))))
+
 
   (testing "delete-and-should-be-zero"
     (is (= (send-delete-request)

@@ -736,11 +736,12 @@
       (is (= 1 (:total (searcher "Intersects(BUFFER(POINT(60 -49),10))" false))))))
 
   (testing "payload"
-    (let [storer (fn [payload]
+    (let [storer (fn [payload fc]
                    (store :index test-index-name
-                          :documents [{:id (str "_aa_bb_" payload) :name_payload (str "zzzxxx|" payload)}]
+                          :documents [{:id (str "_aa_bb_" payload)
+                                       :name_payload (str "zzzxxx|" payload)
+                                       :some_integer fc}]
                           :facets {:name_payload {:use-analyzer "name_payload"}}
-                          :force-merge 1
                           :analyzer {:name_payload {:type "custom"
                                                     :tokenizer "whitespace"
                                                     :filter [{:type "delimited-payload"
@@ -751,17 +752,25 @@
                               :explain true
                               :facets {:name_payload {}}
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
-                                                               :clj-eval "(fn [payload] (+ 10 payload))"}}}))]
-      (storer "255")
-      (storer "1024")
-      (storer "1001")
+                                                               :field-cache ["some_integer"]
+                                                               :clj-eval "
+(fn [payload fc doc-id]
+  (+ 10
+     payload
+     (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))
+"
+                                                               }}}))]
+      (storer "255" 1000)
+      (storer "1024" 2000)
+      (storer "1001" 2000)
+      (reset! query/allow-unsafe-queries* false)
       (is (thrown? Throwable ;; confirm that throws exception when unsafe queries are disabled
                    (searcher)))
       (reset! query/allow-unsafe-queries* true)
       (let [r (searcher)]
-        (is (= 1034.0 (:_score (first (:hits r)))))
-        (is (= 1011.0 (:_score (second (:hits r)))))
-        (is (= 265.0 (:_score (last (:hits r))))))
+        (is (= 3034.0 (:_score (first (:hits r)))))
+        (is (= 3011.0 (:_score (second (:hits r)))))
+        (is (= 1265.0 (:_score (last (:hits r))))))
 
       (let [clj-score {:term-payload-clj-score
                        {:field "name_payload", :value "zzzxxx"
@@ -769,7 +778,7 @@
 ;; query eval score expression
 ;; also testing for comments
 ;; seems to work.
-(fn [payload]
+(fn [payload fc doc-id]
   (let [max-thresh (fn [x] (> x 1010))]
     (if (max-thresh payload)
       0

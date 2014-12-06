@@ -51,19 +51,22 @@ public class TermPayloadClojureScoreQuery extends Query {
             public void normalize(float queryNorm, float topLevelBoost) {}
             @Override
             public Scorer scorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
-                return createScorer(context,acceptDocs);
+                return createScorer(context,acceptDocs,null);
             }
             @Override
             public Explanation explain(AtomicReaderContext context, int doc) throws IOException {
-                Scorer s = createScorer(context,context.reader().getLiveDocs());
+                Explanation e = new Explanation();
+                Scorer s = createScorer(context,context.reader().getLiveDocs(),e);
                 if (s != null && s.advance(doc) == doc ) {
-                    return new Explanation(s.score(),expr);
-                } else {
-                    return new Explanation(0f,"no matching term");
+                    float score = s.score();
+                    e.setValue(score);
+                    e.setDescription("result of: " + expr);
+                    return e;
                 }
+                return new Explanation(0f,"no matching term");
             }
 
-            public Scorer createScorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
+            public Scorer createScorer(AtomicReaderContext context, Bits acceptDocs, final Explanation explanation) throws IOException {
                 Terms terms = context.reader().terms(term.field());
                 if (terms == null)
                     return null;
@@ -111,7 +114,7 @@ public class TermPayloadClojureScoreQuery extends Query {
                     @Override
                     public float score() throws IOException {
                         int payload = Helper.decode_int_payload(postings.getPayload());
-                        return (float) clj_expr.invoke(payload,local_state,fc,docID());
+                        return (float) clj_expr.invoke(explanation,payload,local_state,fc,docID());
                     }
                 };
             }

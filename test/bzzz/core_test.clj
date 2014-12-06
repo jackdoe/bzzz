@@ -753,7 +753,7 @@
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
                                                                :field-cache ["some_integer"]
                                                                :clj-eval "
-(fn [payload ^java.util.Map local-state fc doc-id]
+(fn [explanation payload ^java.util.Map local-state fc doc-id]
   (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id)
         existed (.get local-state some_integer)]
     (float
@@ -784,7 +784,7 @@
 ;; query eval score expression
 ;; also testing for comments
 ;; seems to work.
-(fn [payload local-state fc doc-id]
+(fn [explanation payload local-state fc doc-id]
   (float
     (let [max-thresh (fn [x] (> x 1010))]
       (if (max-thresh payload)

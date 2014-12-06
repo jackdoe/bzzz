@@ -161,7 +161,7 @@
     (let [broken-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                  :field-cache ["some_integer"]
                                                  :clj-eval "
-(fn [payload local-state fc doc-id]
+(fn [explanation payload local-state fc doc-id]
   (float
     (+ 10
        non-existing-thing
@@ -172,7 +172,7 @@
           good-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                :field-cache ["some_integer"]
                                                :clj-eval "
-(fn [payload local-state fc doc-id]
+(fn [explanation payload local-state fc doc-id]
   (float
     (+ 10
        payload

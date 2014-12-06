@@ -9,8 +9,11 @@ import clojure.lang.Var;
 import clojure.lang.IFn;
 import clojure.lang.Compiler;
 import java.io.StringReader;
+import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap.Builder;
 
 public class TermPayloadClojureScoreQuery extends Query {
+    public static int EXPR_CACHE_CAPACITY = 10000;
+    public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
     public Term term;
     public String expr;
     public Map<Object,Object> local_state = new HashMap<Object,Object>();
@@ -24,7 +27,11 @@ public class TermPayloadClojureScoreQuery extends Query {
         this.term = term;
         this.expr = expr;
         this.field_cache_req = field_cache_req;
-        this.clj_expr = (IFn) EVAL.invoke(READ_STRING.invoke(expr));
+        this.clj_expr = EXPR_CACHE.get(expr);
+        if (this.clj_expr == null) {
+            this.clj_expr = (IFn) EVAL.invoke(READ_STRING.invoke(expr));
+            EXPR_CACHE.put(expr,this.clj_expr);
+        }
     }
 
     @Override
@@ -104,7 +111,7 @@ public class TermPayloadClojureScoreQuery extends Query {
                     @Override
                     public float score() throws IOException {
                         int payload = Helper.decode_int_payload(postings.getPayload());
-                        return (Float) clj_expr.invoke(payload,local_state,fc,docID());
+                        return (float) clj_expr.invoke(payload,local_state,fc,docID());
                     }
                 };
             }

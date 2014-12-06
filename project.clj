@@ -10,6 +10,8 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.6.0"]
+                 [com.googlecode.concurrentlinkedhashmap/concurrentlinkedhashmap-lru "1.4"]
+                 [com.google.code.findbugs/jsr305 "3.0.0"]
                  [com.spatial4j/spatial4j "0.4.1"]
                  [org.apache.lucene/lucene-core "4.10.2"]
                  [org.apache.lucene/lucene-facet "4.10.2"]

@@ -25,8 +25,7 @@
    :force-merge 1
    :analyzer {:name_payload {:type "custom"
                              :tokenizer "whitespace"
-                             :filter [{:type "delimited-payload"
-                                       :delimiter "|"}]}}
+                             :filter [{:type "delimited-payload"}]}}
    :documents [{:name "jack doe" :popularity_double 300000.281 :name_payload "xxxyyy|1000"}
                {:name "jack doe" :popularity_double 30000.284 :name_payload "xxxyyy|2000"}
                {:name "john doe" :popularity_double 3000.283 :name_payload "xxxyyy|3000"}

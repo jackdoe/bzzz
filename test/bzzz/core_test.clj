@@ -744,8 +744,7 @@
                           :facets {:name_payload {:use-analyzer "name_payload"}}
                           :analyzer {:name_payload {:type "custom"
                                                     :tokenizer "whitespace"
-                                                    :filter [{:type "delimited-payload"
-                                                              :delimiter "|"}]}})
+                                                    :filter [{:type "delimited-payload"}]}})
                    (refresh-search-managers))
           searcher (fn []
                      (search {:index test-index-name
@@ -817,8 +816,7 @@
 
                           :analyzer {:name_mr_payload {:type "custom"
                                                        :tokenizer "whitespace"
-                                                       :filter [{:type "delimited-payload"
-                                                                 :delimiter "|"}]}}))
+                                                       :filter [{:type "delimited-payload"}]}}))
           searcher (fn [mr]
                      (search {:index test-index-name
                               :explain true

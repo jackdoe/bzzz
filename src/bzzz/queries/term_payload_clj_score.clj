@@ -22,7 +22,7 @@
   (into {} (for [name fc]
              [(keyword name) (field->field-cache reader name)])))
 
-(defn new-scorer [^Term term ^Weight weight ^AtomicReaderContext context ^Bits acceptDocs clj-eval clj-state field-cache-req]
+(defn new-scorer [^Term term ^Weight weight ^AtomicReaderContext context ^Bits acceptDocs clj-eval ^java.util.Map clj-state field-cache-req]
   (if-let [terms (.terms (.reader context) (.field term))]
     (let [terms-enum (.iterator terms nil)]
       (if (.seekExact terms-enum (.bytes term))
@@ -57,7 +57,7 @@
 ;; :query {:term-payload-clj-score {:field "name_payload", :value "zzz"
 ;;                                  :clj-eval "(fn [payload fc doc-id] (+ 10 payload))"}}}))]
 (defn term-payload-expr-score-query [^Term term clj-eval-str field-cache-req]
-  (let [clj-state (atom {}) ;; we create one query per shard, and we are not using search with executor within the shard
+  (let [clj-state (java.util.HashMap.) ;; we create one query per shard, and we are not using search with executor within the shard
         clj-eval (eval (read-string clj-eval-str))]
     (proxy [Query] []
       (toString [] clj-eval-str)

@@ -753,15 +753,14 @@
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
                                                                :field-cache ["some_integer"]
                                                                :clj-eval "
-(fn [payload local-state fc doc-id]
+(fn [payload ^java.util.Map local-state fc doc-id]
   (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)
-        existed (get @local-state some_integer)]
-;;    (println @local-state existed)
+        existed (.get local-state some_integer)]
     (+ 10
        payload
        (if (not existed)
          (do
-           (swap! local-state assoc some_integer payload)
+           (.put local-state some_integer payload)
            some_integer)
          0))))
 "

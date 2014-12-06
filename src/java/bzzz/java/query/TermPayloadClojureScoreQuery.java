@@ -72,7 +72,7 @@ public class TermPayloadClojureScoreQuery extends Query {
                 if (postings == null)
                     throw new IllegalStateException("field <" + term.field() + "> was indexed without position data");
 
-                Map<String,Object> fc = new HashMap<String,Object>();
+                final Map<String,Object> fc = new HashMap<String,Object>();
                 if (field_cache_req != null) {
                     AtomicReader r = context.reader();
                     for (String name : field_cache_req) {

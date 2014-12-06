@@ -754,15 +754,16 @@
                                                                :field-cache ["some_integer"]
                                                                :clj-eval "
 (fn [payload ^java.util.Map local-state fc doc-id]
-  (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)
+  (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id)
         existed (.get local-state some_integer)]
-    (+ 10
-       payload
-       (if (not existed)
-         (do
-           (.put local-state some_integer payload)
-           some_integer)
-         0))))
+    (float
+      (+ 10
+         payload
+         (if (not existed)
+           (do
+             (.put local-state some_integer payload)
+             some_integer)
+           0)))))
 "
                                                                }}}))]
       (storer "255" 1000)
@@ -784,10 +785,11 @@
 ;; also testing for comments
 ;; seems to work.
 (fn [payload local-state fc doc-id]
-  (let [max-thresh (fn [x] (> x 1010))]
-    (if (max-thresh payload)
-      0
-      (+ 10 payload))))
+  (float
+    (let [max-thresh (fn [x] (> x 1010))]
+      (if (max-thresh payload)
+        0
+        (+ 10 payload)))))
                         "}}
             r (search {:index test-index-name
                        :explain true

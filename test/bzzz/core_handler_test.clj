@@ -162,19 +162,21 @@
                                                  :field-cache ["some_integer"]
                                                  :clj-eval "
 (fn [payload local-state fc doc-id]
-  (+ 10
-     non-existing-thing
-     payload
-     (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))
+  (float
+    (+ 10
+       non-existing-thing
+       payload
+       (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id))))
 "
                                                  }}
           good-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                :field-cache ["some_integer"]
                                                :clj-eval "
 (fn [payload local-state fc doc-id]
-  (+ 10
-     payload
-     (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))
+  (float
+    (+ 10
+       payload
+       (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id))))
 "
                                                }}
           req-good {:index test-index-name

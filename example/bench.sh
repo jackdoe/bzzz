@@ -23,9 +23,9 @@ curl -XGET -d '{
     "value": "doe",
     "clj-eval": "
      (fn [payload ^java.util.Map local-state fc doc-id]
-       (.get local-state doc-id)
-       (.put local-state doc-id payload)
-       payload)
+;;       (.get local-state doc-id)
+;;       (.put local-state doc-id payload)
+       (float payload))
 "}},
     "index": "bzzz-bench"
 }' http://localhost:3000/ | json_xs | grep took
@@ -38,7 +38,7 @@ curl -XGET -d '{
      (fn [payload ^java.util.Map local-state fc doc-id]
        (.get local-state \"a\")
        (.put local-state \"a\" payload)
-       payload))
+       (float payload)))
 "}},
     "index": "bzzz-bench"
 }' http://localhost:3000/ | json_xs | grep took
@@ -59,7 +59,7 @@ boom -n 100000 -c 20 -m GET -d '
      (fn [payload ^java.util.Map local-state fc doc-id]
        (.get local-state doc-id)
        (.put local-state doc-id payload)
-       payload)
+       (float payload))
 "}},
     "index": "bzzz-bench"
 }' http://localhost:3000/
@@ -71,9 +71,9 @@ boom -n 1000 -c 10 -m GET -d '
     "value": "doe",
     "clj-eval": "
      (fn [payload ^java.util.Map local-state fc doc-id]
-       (.get local-state \"something\")
-       (.put local-state \"something\" payload)
-       payload)
+;;       (.get local-state \"something\")
+;;       (.put local-state \"something\" payload)
+       (float payload))
 "}},
     "index": "bzzz-bench"
 }' http://localhost:3000/

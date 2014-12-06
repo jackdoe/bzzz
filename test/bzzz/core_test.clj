@@ -740,6 +740,7 @@
                    (store :index test-index-name
                           :documents [{:id (str "_aa_bb_" payload) :name_payload (str "zzzxxx|" payload)}]
                           :facets {:name_payload {:use-analyzer "name_payload"}}
+                          :force-merge 1
                           :analyzer {:name_payload {:type "custom"
                                                     :tokenizer "whitespace"
                                                     :filter [{:type "delimited-payload"
@@ -792,6 +793,7 @@
         (is (= 265.0 (:_score (second (:hits r)))))
         (is (= 2 (:total r))))))
 
+
   (testing "must-refresh"
     (let [storer (fn [payload]
                    (store :index test-index-name
@@ -812,6 +814,8 @@
       (is (= 1 (:total (searcher false))))
       (storer "300")
       (is (= 2 (:total (searcher true))))))
+
+
 
   (testing "facets"
     (dotimes [n 1000]

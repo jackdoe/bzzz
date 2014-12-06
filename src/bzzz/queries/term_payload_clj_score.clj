@@ -10,23 +10,29 @@
     (let [terms-enum (.iterator terms nil)]
       (if (.seekExact terms-enum (.bytes term))
         (let [state (.termState terms-enum)]
+          (.seekExact terms-enum (.bytes term) state)
           (if-let [postings (.docsAndPositions terms-enum acceptDocs nil DocsAndPositionsEnum/FLAG_PAYLOADS)]
             (proxy [Scorer] [weight]
-              (nextDoc [] (let [n (.nextDoc postings)]
-                            (if-not (= DocsEnum/NO_MORE_DOCS n)
-                              (.nextPosition postings))
-                            n))
-              (advance [target] (let [n (.advance postings target)]
-                                  (if-not (= DocsEnum/NO_MORE_DOCS n)
-                                    (.nextPosition postings))
-                                  n))
+              (nextDoc []
+                (let [n (.nextDoc postings)]
+                  (if-not (= DocsEnum/NO_MORE_DOCS n)
+                    (.nextPosition postings))
+                  n))
+              (advance [target]
+                (let [n (.advance postings target)]
+                  (if-not (= DocsEnum/NO_MORE_DOCS n)
+                    (.nextPosition postings))
+                  n))
               (cost [] (.cost postings))
               (freq [] (.freq postings))
               (docID [] (.docID postings))
               (score []
-                (clj-eval (PayloadHelper/decodeInt (.bytes (.getPayload postings)) 0))))
+                (let [payload (.getPayload postings)]
+                  (clj-eval (if payload
+                              (PayloadHelper/decodeInt (.bytes (.getPayload postings)) (.offset payload))
+                              0)))))
             (throw (Throwable. (str (.toString term) " was not indexed with payload data")))))
-        nil))
+          nil))
     nil))
 
 ;; :query {:term-payload-clj-score {:field "name_payload", :value "zzz"
@@ -38,8 +44,8 @@
       (createWeight [^IndexSearcher searcher]
         (let [query this]
           (proxy [Weight][]
-            (explain [^AtomicReaderContext reader-ctx doc]
-              (let [s ^Scorer (.scorer ^Weight this reader-ctx ^Bits (.getLiveDocs (.reader reader-ctx)))]
+            (explain [^AtomicReaderContext context doc]
+              (let [s ^Scorer (.scorer ^Weight this context ^Bits (.getLiveDocs (.reader context)))]
                 (if (and s
                          (not (= doc DocsEnum/NO_MORE_DOCS))
                          (= (.advance s doc) doc))
@@ -49,8 +55,8 @@
             (getQuery [] query)
             (normalize [norm boost])
             (toString [^String field] "payload-expr-score")
-            (scorer ^Scorer [^AtomicReaderContext reader-ctx ^Bits acceptDocs]
-              (new-scorer term this reader-ctx acceptDocs clj-eval))))))))
+            (scorer ^Scorer [^AtomicReaderContext context ^Bits acceptDocs]
+              (new-scorer term this context acceptDocs clj-eval))))))))
 
 (defn parse
   [generic input analyzer]

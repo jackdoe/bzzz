@@ -22,7 +22,7 @@
   (into {} (for [name fc]
              [(keyword name) (field->field-cache reader name)])))
 
-(defn new-scorer [^Term term ^Weight weight ^AtomicReaderContext context ^Bits acceptDocs clj-eval field-cache-req]
+(defn new-scorer [^Term term ^Weight weight ^AtomicReaderContext context ^Bits acceptDocs clj-eval clj-state field-cache-req]
   (if-let [terms (.terms (.reader context) (.field term))]
     (let [terms-enum (.iterator terms nil)]
       (if (.seekExact terms-enum (.bytes term))
@@ -49,15 +49,16 @@
                         decoded-payload (if payload
                                           (PayloadHelper/decodeInt (.bytes (.getPayload postings)) (.offset payload))
                                           0)]
-                    (clj-eval decoded-payload fc (.docID postings))))))
+                    (clj-eval decoded-payload clj-state fc (.docID postings))))))
               (throw (Throwable. (str (.toString term) " was not indexed with payload data")))))
           nil))
     nil))
 
 ;; :query {:term-payload-clj-score {:field "name_payload", :value "zzz"
-;;                                  :clj-eval "(fn [payload] (+ 10 payload))"}}}))]
+;;                                  :clj-eval "(fn [payload fc doc-id] (+ 10 payload))"}}}))]
 (defn term-payload-expr-score-query [^Term term clj-eval-str field-cache-req]
-  (let [clj-eval (eval (read-string clj-eval-str))]
+  (let [clj-state (atom {}) ;; we create one query per shard, and we are not using search with executor within the shard
+        clj-eval (eval (read-string clj-eval-str))]
     (proxy [Query] []
       (toString [] clj-eval-str)
       (createWeight [^IndexSearcher searcher]
@@ -75,7 +76,7 @@
             (normalize [norm boost])
             (toString [^String field] "payload-expr-score")
             (scorer ^Scorer [^AtomicReaderContext context ^Bits acceptDocs]
-              (new-scorer term this context acceptDocs clj-eval field-cache-req))))))))
+              (new-scorer term this context acceptDocs clj-eval clj-state field-cache-req))))))))
 
 (defn parse
   [generic input analyzer]

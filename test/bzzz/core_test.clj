@@ -754,10 +754,17 @@
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
                                                                :field-cache ["some_integer"]
                                                                :clj-eval "
-(fn [payload fc doc-id]
-  (+ 10
-     payload
-     (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))
+(fn [payload local-state fc doc-id]
+  (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)
+        existed (get @local-state some_integer)]
+;;    (println @local-state existed)
+    (+ 10
+       payload
+       (if (not existed)
+         (do
+           (swap! local-state assoc some_integer payload)
+           some_integer)
+         0))))
 "
                                                                }}}))]
       (storer "255" 1000)
@@ -769,8 +776,8 @@
       (reset! query/allow-unsafe-queries* true)
       (let [r (searcher)]
         (is (= 3034.0 (:_score (first (:hits r)))))
-        (is (= 3011.0 (:_score (second (:hits r)))))
-        (is (= 1265.0 (:_score (last (:hits r))))))
+        (is (= 1265.0 (:_score (second (:hits r)))))
+        (is (= 1011.0 (:_score (last (:hits r))))))
 
       (let [clj-score {:term-payload-clj-score
                        {:field "name_payload", :value "zzzxxx"
@@ -778,7 +785,7 @@
 ;; query eval score expression
 ;; also testing for comments
 ;; seems to work.
-(fn [payload fc doc-id]
+(fn [payload local-state fc doc-id]
   (let [max-thresh (fn [x] (> x 1010))]
     (if (max-thresh payload)
       0

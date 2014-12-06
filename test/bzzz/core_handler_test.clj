@@ -162,7 +162,7 @@
     (let [broken-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                  :field-cache ["some_integer"]
                                                  :clj-eval "
-(fn [payload fc doc-id]
+(fn [payload local-state fc doc-id]
   (+ 10
      non-existing-thing
      payload
@@ -172,7 +172,7 @@
           good-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                :field-cache ["some_integer"]
                                                :clj-eval "
-(fn [payload fc doc-id]
+(fn [payload local-state fc doc-id]
   (+ 10
      payload
      (.get ^org.apache.lucene.search.FieldCache$Ints (:some_integer fc) doc-id)))

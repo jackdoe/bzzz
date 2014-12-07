@@ -226,6 +226,7 @@ At the moment I am working on adding more and more analyzers/tokenizers/tokenfil
 * has *some* GC predictability (avoids talking to other boxes that are about to do GC, and you also know in how much time will someone do GC)
 * should be able to restart frequently
 * *user* controlled sharding (there are 2 types, external and internal(within the jvm))
+* clojure expression queries (term-payload-clj-score is the only one at the moment, but more will come)
 
 BZZZ being extremely simple it can actually scale very well if you know your data, for example if we have 100_000_000 documents and we want to search them, we can just spawn 100 BZZZ processess across multiple machines, and just put different pieces of data in different boxes `(hash($id) % BOXES)`. BZZZ supports swarm like queries, so you can ask 1 box, to ask 5 boxes, and each of those 5 boxes can ask 5 more, and actually the _user_ is in control of that.
 
@@ -439,6 +440,93 @@ queries will return a set of documents, using the query settings you can control
 #### random-score
 
 #### fuzzy
+
+#### no-zero-score
+
+#### no-norm
+
+#### term-payload-clj-score - [UNSAFE: requires --allow-unsafe-queries startup paramter]
+
+This is a clojure expression payload term query, it needs a term that is indexed with payload information, and it will
+call a clojure expression for every document that matches.
+in order to use it, you will need to index data with payload, which is quite easy:
+```
+curl -XPOST -d '{
+    "documents": [
+        { "name": "john|1 doe|2147483647", "popularity_integer": 10 },
+        { "name": "jack|2147483647 doe|1", "popularity_integer": 20 },
+    ],
+    "analyzer":{"name":{"type":"custom","tokenizer":"whitespace","filter":[{"type":"delimited-payload"}]}},
+    "index": "some-index"
+}' http://localhost:3000/
+```
+
+Numbers |1, |2147483647 are the actual payloads, at the moment the delimited-payload filter, works only with integers, and it uses the default separator which is `|`(all this will be parameterized in the future), so it will actually
+split the term produced by the tokenizer, and it will index only the left part, the right part it will store as payload, for that occurance.
+
+This integer will be passed as one of the arguments to the term-payload-clj-score clj-eval expression
+
+```
+{
+  "explain": true,
+  "query": {
+    "term-payload-clj-score": {
+      "field": "name",
+      "value": "doe",
+      "field-cache": ["popularity_integer"],
+      "clj-eval": "
+       ;; if you are using the local-state, always hint it to java.util.Map
+       ;; so .put and .get calls are not looked up through reflection
+       (fn [explanation payload ^java.util.Map local-state ^java.util.Map fc doc-id]
+         (let [popularity_integer (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"popularity_integer\") doc-id)]
+           (when explanation ;; not-null only for top returned results when explain:true is passed
+             (do
+               (println \"you can even print something here, it will be in /var/log/bzzz/bzz.log, lets dump all params:\"
+                        explanation payload local-state fc doc-id)
+               (.addDetail explanation (org.apache.lucene.search.Explanation.
+                                         (float 10)
+                                         \"starting with 10\")))
+               (.addDetail explanation (org.apache.lucene.search.Explanation.
+                                         (float payload)
+                                         (str \"because of payload: \" payload)))
+               (.addDetail explanation (org.apache.lucene.search.Explanation.
+                                         (float popularity_integer)
+                                         (str \"because of popularity_integer's value: \" popularity_integer))))
+
+           (.get local-state \"something\")         ;; access to per-shard state
+           (.put local-state \"something\" payload) ;; it is just a Map<Object,Object>
+           ;; return the actual score, has to be float-ed
+           (float (+ 10 payload popularity_integer))))"
+    }
+  },
+  "index": "some-index"
+}
+```
+
+the query needs:
+
+* field,value: that define the actual Term
+* field-cache(optional): array of field names that will be requested from FieldCache/DEFAULT, and mapped into Map<String,Object>, that will can be used from  if you want to access some of the field-cache data from the clojure expression
+* clj-eval: string that is the actuall expression, it is compiled only once and there is LRU cache that takes 10_000 expressions, so it wont be compiled again for quite some time, this LRU cache is shared through all threads/shards/indexes, so you dont have to worry too much about time spend while clj evaluating the expression
+
+The expression has to return a function, that takes 5 arguments, and returns a float:
+```
+(fn [^org.apache.lucene.search.Explanation explanation
+     payload
+     ^java.util.Map local-state
+     ^java.util.Map fc
+     doc-id]
+      (float 1))
+```
+
+* explanation - this is new Explanation() called for you to explain your score, for the top documents when explain:true is passed, as you can see in the example you can use that for very extensive debugging because it will be called only `"size"` times per query, and not only you can dump string directly into the resultset, you can also print into stdout
+* payload - the actual payload indexed with this term, if the term has multiple occurances per document, it will call your function only once, with the first payload for that document.
+* local-state - something you can put/get data from while scoring documents in the same shard, it is just a `Map<Object,Object>`, be carefull to hint it in your function (like `(fn([explanation payload ^java.util.Map local-state ...`), if you are about to use it, otherwise it will use reflection for every score() call, which means if you have 5m documents it will resort to reflection for every single one of them.
+
+* field-cache map (string -> field cache instance), also remember to hint it
+* doc id (used to lookup field cache values for the document being scored), or to store it in the local-state for some reason
+
+speed wise it is quite ok, running a regular term query(one that does not access the payload data) with 5.5m documents on 1 shard on 1 thread on my laptop takes 150ms, running a clojure expression query takes ~300-400ms (depending if you use the local state or not), and for small sets of documents (100-200k) the difference is almost not noticable.
 
 ### TODO:
 * write proper documentation

@@ -6,6 +6,7 @@ import java.io.*;
 import java.util.*;
 import clojure.lang.RT;
 import clojure.lang.Var;
+import clojure.lang.Symbol;
 import clojure.lang.IFn;
 import clojure.lang.Compiler;
 import java.io.StringReader;
@@ -19,10 +20,6 @@ public class TermPayloadClojureScoreQuery extends Query {
     public Map<Object,Object> local_state = new HashMap<Object,Object>();
     public String[] field_cache_req;
     public IFn clj_expr;
-
-    public static final Var EVAL = RT.var("clojure.core", "eval");
-    public static final Var READ_STRING = RT.var("clojure.core", "read-string");
-
     public TermPayloadClojureScoreQuery(Term term, String expr, String[] field_cache_req) throws Exception {
         this.term = term;
         this.expr = expr;
@@ -31,12 +28,20 @@ public class TermPayloadClojureScoreQuery extends Query {
     }
 
     public IFn eval_and_cache(String raw) {
-        // there is of course a race condition between get/eval/put
+        // there is of course a race condition between get/compile/put
         // but worst case few threads will do the eval, which
         // will just result in few ms extra to those calls
         IFn e = EXPR_CACHE.get(raw);
         if (e == null) {
-            e = (IFn) EVAL.invoke(READ_STRING.invoke(raw));
+            try {
+                // since we are compiling only once, it makese sense to warn-on-reflection
+                // it might be very costly to do (.get local-state "key") if you
+                // did not hint it, for 5 million score() calls.
+                Var.pushThreadBindings(RT.map(RT.var("clojure.core","*warn-on-reflection*"),RT.T));
+                e = (IFn) clojure.lang.Compiler.load(new StringReader(raw));
+            } finally {
+                Var.popThreadBindings();
+            }
             EXPR_CACHE.put(raw,e);
         }
         return e;

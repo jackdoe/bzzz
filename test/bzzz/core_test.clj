@@ -740,7 +740,10 @@
                    (store :index test-index-name
                           :documents [{:id (str "_aa_bb_" payload)
                                        :name_payload (str "zzzxxx|" payload)
-                                       :some_integer fc}]
+                                       :some_integer fc
+                                       :some_float 10.0
+                                       :some_double 20.0
+                                       :some_long 30}]
                           :facets {:name_payload {:use-analyzer "name_payload"}}
                           :analyzer {:name_payload {:type "custom"
                                                     :tokenizer "whitespace"
@@ -751,10 +754,13 @@
                               :explain true
                               :facets {:name_payload {}}
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
-                                                               :field-cache ["some_integer"]
+                                                               :field-cache ["some_integer","some_float","some_double","some_long"]
                                                                :clj-eval "
 (fn [explanation payload ^java.util.Map local-state fc doc-id]
   (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id)
+        some_float (.get ^org.apache.lucene.search.FieldCache$Floats (get fc \"some_float\") doc-id)
+        some_double (.get ^org.apache.lucene.search.FieldCache$Doubles (get fc \"some_double\") doc-id)
+        some_long (.get ^org.apache.lucene.search.FieldCache$Longs (get fc \"some_long\") doc-id)
         existed (.get local-state some_integer)]
     (float
       (+ 10
@@ -762,7 +768,7 @@
          (if (not existed)
            (do
              (.put local-state some_integer payload)
-             some_integer)
+             (+ some_integer some_float some_double some_long))
            0)))))
 "
                                                                }}}))]
@@ -774,8 +780,8 @@
                    (searcher)))
       (reset! query/allow-unsafe-queries* true)
       (let [r (searcher)]
-        (is (= 3034.0 (:_score (first (:hits r)))))
-        (is (= 1265.0 (:_score (second (:hits r)))))
+        (is (= 3094.0 (:_score (first (:hits r)))))
+        (is (= 1325.0 (:_score (second (:hits r)))))
         (is (= 1011.0 (:_score (last (:hits r))))))
 
       (let [clj-score {:term-payload-clj-score

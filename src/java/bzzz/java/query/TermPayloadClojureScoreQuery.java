@@ -12,7 +12,7 @@ import java.io.StringReader;
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap.Builder;
 
 public class TermPayloadClojureScoreQuery extends Query {
-    public static int EXPR_CACHE_CAPACITY = 10000;
+    public static int EXPR_CACHE_CAPACITY = 10000; // TODO: make this a parameter
     public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
     public Term term;
     public String expr;
@@ -27,11 +27,19 @@ public class TermPayloadClojureScoreQuery extends Query {
         this.term = term;
         this.expr = expr;
         this.field_cache_req = field_cache_req;
-        this.clj_expr = EXPR_CACHE.get(expr);
-        if (this.clj_expr == null) {
-            this.clj_expr = (IFn) EVAL.invoke(READ_STRING.invoke(expr));
-            EXPR_CACHE.put(expr,this.clj_expr);
+        this.clj_expr = eval_and_cache(expr);
+    }
+
+    public IFn eval_and_cache(String raw) {
+        // there is of course a race condition between get/eval/put
+        // but worst case few threads will do the eval, which
+        // will just result in few ms extra to those calls
+        IFn e = EXPR_CACHE.get(raw);
+        if (e == null) {
+            e = (IFn) EVAL.invoke(READ_STRING.invoke(raw));
+            EXPR_CACHE.put(raw,e);
         }
+        return e;
     }
 
     @Override

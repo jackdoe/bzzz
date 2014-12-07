@@ -21,6 +21,10 @@ JAVA_OPTS="$JAVA_OPTS -XX:+UseConcMarkSweepGC"
 JAVA_OPTS="$JAVA_OPTS -XX:CMSInitiatingOccupancyFraction=75"
 JAVA_OPTS="$JAVA_OPTS -XX:+UseCMSInitiatingOccupancyOnly"
 
+if [ "x$BZZZ_OPTIONS" = "x" ]; then
+    BZZZ_OPTIONS=""
+fi
+
 if [ "x$BZZZ_MIN_MEM" = "x" ]; then
     BZZZ_MIN_MEM=256m
 fi
@@ -45,4 +49,4 @@ $JAVA -Dlog4j.configuration=file:/etc/bzzz/log4j.properties $JAVA_OPTS \
       --directory $BZZZ_DIRECTORY \
       --port $BZZZ_PORT \
       --hosts $BZZZ_HOSTS \
-      --identifier $BZZZ_IDENTIFIER
+      --identifier $BZZZ_IDENTIFIER $BZZZ_OPTIONS

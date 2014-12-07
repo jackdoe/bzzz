@@ -6,7 +6,6 @@ import java.io.*;
 import java.util.*;
 import clojure.lang.RT;
 import clojure.lang.Var;
-import clojure.lang.Symbol;
 import clojure.lang.IFn;
 import clojure.lang.Compiler;
 import java.io.StringReader;
@@ -35,8 +34,8 @@ public class TermPayloadClojureScoreQuery extends Query {
         if (e == null) {
             try {
                 // since we are compiling only once, it makese sense to warn-on-reflection
-                // it might be very costly to do (.get local-state "key") if you
-                // did not hint it, for 5 million score() calls.
+                // it might be very costly for 5 million score() calls to do (.get local-state "key")
+                // with reflection, when a simple hint might save you.
                 Var.pushThreadBindings(RT.map(RT.var("clojure.core","*warn-on-reflection*"),RT.T));
                 e = (IFn) clojure.lang.Compiler.load(new StringReader(raw));
             } finally {

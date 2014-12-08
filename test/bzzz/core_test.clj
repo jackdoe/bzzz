@@ -756,18 +756,19 @@
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
                                                                :field-cache ["some_integer","some_float","some_double","some_long"]
                                                                :clj-eval "
-(fn [explanation payload ^java.util.Map local-state fc doc-id]
-  (let [some_integer (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id)
-        some_float (.get ^org.apache.lucene.search.FieldCache$Floats (get fc \"some_float\") doc-id)
-        some_double (.get ^org.apache.lucene.search.FieldCache$Doubles (get fc \"some_double\") doc-id)
-        some_long (.get ^org.apache.lucene.search.FieldCache$Longs (get fc \"some_long\") doc-id)
-        existed (.get local-state some_integer)]
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [some_integer (.fc_get_int ctx \"some_integer\")
+        some_float (.fc_get_float ctx \"some_float\")
+        some_long (.fc_get_long ctx \"some_long\")
+        some_double (.fc_get_double ctx \"some_double\")
+        existed (.local_state_get ctx some_integer)
+        payload (.payload_get_int ctx)]
     (float
       (+ 10
          payload
          (if (not existed)
            (do
-             (.put local-state some_integer payload)
+             (.local_state_set ctx some_integer payload)
              (+ some_integer some_float some_double some_long))
            0)))))
 "
@@ -790,9 +791,13 @@
 ;; query eval score expression
 ;; also testing for comments
 ;; seems to work.
-(fn [explanation payload local-state fc doc-id]
+(fn [^bzzz.java.query.ExpressionContext ctx]
   (float
-    (let [max-thresh (fn [x] (> x 1010))]
+    (let [max-thresh (fn [x] (> x 1010))
+          payload (.payload_get_int ctx)
+          counter (or (.global_state_get ctx \"counter_previous\") 0)]
+      (when (not (.explanation ctx))
+        (.global_state_set ctx \"counter_previous\" (+ 1 counter)))
       (if (max-thresh payload)
         0
         (+ 10 payload)))))
@@ -813,8 +818,31 @@
         (is (= 2 (:total r1)))
         (is (= 1011.0 (:_score (first (:hits r)))))
         (is (= 265.0 (:_score (second (:hits r)))))
-        (is (= 2 (:total r))))))
-
+        (is (= 2 (:total r)))))
+    (let [gs (fn [q]
+               (search {:index test-index-name
+                        :explain true
+                        :facets {:name_payload {}}
+                        :query q}))
+          update (gs {:term-payload-clj-score
+                      {:field "name_payload", :value "zzzxxx"
+                       :clj-eval "
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [counter (or (.global_state_get ctx \"counter\") 0)]
+    (when (not (.explanation ctx))
+      (.global_state_set ctx \"counter\" (+ 1 counter)))
+    (float 1)))"
+                       }})
+          result (gs {:term-payload-clj-score
+                      {:field "name_payload", :value "zzzxxx"
+                       :clj-eval "
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [counter (or (.global_state_get ctx \"counter\") 0)]
+    (float counter)))"
+                       }})]
+      (is (= 3 (:total result)))
+      (is (= 3.0 (:_score (first (:hits result)))))
+      (is (= 3.0 (:_score (last (:hits result)))))))
 
   (testing "must-refresh"
     (let [storer (fn [payload]

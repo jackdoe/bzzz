@@ -22,30 +22,13 @@ curl -XGET -d '{
     "field": "name",
     "value": "doe",
     "clj-eval": "
-     (fn [explanation payload ^java.util.Map local-state fc doc-id]
-;;       (.get local-state doc-id)
-;;       (.put local-state doc-id payload)
-       (float payload))
+     (fn [^bzzz.java.query.ExpressionContext ctx]
+       (let [payload (.payload_get_int ctx)]
+;;         (.local-state_get ctx (.docID ctx))
+;;         (.local-state_set ctx (.docID ctx) payload)
+         (float payload)))
 "}},
     "index": "bzzz-bench"
-}' http://localhost:3000/ | json_xs | grep took
-
-curl -XGET -d '{
-    "query": {"term-payload-clj-score": {
-    "field": "name",
-    "value": "doe",
-    "clj-eval": "
-     (fn [explanation payload ^java.util.Map local-state fc doc-id]
-       (when explanation
-         (.addDetail explanation (org.apache.lucene.search.Explanation.
-                                   (float payload)
-                                   (str \"because of payload: \" payload))))
-
-       (.get local-state \"a\")
-       (.put local-state \"a\" payload)
-       (float payload)))
-"}},
-    "index": "bzzz-bench","explain":true
 }' http://localhost:3000/ | json_xs | grep took
 
 boom -n 100000 -c 20 -m GET -d '{
@@ -61,10 +44,11 @@ boom -n 100000 -c 20 -m GET -d '
     "field": "name",
     "value": "doe",
     "clj-eval": "
-     (fn [explanation payload ^java.util.Map local-state fc doc-id]
-       (.get local-state doc-id)
-       (.put local-state doc-id payload)
-       (float payload))
+     (fn [^bzzz.java.query.ExpressionContext ctx]
+       (let [payload (.payload_get_int ctx)]
+         (.local-state_get ctx (.docID ctx))
+         (.local-state_set ctx (.docID ctx) payload)
+         (float payload)))
 "}},
     "index": "bzzz-bench"
 }' http://localhost:3000/
@@ -75,10 +59,9 @@ boom -n 1000000 -c 10 -m GET -d '
     "field": "name",
     "value": "doe",
     "clj-eval": "
-     (fn [explanation payload ^java.util.Map local-state fc doc-id]
-;;       (.get local-state \"something\")
-;;       (.put local-state \"something\" payload)
-       (float payload))
+     (fn [^bzzz.java.query.ExpressionContext ctx]
+       (let [payload (.payload_get_int ctx)]
+         (float payload)))
 "}},
     "index": "bzzz2-bench-5m"
 }' http://localhost:3000/

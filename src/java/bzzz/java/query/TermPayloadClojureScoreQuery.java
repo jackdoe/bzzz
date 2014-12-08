@@ -10,15 +10,17 @@ import clojure.lang.IFn;
 import clojure.lang.Compiler;
 import java.io.StringReader;
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap.Builder;
+import bzzz.java.query.ExpressionContext;
 
 public class TermPayloadClojureScoreQuery extends Query {
     public static int EXPR_CACHE_CAPACITY = 10000; // TODO: make this a parameter
     public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
+    public static Map<Object,Object> GLOBAL_EXPR_CACHE = new Builder<Object,Object>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
     public Term term;
     public String expr;
-    public Map<Object,Object> local_state = new HashMap<Object,Object>();
     public String[] field_cache_req;
     public IFn clj_expr;
+    public final ExpressionContext clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE);
     public TermPayloadClojureScoreQuery(Term term, String expr, String[] field_cache_req) throws Exception {
         this.term = term;
         this.expr = expr;
@@ -63,22 +65,23 @@ public class TermPayloadClojureScoreQuery extends Query {
             public void normalize(float queryNorm, float topLevelBoost) {}
             @Override
             public Scorer scorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
-                return createScorer(context,acceptDocs,null);
+                return createScorer(context,acceptDocs);
             }
             @Override
             public Explanation explain(AtomicReaderContext context, int doc) throws IOException {
-                Explanation e = new Explanation();
-                Scorer s = createScorer(context,context.reader().getLiveDocs(),e);
+                clj_context.explanation = null;
+                Scorer s = createScorer(context,context.reader().getLiveDocs());
                 if (s != null && s.advance(doc) == doc ) {
+                    clj_context.explanation = new Explanation();
                     float score = s.score();
-                    e.setValue(score);
-                    e.setDescription("result of: " + expr);
-                    return e;
+                    clj_context.explanation.setValue(score);
+                    clj_context.explanation.setDescription("result of: " + expr);
+                    return clj_context.explanation;
                 }
                 return new Explanation(0f,"no matching term");
             }
 
-            public Scorer createScorer(AtomicReaderContext context, Bits acceptDocs, final Explanation explanation) throws IOException {
+            public Scorer createScorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
                 Terms terms = context.reader().terms(term.field());
                 if (terms == null)
                     return null;
@@ -94,22 +97,9 @@ public class TermPayloadClojureScoreQuery extends Query {
                 if (postings == null)
                     throw new IllegalStateException("field <" + term.field() + "> was indexed without position data");
 
-                final Map<String,Object> fc = new HashMap<String,Object>();
-                if (field_cache_req != null) {
-                    AtomicReader r = context.reader();
-                    for (String name : field_cache_req) {
-                        if (name.indexOf("_int") != -1)
-                            fc.put(name,FieldCache.DEFAULT.getInts(r,name,false));
-                        else if (name.indexOf("_long") != -1)
-                            fc.put(name,FieldCache.DEFAULT.getLongs(r,name,false));
-                        else if (name.indexOf("_float") != -1)
-                            fc.put(name,FieldCache.DEFAULT.getFloats(r,name,false));
-                        else if (name.indexOf("_double") != -1)
-                            fc.put(name,FieldCache.DEFAULT.getDoubles(r,name,false));
-                        else
-                            throw new IOException(name + " can only get field cache for _int|_long|_float|_double");
-                    }
-                }
+                clj_context.postings = postings;
+                clj_context.fill_field_cache(context.reader(),field_cache_req);
+
                 return new Scorer(weight) {
                     @Override
                     public int docID() { return postings.docID(); }
@@ -125,8 +115,9 @@ public class TermPayloadClojureScoreQuery extends Query {
                     public String toString() { return "scorer(" + weight.getQuery().toString() + ")"; }
                     @Override
                     public float score() throws IOException {
-                        int payload = Helper.decode_int_payload(postings.getPayload());
-                        return (float) clj_expr.invoke(explanation,payload,local_state,fc,docID());
+                        clj_context.freq = freq();
+                        clj_context.docID = docID();
+                        return (float) clj_expr.invoke(clj_context);
                     }
                 };
             }

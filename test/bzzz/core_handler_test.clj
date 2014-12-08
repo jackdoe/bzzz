@@ -161,22 +161,22 @@
     (let [broken-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                  :field-cache ["some_integer"]
                                                  :clj-eval "
-(fn [explanation payload local-state fc doc-id]
+(fn [^bzzz.java.query.ExpressionContext ctx]
   (float
     (+ 10
        non-existing-thing
-       payload
-       (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id))))
+       (.payload_get_int ctx)
+       (.fc_get_integer ctx \"some_integer\"))))
 "
                                                  }}
           good-query {:term-payload-clj-score {:field "name_payload", :value "xxxyyy"
                                                :field-cache ["some_integer"]
                                                :clj-eval "
-(fn [explanation payload local-state fc doc-id]
+(fn [^bzzz.java.query.ExpressionContext ctx]
   (float
     (+ 10
-       payload
-       (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"some_integer\") doc-id))))
+       (.payload_get_int ctx)
+       (.fc_get_integer ctx \"some_integer\"))))
 "
                                                }}
           req-good {:index test-index-name

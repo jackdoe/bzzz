@@ -467,7 +467,7 @@ split the term produced by the tokenizer, and it will index only the left part, 
 This integer will be passed as one of the arguments to the term-payload-clj-score clj-eval expression
 
 ```
-{
+curl -XGET -d '{
   "explain": true,
   "query": {
     "term-payload-clj-score": {
@@ -475,32 +475,31 @@ This integer will be passed as one of the arguments to the term-payload-clj-scor
       "value": "doe",
       "field-cache": ["popularity_integer"],
       "clj-eval": "
-       ;; if you are using the local-state, always hint it to java.util.Map
-       ;; so .put and .get calls are not looked up through reflection
-       (fn [explanation payload ^java.util.Map local-state ^java.util.Map fc doc-id]
-         (let [popularity_integer (.get ^org.apache.lucene.search.FieldCache$Ints (get fc \"popularity_integer\") doc-id)]
-           (when explanation ;; not-null only for top returned results when explain:true is passed
+       (fn [^bzzz.java.query.ExpressionContext ctx]
+         (let [popularity_integer (.fc_get_int ctx \"popularity_integer\")
+               payload (.payload_get_int ctx)]
+           (when (.explanation ctx) ;; not-null only for top returned results when explain:true is passed
              (do
-               (println \"you can even print something here, it will be in /var/log/bzzz/bzz.log, lets dump all params:\"
-                        explanation payload local-state fc doc-id)
-               (.addDetail explanation (org.apache.lucene.search.Explanation.
+               (println \"you can even print something here, it will be in /var/log/bzzz/bzz.log, some parameters:\" payload popularity_integer)
+               (.addDetail (.explanation ctx) (org.apache.lucene.search.Explanation.
                                          (float 10)
-                                         \"starting with 10\")))
-               (.addDetail explanation (org.apache.lucene.search.Explanation.
-                                         (float payload)
-                                         (str \"because of payload: \" payload)))
-               (.addDetail explanation (org.apache.lucene.search.Explanation.
-                                         (float popularity_integer)
-                                         (str \"because of popularity_integer's value: \" popularity_integer))))
+                                         \"starting with 10\"))
+               (.explanation_add ctx 10 \"starting with 10\")
+               (.explanation_add ctx payload \"because of payload\")
+               (.explanation_add ctx popularity_integer (str \"because of popularity_integer: \" popularity_integer))))
+           (.local_state_get ctx \"something\")         ;; access to per-shard state (destroyed after the query execution is done)
+           (.local_state_set ctx \"something\" payload) ;; it is just a Map<Object,Object>
 
-           (.get local-state \"something\")         ;; access to per-shard state
-           (.put local-state \"something\" payload) ;; it is just a Map<Object,Object>
+           (.global_state_get ctx \"something_uniq_id_0x4\")         ;; global LRU Map that has 10k key capacity
+           (.global_state_set ctx \"something_uniq_id_0x4\" payload) ;; destroyed on server restart (it is also just a Map<Object,Object>)
+
            ;; return the actual score, has to be float-ed
            (float (+ 10 payload popularity_integer))))"
     }
   },
   "index": "some-index"
-}
+}' http://localhost:3000/
+
 ```
 
 the query needs:
@@ -509,24 +508,38 @@ the query needs:
 * field-cache(optional): array of field names that will be requested from FieldCache/DEFAULT, and mapped into Map<String,Object>, that will can be used from  if you want to access some of the field-cache data from the clojure expression
 * clj-eval: string that is the actuall expression, it is compiled only once and there is LRU cache that takes 10_000 expressions, so it wont be compiled again for quite some time, this LRU cache is shared through all threads/shards/indexes, so you dont have to worry too much about time spend while clj evaluating the expression
 
-The expression has to return a function, that takes 5 arguments, and returns a float:
+The expression has to return a function, that takes 1 argument, and returns a float:
 ```
-(fn [^org.apache.lucene.search.Explanation explanation
-     payload
-     ^java.util.Map local-state
-     ^java.util.Map fc
-     doc-id]
+(fn [^bzzz.java.query.ExpressionContext ctx]
       (float 1))
 ```
 
-* explanation - this is new Explanation() called for you to explain your score, for the top documents when explain:true is passed, as you can see in the example you can use that for very extensive debugging because it will be called only `"size"` times per query, and not only you can dump string directly into the resultset, you can also print into stdout
-* payload - the actual payload indexed with this term, if the term has multiple occurances per document, it will call your function only once, with the first payload for that document.
-* local-state - something you can put/get data from while scoring documents in the same shard, it is just a `Map<Object,Object>`, be carefull to hint it in your function (like `(fn([explanation payload ^java.util.Map local-state ...`), if you are about to use it, otherwise it will use reflection for every score() call, which means if you have 5m documents it will resort to reflection for every single one of them.
+context:
+* (.explanation ctx) - this is new Explanation() called for you to explain your score, for the top documents when explain:true is passed, as you can see in the example you can use that for very extensive debugging because it will be called only `"size"` times per query, and not only you can dump string directly into the resultset, you can also print into stdout
+* (.payload ctx) - this is the actual BytesRef from the postings, you can decode it yourself if you want, of use the helper (.payload_get_int ctx) method, which uses the PayloadHelper/decodeInt. If you have multiple occurances you have access to all the payloads by using (.postings_next_position ctx) and then getting the payload agani
+* (.fc ctx) - `Map<String,Object>` for reqested field cache fields, and their FieldCache$Ints/Longs.. representations, there are some helper functions like `(.fc_get_int ctx name)`, `(.fc_get_float ctx name), `(.fc_get_long ctx name)` `(.fc_get_double ctx name)` that use the current docID and looks it up in the `fc` map
+* (.local_state ctx) - temporary `Map<Object,Object>` that lives only through your query lifecycle, you can put/get data from while scoring documents in the same shard, there are `(.local_state_get ctx key)` and `(.local_state_set ctx key value)` helper functions in the `ctx`
+* (.global_state ctx) - global state, it is a concurrent LRU Map<Object,Object> with 10k entries, and the items you put in, will live until server restart, or when you run out of capacity and they are pushed out, because new stuff comes in. You can use it for something like:
+```
+1) run query that updates the state for some uniq message token (a generic query id for example)
+2) re-run the query but actually using the state set up from the previous query for the same query id
 
-* field-cache map (string -> field cache instance), also remember to hint it
-* doc id (used to lookup field cache values for the document being scored), or to store it in the local-state for some reason
+1) so the first expression can look like:
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [counter (or (.global_state_get ctx \"counter_for_0x23\") 0)]
+    (when (not (.explanation ctx))
+      (.global_state_set ctx \"counter_for_0x23\" (+ 1 counter)))
+    (float 1)))
 
-speed wise it is quite ok, running a regular term query(one that does not access the payload data) with 5.5m documents on 1 shard on 1 thread on my laptop takes 150ms, running a clojure expression query takes ~300-400ms (depending if you use the local state or not), and for small sets of documents (100-200k) the difference is almost not noticable.
+2) and the second expression just uses counter_for_0x23
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [counter (or (.global_state_get ctx \"counter_for_0x23\") 0)]
+    (float counter)))
+```
+* (.docID ctx) - (used to lookup field cache values for the document being scored), or to store it in the local-state for some reason
+* (.postings ctx) those are the actual `DocsAndPositionsEnum`, so you have access to freq() or docID() or nextPosition() etc
+
+speed wise it is quite ok, running a regular term query(one that does not access the payload data) with 5.5m documents on 1 shard on 1 thread on my laptop takes 150ms, running a clojure expression query takes ~300-400ms (depending if you use the local state or not), and for small sets of documents (100-200k) the difference is quite small (will actually post some data about it soon)
 
 ### TODO:
 * write proper documentation

@@ -538,7 +538,7 @@ context:
 * (.docID ctx) - used to lookup field cache values for the document being scored, or to store it in the local-state for some reason
 * (.postings ctx) those are the actual `DocsAndPositionsEnum`, so you have access to freq() or docID() or nextPosition() etc
 
-speed wise it is quite ok, running a regular term query(one that does not access the payload data) with 5.5m documents on 1 shard on 1 thread on my laptop takes 150ms, running a clojure expression query takes ~300-400ms (depending if you use the local state or not), and for small sets of documents (100-200k) the difference is quite small (will actually post some data about it soon)
+speed wise it is quite ok, running a regular term query(one that does not access the payload data) with 5.5m documents on 1 shard on 1 thread on my laptop takes 150ms, running a clojure expression query takes ~250-400ms (depending if you use the local state or not), and for small sets of documents (100-200k) the difference is quite small (will actually post some data about it soon)
 
 ### TODO:
 * write proper documentation

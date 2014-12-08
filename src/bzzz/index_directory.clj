@@ -7,6 +7,7 @@
   (use [clojure.string :only (join)])
   (:require [clojure.tools.logging :as log])
   (:require [clojure.data.json :as json])
+  (:require [bzzz.index-stat :as stat])
   (:require [clojure.java.io :as io])
   (:import (java.io StringReader File Writer FileNotFoundException)
            (java.lang OutOfMemoryError)
@@ -156,10 +157,18 @@
 
 (defn use-searcher [index refresh callback]
   (let [[^SearcherManager manager taxo] (get-smanager-taxo index refresh)
-        searcher ^IndexSearcher (.acquire manager)]
+        searcher ^IndexSearcher (.acquire manager)
+        t0 (time-ms)]
     (try
-        (callback searcher taxo)
-      (finally (.release manager searcher)))))
+      (callback searcher taxo)
+      (catch Throwable e
+        (do
+          (stat/update-error index "use-searcher")
+          (throw e)))
+      (finally
+        (do
+          (.release manager searcher)
+          (stat/update-took-count index "use-searcher" (time-took t0)))))))
 
 (defn log-close-err [^Directory dir ^Throwable e]
   (log/warn (str
@@ -202,7 +211,8 @@
 
 (defn use-writer [index force-merge callback]
   (let [writer (new-index-writer index)
-        taxo (new-taxo-writer index)]
+        taxo (new-taxo-writer index)
+        t0 (time-ms)]
     (try
       (do
         (.prepareCommit writer)
@@ -216,6 +226,7 @@
           rc))
       (catch Exception e
         (do
+          (stat/update-error index "use-writer")
           (if-not (instance? OutOfMemoryError e)
             (do
               (.rollback taxo)
@@ -224,7 +235,8 @@
       (finally
         (do
           (safe-close-taxo taxo)
-          (safe-close-writer writer))))))
+          (safe-close-writer writer)
+          (stat/update-took-count index "use-writer"(time-took t0)))))))
 
 (defn use-writer-all [index callback]
   (doseq [name (index-name-matching index)]
@@ -243,35 +255,43 @@
 (defn get-smanager-taxo [index refresh]
   (locking name->smanager-taxo*
     (when (nil? (@name->smanager-taxo* index))
-      (swap! name->smanager-taxo* assoc index [(new-searcher-manager index)
-                                               (try-new-taxo-reader index)]))
+      (do
+        (swap! name->smanager-taxo* assoc index [(new-searcher-manager index)
+                                                 (try-new-taxo-reader index)])
+        ;; to avoid a race in case multiple threads
+        ;; decide to use the index in the very beginning
+        ;; before the statistic keys are ready, so we just create them under the lock here
+        ;; not doing the same for writers, because of the exclusive write lock there
+        (stat/get-statistics index)))
     (let [[manager taxo] (@name->smanager-taxo* index)]
       (when refresh
-        (do
-          (refresh-searcher-locked index manager taxo)))
+        (refresh-searcher-locked index manager taxo))
       [manager taxo])))
 
 (defn refresh-searcher-locked [index ^SearcherManager manager ^DirectoryTaxonomyReader taxo]
   (log/debug "refreshing: " index " " manager " " taxo)
-  (try
-    (do
-      (.maybeRefresh manager)
-      (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
-        (swap! name->smanager-taxo* assoc-in [index 1] changed)))
-    (catch Throwable e
+  (let [t0 (time-ms)]
+    (try
       (do
-        (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
-        (try-close-manager-taxo manager taxo)
-        (swap! name->smanager-taxo* dissoc index)))))
+        (.maybeRefresh manager)
+        (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
+          (swap! name->smanager-taxo* assoc-in [index 1] changed))
+        (stat/update-took-count index "refresh-search-managers" (time-took t0)))
+      (catch Throwable e
+        (do
+          (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
+          (try-close-manager-taxo manager taxo)
+          (swap! name->smanager-taxo* dissoc index))))))
 
 (defn refresh-search-managers []
-  (let [start (time-ms)]
+  (let [t0 (time-ms)]
     (bootstrap-indexes)
     (locking name->smanager-taxo*
       (doseq [[index [^SearcherManager manager
                       ^DirectoryTaxonomyReader taxo]] @name->smanager-taxo*]
         (refresh-searcher-locked index manager taxo)))
-    (log/debug "refreshing took" (time-took start))))
+    (stat/update-took-count stat/total "refresh-search-managers" (time-took t0))
+    (log/debug "refreshing took" (time-took t0))))
 
 (defn shutdown []
   (locking name->smanager-taxo*
@@ -288,6 +308,7 @@
                                      {:docs (.numDocs reader)
                                       :searcher {:to-string (.toString searcher)
                                                  :sim (.toString (.getSimilarity searcher))}
+                                      :stat (stat/get-statistics name)
                                       :manager {:to-string (.toString manager)}
                                       :reader {:to-string (.toString reader)
                                                :leaves (count (.leaves reader))

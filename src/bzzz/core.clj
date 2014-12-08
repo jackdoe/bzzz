@@ -2,12 +2,13 @@
   (use ring.adapter.jetty)
   (use bzzz.util)
   (use bzzz.const)
-  (use [clojure.string :only (split join)])
+  (use [clojure.string :only (split join lower-case)])
   (use [overtone.at-at :only (every mk-pool)])
   (:require [bzzz.const :as const])
   (:require [bzzz.index-search :as index-search])
   (:require [bzzz.index-directory :as index-directory])
   (:require [bzzz.index-store :as index-store])
+  (:require [bzzz.index-stat :as index-stat])
   (:require [bzzz.analyzer :as analyzer])
   (:require [bzzz.query :as query])
   (:require [clojure.core.async :as async])
@@ -33,7 +34,7 @@
 (defn not-doing-gc? [than]
   (let [diff (- (get (second than) :next-gc-at (+ @timer* 100000)) @timer*)]
     (not (< (abs diff) 2)))) ;; regardless if we are 2 seconds before gc
-                             ;; or 2 seconds after, try to skip this host
+;; or 2 seconds after, try to skip this host
 
 (defn possible-hosts [list]
   (let [p (filter #(and (rescent? %1) (not-doing-gc? %1)) list)]
@@ -44,11 +45,15 @@
       (first (rand-nth p)))))
 
 (defn peer-resolve [identifier]
-  (if-let [all-possible ((keyword identifier) @peers*)]
-    (if-let [host (possible-hosts all-possible)]
-      host
-      (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier)))))
-    identifier)) ;; nothing matches the identifier
+  (let [t0 (time-ms)
+        resolved (if-let [all-possible ((keyword identifier) @peers*)]
+                   (if-let [host (possible-hosts all-possible)]
+                     host
+                     (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier)))))
+                   ;; nothing matches the identifier
+                   identifier)]
+    (index-stat/update-took-count index-stat/total "peer-resolve" (time-took t0))
+    resolved))
 
 ;; [ "a", ["b","c",["d","e"]]]
 (defn search-remote [hosts input c]
@@ -91,6 +96,7 @@
    :discover-hosts @discover-hosts*
    :peers @peers*
    :timer @timer*
+   :stat (index-stat/get-statistics)
    :next-gc @next-gc*})
 
 (defn validate-discover-url [x]
@@ -131,18 +137,24 @@
       (throw (Throwable. "unexpected method" method)))))
 
 (defn handler [request]
-  (try
-    {:status 200
-     :headers {"Content-Type" "application/json"}
-     :body (json/write-str (work (:request-method request)
-                                 (:uri request)
-                                 (json/read-str (slurp-or-default (:body request) "{}") :key-fn keyword)))}
-    (catch Throwable e
-      (let [ex (ex-str e)]
-        (log/warn request "->" ex)
-        {:status 500
-         :headers {"Content-Type" "application/json"}
-         :body (json/write-str {:exception ex})}))))
+  (let [t0 (time-ms)
+        stat-key (str "http-" (lower-case (as-str (:request-method request))))]
+    (try
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (json/write-str (work (:request-method request)
+                                   (:uri request)
+                                   (json/read-str (slurp-or-default (:body request) "{}") :key-fn keyword)))}
+      (catch Throwable e
+        (let [ex (ex-str e)]
+          (index-stat/update-error index-stat/total stat-key)
+          (log/warn request "->" ex)
+          {:status 500
+           :headers {"Content-Type" "application/json"}
+           :body (json/write-str {:exception ex})}))
+      (finally (index-stat/update-took-count index-stat/total
+                                             stat-key
+                                             (time-took t0))))))
 
 (defn update-discovery-state [host c str-state]
   (try
@@ -167,6 +179,7 @@
                              (merge-discover-hosts remote-discover-hosts)))
                          (async/>!! c true)))
     (catch Exception e
+      (index-stat/update-error index-stat/total "update-discovery")
       (log/trace "update-discovery-state" host (.getMessage e))
       (async/>!! c false))))
 
@@ -178,18 +191,22 @@
            assoc-in [@index-directory/identifier*
                      (join ":" ["http://localhost" (as-str @port*)])] {:update @timer*
                                                                        :next-gc-at (+ @timer* @next-gc*)}))
-  (let [c (async/chan)
+  (let [t0 (time-ms)
+        c (async/chan)
         hosts @discover-hosts*
         str-state (json/write-str {:discover-hosts @discover-hosts*})]
     (doseq [[host unused] hosts]
       (update-discovery-state host c str-state))
     (doseq [host hosts]
-      (async/<!! c))))
+      (async/<!! c))
+    (index-stat/update-took-count index-stat/total "discover" (time-took t0))))
 
 (defn attempt-gc []
   (if (<= @next-gc* 0)
     (do
-      (System/gc)
+      (let [t0 (time-ms)]
+        (System/gc)
+        (index-stat/update-took-count index-stat/total "gc" (time-took t0)))
       (let [half (/ @gc-interval* 2)]
         (reset! next-gc* (+ half (int (rand half))))))
     (swap! next-gc* dec)))
@@ -250,12 +267,12 @@
     (reset! index-directory/root* (:directory options))
     (reset! port* (:port options)))
   (index-directory/initial-read-alias-file)
+  (index-stat/initial-setup)
   (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
   (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--allow-unsafe-queries" @query/allow-unsafe-queries*)
   (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
   (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
   (every 1000 #(attempt-gc) (mk-pool) :desc "attempt-gc")
-
   (discover)
   (every (* 1000 @discover-interval*) #(discover) (mk-pool) :desc "periodic discover")
 

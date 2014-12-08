@@ -57,8 +57,8 @@
    obj - the instance object, or a Class for static fields"
   [class field-name obj]
   (-> class (.getDeclaredField (name field-name))
-    (doto (.setAccessible true))
-    (.get obj)))
+      (doto (.setAccessible true))
+      (.get obj)))
 
 (defn jr [body]
   (json/read-str body :key-fn keyword))
@@ -155,7 +155,7 @@
   (if (instance? Boolean x)
     x
     (Boolean/parseBoolean x)))
-  
+
 (defn indexed [coll] (map-indexed vector coll))
 
 (defn delete-recursively [fname]

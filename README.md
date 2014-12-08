@@ -484,8 +484,7 @@ curl -XGET -d '{
                (.addDetail (.explanation ctx) (org.apache.lucene.search.Explanation.
                                          (float 10)
                                          \"starting with 10\"))
-               (.explanation_add ctx 10 \"starting with 10\")
-               (.explanation_add ctx payload \"because of payload\")
+               (.explanation_add ctx payload \"because of payload\") ;; or you can use the helper .explanation_add
                (.explanation_add ctx popularity_integer (str \"because of popularity_integer: \" popularity_integer))))
            (.local_state_get ctx \"something\")         ;; access to per-shard state (destroyed after the query execution is done)
            (.local_state_set ctx \"something\" payload) ;; it is just a Map<Object,Object>
@@ -517,7 +516,7 @@ The expression has to return a function, that takes 1 argument, and returns a fl
 context:
 * (.explanation ctx) - this is new Explanation() called for you to explain your score, for the top documents when explain:true is passed, as you can see in the example you can use that for very extensive debugging because it will be called only `"size"` times per query, and not only you can dump string directly into the resultset, you can also print into stdout
 * (.payload ctx) - this is the actual BytesRef from the postings, you can decode it yourself if you want, of use the helper (.payload_get_int ctx) method, which uses the PayloadHelper/decodeInt. If you have multiple occurances you have access to all the payloads by using (.postings_next_position ctx) and then getting the payload agani
-* (.fc ctx) - `Map<String,Object>` for reqested field cache fields, and their FieldCache$Ints/Longs.. representations, there are some helper functions like `(.fc_get_int ctx name)`, `(.fc_get_float ctx name), `(.fc_get_long ctx name)` `(.fc_get_double ctx name)` that use the current docID and looks it up in the `fc` map
+* (.fc ctx) - `Map<String,Object>` for reqested field cache fields, and their FieldCache$Ints/Longs.. representations, there are some helper functions like `(.fc_get_int ctx name)`, `(.fc_get_float ctx name)`, `(.fc_get_long ctx name)` `(.fc_get_double ctx name)` that use the current docID and looks it up in the `fc` map
 * (.local_state ctx) - temporary `Map<Object,Object>` that lives only through your query lifecycle, you can put/get data from while scoring documents in the same shard, there are `(.local_state_get ctx key)` and `(.local_state_set ctx key value)` helper functions in the `ctx`
 * (.global_state ctx) - global state, it is a concurrent LRU Map<Object,Object> with 10k entries, and the items you put in, will live until server restart, or when you run out of capacity and they are pushed out, because new stuff comes in. You can use it for something like:
 ```
@@ -536,7 +535,7 @@ context:
   (let [counter (or (.global_state_get ctx \"counter_for_0x23\") 0)]
     (float counter)))
 ```
-* (.docID ctx) - (used to lookup field cache values for the document being scored), or to store it in the local-state for some reason
+* (.docID ctx) - used to lookup field cache values for the document being scored, or to store it in the local-state for some reason
 * (.postings ctx) those are the actual `DocsAndPositionsEnum`, so you have access to freq() or docID() or nextPosition() etc
 
 speed wise it is quite ok, running a regular term query(one that does not access the payload data) with 5.5m documents on 1 shard on 1 thread on my laptop takes 150ms, running a clojure expression query takes ~300-400ms (depending if you use the local state or not), and for small sets of documents (100-200k) the difference is quite small (will actually post some data about it soon)

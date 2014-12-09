@@ -52,6 +52,7 @@
         resolved (if-let [all-possible ((keyword identifier) @peers*)]
                    (if-let [host (possible-hosts all-possible)]
                      host
+                     ;; there is something in the @peers* table, but it is empty/not-rescenn
                      (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier)))))
                    ;; nothing matches the identifier, in the @peers* table
                    ;; just return it

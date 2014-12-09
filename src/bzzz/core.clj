@@ -28,11 +28,11 @@
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
 
-(defn rescent? [[host setting]]
-  (< (- @timer* (get setting :update 0)) @acceptable-discover-time-diff*))
+(defn rescent? [[host state]]
+  (< (- @timer* (get state :update 0)) @acceptable-discover-time-diff*))
 
-(defn not-doing-gc? [[host setting]]
-  (let [diff (- (get setting :next-gc-at (+ @timer* 100000)) @timer*)]
+(defn not-doing-gc? [[host state]]
+  (let [diff (- (get state :next-gc-at (+ @timer* 100000)) @timer*)]
     (not (< (abs diff) 2)))) ;; regardless if we are 2 seconds before gc
                              ;; or 2 seconds after, try to skip this host
 

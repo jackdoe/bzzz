@@ -28,22 +28,24 @@
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
 
-(defn rescent? [than]
-  (< (- @timer* (get (second than) :update 0)) @acceptable-discover-time-diff*))
+(defn rescent? [[host setting]]
+  (< (- @timer* (get setting :update 0)) @acceptable-discover-time-diff*))
 
-(defn not-doing-gc? [than]
-  (let [diff (- (get (second than) :next-gc-at (+ @timer* 100000)) @timer*)]
+(defn not-doing-gc? [[host setting]]
+  (let [diff (- (get setting :next-gc-at (+ @timer* 100000)) @timer*)]
     (not (< (abs diff) 2)))) ;; regardless if we are 2 seconds before gc
                              ;; or 2 seconds after, try to skip this host
 
 (defn possible-hosts [list]
-  (let [rescent (filter rescent? list)]
-    (let [not-doing-gc (filter not-doing-gc? rescent)]
-      (if (= 0 (count not-doing-gc))
-        (do
-          (log/debug "found host after ignoring the gcing ones, dump:" list @timer* @discover-hosts* @peers*)
-          (first (rand-nth rescent)))
-        (first (rand-nth not-doing-gc))))))
+  (let [rescent (filter rescent? list)
+        not-doing-gc (filter not-doing-gc? rescent)]
+    (if-not (= 0 (count not-doing-gc))
+      (first (rand-nth not-doing-gc))
+      (do
+        (log/debug "found host after ignoring the gcing ones, dump:" list @timer* @discover-hosts* @peers*)
+        (if (> (count rescent) 0)
+          (first (rand-nth rescent))
+          nil)))))
 
 (defn peer-resolve [identifier]
   (let [t0 (time-ms)
@@ -51,7 +53,8 @@
                    (if-let [host (possible-hosts all-possible)]
                      host
                      (throw (Throwable. (str "cannot find possible hosts for:" (as-str identifier)))))
-                   ;; nothing matches the identifier
+                   ;; nothing matches the identifier, in the @peers* table
+                   ;; just return it
                    identifier)]
     (index-stat/update-took-count index-stat/total "peer-resolve" (time-took t0))
     resolved))

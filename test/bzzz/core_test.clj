@@ -89,6 +89,48 @@
   (testing "cleanup"
     (cleanup))
 
+  (testing "resolve"
+    (let [old-peers @peers*
+          state {:__partition_1 {"some-host-1" {:update @timer*
+                                                :next-gc-at 19999}}
+                 :__partition_4 {"some-host-4" {:update @timer*
+                                                :next-gc-at 0}
+                                 "some-host-4-no-gc" {:update @timer*
+                                                      :next-gc-at 20000}}
+                 :__partition_5 {"some-host-5-old" {:update (- @timer* @acceptable-discover-time-diff* 10)
+                                                    :next-gc-at 2000}
+                                 "some-host-5-gc" {:update @timer*
+                                                   :next-gc-at 0}}
+                 :__partition_7 {"some-host-7-old" {:update (- @timer* @acceptable-discover-time-diff* 10)
+                                                    :next-gc-at 2000}
+                                 "some-host-7-gc" {:update @timer*
+                                                   :next-gc-at 0}
+                                 "some-host-7" {:update @timer*
+                                                :next-gc-at 1999}}
+                 :__partition_6 {"some-host-6-gc" {:update @timer*
+                                                   :next-gc-at 0}}
+                 :__partition_2 nil
+                 :__partition_3 {}}]
+      (reset! peers* state)
+      (is (= "some-host-1" (peer-resolve "__partition_1")))
+      (is (= "some-host-1" (peer-resolve :__partition_1)))
+
+      (is (= "__partition_2" (peer-resolve "__partition_2")))   ;; stored as nil
+      (is (= "__partition_10" (peer-resolve "__partition_10"))) ;; not in the map
+
+      (dotimes [n 100]
+        (is (= "some-host-4-no-gc" (peer-resolve "__partition_4"))))
+      (dotimes [n 100]
+        (is (= "some-host-5-gc" (peer-resolve "__partition_5"))))
+
+      (dotimes [n 100]
+        (is (= "some-host-7" (peer-resolve "__partition_7"))))
+
+      (is (= "some-host-6-gc" (peer-resolve "__partition_6")))
+      (is (thrown? Throwable (peer-resolve "__partition_3")))
+
+      (reset! peers* old-peers)))
+
   (testing "store"
     (let [ret-0 (store :index test-index-name
                        :documents [{:name "jack doe foo"

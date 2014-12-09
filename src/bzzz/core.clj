@@ -43,7 +43,7 @@
         (do
           (log/debug "found host after ignoring the gcing ones, dump:" list @timer* @discover-hosts* @peers*)
           (first (rand-nth rescent)))
-        (first rand-nth not-doing-gc)))))
+        (first (rand-nth not-doing-gc))))))
 
 (defn peer-resolve [identifier]
   (let [t0 (time-ms)

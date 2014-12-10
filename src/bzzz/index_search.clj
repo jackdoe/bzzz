@@ -306,7 +306,7 @@
 
 (defn search [input]
   (let [ms-start (time-ms)
-        index (need :index input "need index")
+        index (need :index input "need <index>")
         facets (:facets input)
         analyzer (extract-analyzer (:analyzer input)) ;; fixme: are all analyzers thread safe?
         facet-config (get-facet-config facets)        ;; fixme: check if it is thread safe

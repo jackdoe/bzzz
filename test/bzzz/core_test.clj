@@ -72,6 +72,7 @@
          :analyzer {:name_st_again {:type "standard"}
                     :bzbz-used-only-for-facet {:type "standard"}}))
 
+
 (defn cleanup []
   (delete-all test-index-name)
   (refresh-search-managers)
@@ -907,6 +908,16 @@
       (is (= 2 (:total (searcher true))))))
 
 
+  (testing "bad-term"
+    (is (thrown-with-msg? Throwable #"need <field>"
+                          (search {:index test-index-name
+                                   :query {:term {:value "x", :field nil}}})))
+    (is (thrown-with-msg? Throwable #"need <field>"
+                          (search {:index test-index-name
+                                   :query {:term-payload-clj-score {:value "x", :field nil :clj-expr "()"}}})))
+    (is (thrown-with-msg? Throwable #"need <clj-eval>"
+                          (search {:index test-index-name
+                                   :query {:term-payload-clj-score {:value "x", :field "x" :clj-eval nil}}}))))
 
   (testing "facets"
     (dotimes [n 1000]

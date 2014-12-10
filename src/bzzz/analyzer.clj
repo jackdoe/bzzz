@@ -38,12 +38,12 @@
 ;;    char-filter => [{ type => "pattern", "pattern" => "X+", "replacement" => "ZZ" }]
 ;; }
 (defn gen-char-filter [^Reader reader obj]
-  (let [type (need :type obj "need char-filter type: 'pattern|html-strip..'")]
+  (let [type (need :type obj "need char-filter <type>: 'pattern|html-strip..'")]
     (case (as-str type)
       ;; http://docs.oracle.com/javase/6/docs/api/java/util/regex/Pattern.html?is-external=true
       ;; https://lucene.apache.org/core/4_9_1/analyzers-common/org/apache/lucene/analysis/pattern/PatternReplaceCharFilter.html
-      "pattern-replace" (PatternReplaceCharFilter. (Pattern/compile (need :pattern obj "need pattern"))
-                                                   (need :replacement obj "need replacement")
+      "pattern-replace" (PatternReplaceCharFilter. (Pattern/compile (need :pattern obj "need <pattern>"))
+                                                   (need :replacement obj "need <replacement>")
                                                    reader)
       "html-strip" (HTMLStripCharFilter. reader (set (get obj :escaped-tags []))))))
 
@@ -61,21 +61,21 @@
       "keyword" (KeywordTokenizer. char-filter)
       "edge-ngram" (EdgeNGramTokenizer. *version*
                                         char-filter
-                                        (int (need :min_gram obj "need min_gram"))
-                                        (int (need :max_gram obj "need max_gram")))
+                                        (int (need :min_gram obj "need <min_gram>"))
+                                        (int (need :max_gram obj "need <max_gram>")))
       "ngram" (NGramTokenizer. *version*
                                char-filter
-                               (int (need :min_gram obj "need min_gram"))
-                               (int (need :max_gram obj "need max_gram"))))))
+                               (int (need :min_gram obj "need <min_gram>"))
+                               (int (need :max_gram obj "need <max_gram>"))))))
 (defn gen-token-filter [^TokenStream source obj]
-  (let [type (need :type obj "need tokenfilter type: 'custom|whitespace|keyword..'")]
+  (let [type (need :type obj "need tokenfilter <type>: 'custom|whitespace|keyword..'")]
     (case (as-str type)
       "lowercase" (LowerCaseFilter. *version* source)
-      "limit" (LimitTokenCountFilter. source (need :max-token-count obj "need max-token-count"))
+      "limit" (LimitTokenCountFilter. source (need :max-token-count obj "need <max-token-count>"))
       "length" (LengthFilter. (get obj :enable-position-increment true)
                               source
-                              (int (need :min obj "need min length"))
-                              (int (need :max obj "need max length")))
+                              (int (need :min obj "need <min> length"))
+                              (int (need :max obj "need <max> length")))
       "position" (PositionFilter. source (get obj :position-increment 0))
       "reverse" (ReverseStringFilter. *version* source)
       "delimited-payload" (DelimitedPayloadTokenFilter. source
@@ -83,12 +83,12 @@
                                                         (IntegerEncoder.))
       "edge-ngram" (EdgeNGramTokenFilter. *version*
                                           source
-                                          (int (need :min_gram obj "need min_gram"))
-                                          (int (need :max_gram obj "need max_gram")))
+                                          (int (need :min_gram obj "need <min_gram>"))
+                                          (int (need :max_gram obj "need <max_gram>")))
       "ngram" (NGramTokenFilter. *version*
                                  source
-                                 (int (need :min_gram obj "need min_gram"))
-                                 (int (need :max_gram obj "need max_gram"))))))
+                                 (int (need :min_gram obj "need <min_gram>"))
+                                 (int (need :max_gram obj "need <max_gram>"))))))
 
 
 (defn to-lucene-token-filter [source filters]
@@ -99,7 +99,7 @@
 
 ;; bloody hell this is awesome!
 (defn token-filter-chain [obj]
-  (let [tokenizer (need :tokenizer obj "need tokenizer: 'ngram|edge-ngram|whitespace|keyword...'")
+  (let [tokenizer (need :tokenizer obj "need <tokenizer>: 'ngram|edge-ngram|whitespace|keyword...'")
         filter (get obj :filter [])]
     (proxy [Analyzer][]
       (createComponents [^String field ^Reader reader]
@@ -109,7 +109,7 @@
             (new Analyzer$TokenStreamComponents t)))))))
 
 (defn parse-lucene-analyzer [obj]
-  (let [type (need :type obj "need analyzer type: 'custom|whitespace|keyword..'")]
+  (let [type (need :type obj "need analyzer <type>: 'custom|whitespace|keyword..'")]
     (case (as-str type)
       "whitespace" (WhitespaceAnalyzer. *version*)
       "keyword" (KeywordAnalyzer.)

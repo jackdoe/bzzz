@@ -40,7 +40,7 @@
 
 (defn read-field-name ^String [name]
   (if (map? name)
-    (as-str (need :field name "missing field [{field:...,reverse:true/false}]"))
+    (as-str (need :field name "need <field> [{field:...,reverse:true/false}]"))
     (let [name (as-str name)]
       (if (= location-field name)
         (Throwable. (str location-field " has to be a map {field:..., point:... }"))

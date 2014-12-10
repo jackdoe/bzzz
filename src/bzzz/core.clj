@@ -173,7 +173,7 @@
                          (if error
                            (log/trace error)
                            (let [info (jr body)
-                                 host-identifier (keyword (need :identifier info "need identifier"))
+                                 host-identifier (keyword (need :identifier info "need <identifier>"))
                                  host-next-gc (+ @timer* (get info :next-gc 1000000))
                                  remote-discover-hosts (:discover-hosts info)]
                              (log/trace "updating" host "with identifier" host-identifier)

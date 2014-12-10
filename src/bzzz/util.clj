@@ -40,13 +40,15 @@
 (defn time-took [start]
   (- (time-ms) start))
 
-(defn need [key obj ex]
-  (let [found (key obj)]
-    (if (not found)
-      (throw (Throwable. (if (string? ex)
-                           ^String ex
-                           (join " " ex)))))
-    found))
+(defn need
+  ([x ex]
+     (if (not x)
+       (throw (Throwable. (if (string? ex)
+                            ^String ex
+                            (join " " ex)))))
+     x)
+  ([key obj ex]
+     (need (get obj key) ex)))
 
 ;; from https://github.com/arohner/clj-wallhack/blob/master/src/wall/hack.clj
 (defn wall-hack-field

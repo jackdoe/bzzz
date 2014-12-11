@@ -195,8 +195,8 @@
                                                         :min_gram 2
                                                         :max_gram 4}})]
       (refresh-search-managers)
-      (is (= true (ret-0 test-index-name)))
-      (is (= true (ret-1 test-index-name)))))
+      (is (= true (ret-0 (sharded test-index-name 0))))
+      (is (= true (ret-1 (sharded test-index-name 0))))))
 
   (testing "search-bool"
     (let [ret (search {:index test-index-name

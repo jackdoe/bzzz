@@ -90,9 +90,29 @@
       (.close stream))
     (add-facet-field-single doc dim val)))
 
+(defn store-on-shard [index documents facets force-merge]
+  (if (> (count documents) 0)
+    (use-writer index
+                force-merge
+                (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
+                  (let [config (get-facet-config facets)
+                        spatial-strategy (new-spatial-strategy)]
+                    (doseq [m documents]
+                      (let [doc (map->document m spatial-strategy)]
+                        (doseq [[dim f-info] facets]
+                          (if-let [f-val ((keyword dim) m)]
+                            (add-facet-field doc dim f-val f-info @analyzer*)))
+                        (if (:id m)
+                          (.updateDocument writer ^Term (Term. ^String id-field
+                                                               (as-str (:id m)))
+                                           (.build config taxo doc))
+                          (.addDocument writer (.build config taxo doc))))))
+                  { index true }))
+    { index false }))
+
 (defn store
-  [& {:keys [index documents analyzer facets shard alias-set alias-del force-merge]
-      :or {documents [] analyzer nil facets {} shard 0 alias-set nil alias-del nil force-merge 0}}]
+  [& {:keys [index documents analyzer facets shard alias-set alias-del force-merge number-of-shards]
+      :or {documents [] analyzer nil facets {} shard nil alias-set nil alias-del nil force-merge 0 number-of-shards nil}}]
 
   (if (or alias-set alias-del)
     (update-alias index alias-del alias-set))
@@ -100,22 +120,26 @@
   (if analyzer
     (reset! analyzer* (parse-analyzer analyzer)))
 
-  (use-writer (sharded (resolve-alias index) shard)
-              force-merge
-              (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
-                (let [config (get-facet-config facets)
-                      spatial-strategy (new-spatial-strategy)]
-                  (doseq [m documents]
-                    (let [doc (map->document m spatial-strategy)]
-                      (doseq [[dim f-info] facets]
-                        (if-let [f-val ((keyword dim) m)]
-                          (add-facet-field doc dim f-val f-info @analyzer*)))
-                      (if (:id m)
-                        (.updateDocument writer ^Term (Term. ^String id-field
-                                                             (as-str (:id m)))
-                                         (.build config taxo doc))
-                        (.addDocument writer (.build config taxo doc))))))
-                { index true })))
+  (if (and shard number-of-shards)
+    (throw (Throwable. "you can specify only one of <shard> or <number-of-shards>")))
+
+  (if number-of-shards
+    (let [futures (into [] (for [n (range number-of-shards)]
+                             (future
+                               (store-on-shard (sharded (resolve-alias index) n)
+                                               (filter (fn [doc]
+                                                         (let [hashCode (if-let [id (:id doc)]
+                                                                          (hash id)
+                                                                          (hash doc))]
+                                                           (= n (mod hashCode number-of-shards))))
+                                                       documents)
+                                               facets
+                                               force-merge))))]
+      (into [] (for [f futures] @f)))
+    (store-on-shard (sharded (resolve-alias index) (or shard 0))
+                    documents
+                    facets
+                    force-merge)))
 
 (defn delete-from-query
   [index input]
@@ -129,4 +153,3 @@
 (defn delete-all [index]
   (use-writer-all (resolve-alias index)
                   (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo] (.deleteAll writer))))
-

@@ -129,7 +129,7 @@
   (let [input (assoc-index input uri)]
     (log/debug "received request" method input)
     (condp = method
-      :post (mapply index-store/store input)
+      :post (index-store/store input)
       :delete (index-store/delete-from-query (:index input)
                                              (:query input))
       :get (case uri

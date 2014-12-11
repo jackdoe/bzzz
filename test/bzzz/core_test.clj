@@ -31,46 +31,46 @@
   (io/file (as-str default-root) (as-str default-identifier) (str (as-str p) "-shard-" (int-or-parse shard))))
 
 (defn store-something [name shard]
-  (store :index name
-         :shard shard
-         :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"
-                      :find "zzz"
-                      :priority_same_integer 1
-                      :priority_integer 1
-                      :priority_long 1
-                      :priority_float 0.1
-                      :priority_double 0.1
-                      :lat_double 40.359011
-                      :lon_double -73.9844722}
-                     {:name "lll" :name_st_again "bbb@aaa"
-                      :find "zzz zzz zzz"
-                      :priority_same_integer 1
-                      :priority_integer 2
-                      :priority_long 2
-                      :priority_float 0.2
-                      :priority_double 0.2
-                      :lat_double 40.759111
-                      :lon_double -73.9844822}
-                     {:priority_integer 3
-                      :find "zzz"
-                      :priority_same_integer 1
-                      :priority_long 3
-                      :priority_float 0.3
-                      :priority_double 0.3
-                      :lat_double 40.7143528
-                      :lon_double -74.0059731}
-                     {:priority_integer 4
-                      :find "zzz"
-                      :priority_same_integer 1
-                      :priority_long 4
-                      :priority_float 0.4
-                      :priority_double 0.4
-                      :lat_double 41.7143528
-                      :lon_double -74.0059731}]
-         :facets {:name {}
-                  :name_st_again {:use-analyzer "bzbz-used-only-for-facet"}}
-         :analyzer {:name_st_again {:type "standard"}
-                    :bzbz-used-only-for-facet {:type "standard"}}))
+  (store {:index name
+          :shard shard
+          :documents [{:name "zzz" :name_st_again "aaa@bbb@ccc"
+                       :find "zzz"
+                       :priority_same_integer 1
+                       :priority_integer 1
+                       :priority_long 1
+                       :priority_float 0.1
+                       :priority_double 0.1
+                       :lat_double 40.359011
+                       :lon_double -73.9844722}
+                      {:name "lll" :name_st_again "bbb@aaa"
+                       :find "zzz zzz zzz"
+                       :priority_same_integer 1
+                       :priority_integer 2
+                       :priority_long 2
+                       :priority_float 0.2
+                       :priority_double 0.2
+                       :lat_double 40.759111
+                       :lon_double -73.9844822}
+                      {:priority_integer 3
+                       :find "zzz"
+                       :priority_same_integer 1
+                       :priority_long 3
+                       :priority_float 0.3
+                       :priority_double 0.3
+                       :lat_double 40.7143528
+                       :lon_double -74.0059731}
+                      {:priority_integer 4
+                       :find "zzz"
+                       :priority_same_integer 1
+                       :priority_long 4
+                       :priority_float 0.4
+                       :priority_double 0.4
+                       :lat_double 41.7143528
+                       :lon_double -74.0059731}]
+          :facets {:name {}
+                   :name_st_again {:use-analyzer "bzbz-used-only-for-facet"}}
+          :analyzer {:name_st_again {:type "standard"}
+                     :bzbz-used-only-for-facet {:type "standard"}}}))
 
 
 (defn cleanup []
@@ -133,67 +133,67 @@
       (reset! peers* old-peers)))
 
   (testing "store"
-    (let [ret-0 (store :index test-index-name
-                       :documents [{:name "jack doe foo"
-                                    :age_integer "57"
-                                    :long_long "570"
-                                    :float_float "57.383"
-                                    :double_double "570.383"}
-                                   {:name ["john doe highlight","jack2 doe2 highlight",3,"highhlight"]
-                                    :name_no_store ["new york","new york2",3]
-                                    :age_integer ["67",64]
-                                    :long_long ["670", 671]
-                                    :float_float ["67.383", 67.384]
-                                    :float_float_no_store ["67.383", 67.384]
-                                    :double_double [670.383, 67.384]
-                                    :dont_want "XXXXXXX"}
-                                   {:id "baz bar"
-                                    :name "duplicate",
-                                    :name_no_norms "bar baz"
-                                    :age_integer "47"
-                                    :long_long "470"
-                                    :float_float "47.383"
-                                    :float_float_no_store "47.383"
-                                    :double_double "470.383"
-                                    :filterable_no_store_integer "470"
-                                    :name_no_store "wth space"}]
-                       :analyzer {:name_no_norms {:type "keyword" }})
-          ret-1 (store :index test-index-name
-                       :documents [{:id "WS baz bar"
-                                    :name "duplicate"
-                                    :name_no_norms "bar baz"
-                                    :name_ngram_no_norms "andurilxX"
-                                    :name_edge_ngram_no_norms "andurilXX"
-                                    :name_keyword_no_norms "hello worldXX"
-                                    :name_no_html_no_norms "bzbzXX<br><html>"
-                                    :name_no_store "wth space"}]
-                       :analyzer {:name_no_norms {:type "whitespace" }
-                                  :name_keyword_no_norms {:type "custom"
-                                                          :tokenizer "keyword"
-                                                          :char-filter [{:type "pattern-replace"
-                                                                         :pattern "X+",
-                                                                         :replacement "ZZ"}]}
-                                  :name_no_html_no_norms {:type "custom"
-                                                          :tokenizer "whitespace"
-                                                          :char-filter [{:type "pattern-replace"
-                                                                         :pattern "X+",
-                                                                         :replacement "ZZ"}
-                                                                        {:type "html-strip",:escaped-tags ["br"]}]}
-                                  :name_edge_ngram_no_norms {:type "custom"
-                                                             :tokenizer "edge-ngram"
-                                                             :char-filter [{:type "pattern-replace"
-                                                                            :pattern "X+",
-                                                                            :replacement "ZZ"}]
-                                                             :min_gram 1
-                                                             :max_gram 8}
-                                  :name_ngram_no_norms {:type "custom"
-                                                        :tokenizer "ngram"
-                                                        :filter [{:type "lowercase"}]
-                                                        :char-filter [{:type "pattern-replace"
-                                                                       :pattern "(?i)X+",
-                                                                       :replacement "ZZ"}]
-                                                        :min_gram 2
-                                                        :max_gram 4}})]
+    (let [ret-0 (store {:index test-index-name
+                        :documents [{:name "jack doe foo"
+                                     :age_integer "57"
+                                     :long_long "570"
+                                     :float_float "57.383"
+                                     :double_double "570.383"}
+                                    {:name ["john doe highlight","jack2 doe2 highlight",3,"highhlight"]
+                                     :name_no_store ["new york","new york2",3]
+                                     :age_integer ["67",64]
+                                     :long_long ["670", 671]
+                                     :float_float ["67.383", 67.384]
+                                     :float_float_no_store ["67.383", 67.384]
+                                     :double_double [670.383, 67.384]
+                                     :dont_want "XXXXXXX"}
+                                    {:id "baz bar"
+                                     :name "duplicate",
+                                     :name_no_norms "bar baz"
+                                     :age_integer "47"
+                                     :long_long "470"
+                                     :float_float "47.383"
+                                     :float_float_no_store "47.383"
+                                     :double_double "470.383"
+                                     :filterable_no_store_integer "470"
+                                     :name_no_store "wth space"}]
+                        :analyzer {:name_no_norms {:type "keyword" }}})
+          ret-1 (store {:index test-index-name
+                        :documents [{:id "WS baz bar"
+                                     :name "duplicate"
+                                     :name_no_norms "bar baz"
+                                     :name_ngram_no_norms "andurilxX"
+                                     :name_edge_ngram_no_norms "andurilXX"
+                                     :name_keyword_no_norms "hello worldXX"
+                                     :name_no_html_no_norms "bzbzXX<br><html>"
+                                     :name_no_store "wth space"}]
+                        :analyzer {:name_no_norms {:type "whitespace" }
+                                   :name_keyword_no_norms {:type "custom"
+                                                           :tokenizer "keyword"
+                                                           :char-filter [{:type "pattern-replace"
+                                                                          :pattern "X+",
+                                                                          :replacement "ZZ"}]}
+                                   :name_no_html_no_norms {:type "custom"
+                                                           :tokenizer "whitespace"
+                                                           :char-filter [{:type "pattern-replace"
+                                                                          :pattern "X+",
+                                                                          :replacement "ZZ"}
+                                                                         {:type "html-strip",:escaped-tags ["br"]}]}
+                                   :name_edge_ngram_no_norms {:type "custom"
+                                                              :tokenizer "edge-ngram"
+                                                              :char-filter [{:type "pattern-replace"
+                                                                             :pattern "X+",
+                                                                             :replacement "ZZ"}]
+                                                              :min_gram 1
+                                                              :max_gram 8}
+                                   :name_ngram_no_norms {:type "custom"
+                                                         :tokenizer "ngram"
+                                                         :filter [{:type "lowercase"}]
+                                                         :char-filter [{:type "pattern-replace"
+                                                                        :pattern "(?i)X+",
+                                                                        :replacement "ZZ"}]
+                                                         :min_gram 2
+                                                         :max_gram 4}}})]
       (refresh-search-managers)
       (is (= true (ret-0 (sharded test-index-name 0))))
       (is (= true (ret-1 (sharded test-index-name 0))))))
@@ -370,9 +370,9 @@
           query {:query-parser {:query "xxx@yyy"
                                 :default-operator "or"
                                 :default-field "name"}}]
-      (store :index test-index-name
-             :documents [{:name s}]
-             :analyzer {:name {:type "standard" }})
+      (store {:index test-index-name
+              :documents [{:name s}]
+              :analyzer {:name {:type "standard" }}})
 
       (refresh-search-managers)
       (let [ret (search {:index test-index-name
@@ -697,14 +697,14 @@
   (testing "write-exception-rolled-back"
     (dotimes [n 100]
       (is (thrown? Throwable
-                   (store :index test-index-name
-                          :documents [{:id "_aaa_" :name "zzz" :name_st "aaa@bbb"}
-                                      {:name "lll" :name_st "bbb@aaa"}
-                                      {:name_no_store_no_index "exception"}]
-                          :facets {:name {}
-                                   :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
-                          :analyzer {:name {:type "keyword"}
-                                     :bzbz-used-only-for-facet {:type "standard"}})))
+                   (store {:index test-index-name
+                           :documents [{:id "_aaa_" :name "zzz" :name_st "aaa@bbb"}
+                                       {:name "lll" :name_st "bbb@aaa"}
+                                       {:name_no_store_no_index "exception"}]
+                           :facets {:name {}
+                                    :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
+                           :analyzer {:name {:type "keyword"}
+                                      :bzbz-used-only-for-facet {:type "standard"}}})))
       (refresh-search-managers)
       (let [ret (search {:index test-index-name
                          :facets {:name {}, :name_st {}}
@@ -714,12 +714,12 @@
 
   (testing "leaves"
     (let [storer (fn [force-merge]
-                   (store :index test-index-name
-                          :documents [{:id "_aaabbb_" :name_leaves "zzz"}
-                                      {:name_leaves "lll"}]
-                          :force-merge force-merge
-                          :facets {:name_leaves {:use-analyzer "bzbz-used-only-for-facet"}}
-                          :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
+                   (store {:index test-index-name
+                           :documents [{:id "_aaabbb_" :name_leaves "zzz"}
+                                       {:name_leaves "lll"}]
+                           :force-merge force-merge
+                           :facets {:name_leaves {:use-analyzer "bzbz-used-only-for-facet"}}
+                           :analyzer {:bzbz-used-only-for-facet {:type "standard"}}})
                    (refresh-search-managers))]
       (storer 0)
       (is (= 1 (leaves)))
@@ -736,10 +736,10 @@
 
   (testing "geo"
     (let [storer (fn [shape int]
-                   (store :index test-index-name
-                          :documents [{:id (str "_aa_bb_" shape) :sort_int int :name_geo "zzz" :__location shape}]
-                          :facets {:name_geo {:use-analyzer "bzbz-used-only-for-facet"}}
-                          :analyzer {:bzbz-used-only-for-facet {:type "standard"}})
+                   (store {:index test-index-name
+                           :documents [{:id (str "_aa_bb_" shape) :sort_int int :name_geo "zzz" :__location shape}]
+                           :facets {:name_geo {:use-analyzer "bzbz-used-only-for-facet"}}
+                           :analyzer {:bzbz-used-only-for-facet {:type "standard"}}})
                    (refresh-search-managers))
           searcher (fn [spatial reverse]
                      (search {:index test-index-name
@@ -781,17 +781,17 @@
 
   (testing "payload"
     (let [storer (fn [payload fc]
-                   (store :index test-index-name
-                          :documents [{:id (str "_aa_bb_" payload)
-                                       :name_payload (str "zzzxxx|" payload)
-                                       :some_integer fc
-                                       :some_float 10.0
-                                       :some_double 20.0
-                                       :some_long 30}]
-                          :facets {:name_payload {:use-analyzer "name_payload"}}
-                          :analyzer {:name_payload {:type "custom"
-                                                    :tokenizer "whitespace"
-                                                    :filter [{:type "delimited-payload"}]}})
+                   (store {:index test-index-name
+                           :documents [{:id (str "_aa_bb_" payload)
+                                        :name_payload (str "zzzxxx|" payload)
+                                        :some_integer fc
+                                        :some_float 10.0
+                                        :some_double 20.0
+                                        :some_long 30}]
+                           :facets {:name_payload {:use-analyzer "name_payload"}}
+                           :analyzer {:name_payload {:type "custom"
+                                                     :tokenizer "whitespace"
+                                                     :filter [{:type "delimited-payload"}]}}})
                    (refresh-search-managers))
           searcher (fn []
                      (search {:index test-index-name
@@ -890,12 +890,12 @@
 
   (testing "must-refresh"
     (let [storer (fn [payload]
-                   (store :index test-index-name
-                          :documents [{:id (str "_must_refresh_aa_bb_" payload) :name_mr_payload (str "mr_zzzxxx|" payload)}]
+                   (store {:index test-index-name
+                           :documents [{:id (str "_must_refresh_aa_bb_" payload) :name_mr_payload (str "mr_zzzxxx|" payload)}]
 
-                          :analyzer {:name_mr_payload {:type "custom"
-                                                       :tokenizer "whitespace"
-                                                       :filter [{:type "delimited-payload"}]}}))
+                           :analyzer {:name_mr_payload {:type "custom"
+                                                        :tokenizer "whitespace"
+                                                        :filter [{:type "delimited-payload"}]}}}))
           searcher (fn [mr]
                      (search {:index test-index-name
                               :explain true
@@ -922,13 +922,13 @@
 
   (testing "facets"
     (dotimes [n 1000]
-      (store :index test-index-name
-             :documents [{:name "abc" :name_st "ddd mmm"}
-                         {:name "def 123" :name_st "uuu ooo"}]
-             :facets {:name {}
-                      :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
-             :analyzer {:name {:type "keyword"}
-                        :bzbz-used-only-for-facet {:type "standard"}})
+      (store {:index test-index-name
+              :documents [{:name "abc" :name_st "ddd mmm"}
+                          {:name "def 123" :name_st "uuu ooo"}]
+              :facets {:name {}
+                       :name_st {:use-analyzer "bzbz-used-only-for-facet"}}
+              :analyzer {:name {:type "keyword"}
+                         :bzbz-used-only-for-facet {:type "standard"}}})
       (refresh-search-managers)
       (let [ret (search {:index test-index-name
                          :facets {:name {:size 1}, :name_st {:path ["uuu"]}}

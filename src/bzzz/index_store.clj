@@ -111,35 +111,38 @@
                   { index true }))
     { index false }))
 
-(defn store
-  [& {:keys [index documents analyzer facets shard alias-set alias-del force-merge number-of-shards]
-      :or {documents [] analyzer nil facets {} shard nil alias-set nil alias-del nil force-merge 0 number-of-shards nil}}]
+(defn store [input]
+  (let [{:keys [index documents analyzer
+                facets shard alias-set alias-del
+                force-merge number-of-shards]
+         :or {documents [] analyzer nil facets {}
+              shard nil alias-set nil alias-del nil
+              force-merge 0 number-of-shards nil}} input]
+    (if (or alias-set alias-del)
+      (update-alias index alias-del alias-set))
 
-  (if (or alias-set alias-del)
-    (update-alias index alias-del alias-set))
+    (if (and shard number-of-shards)
+      (throw (Throwable. "you can specify only one of <shard> or <number-of-shards>")))
 
-  (if (and shard number-of-shards)
-    (throw (Throwable. "you can specify only one of <shard> or <number-of-shards>")))
-
-  (if number-of-shards
-    (let [futures (into [] (for [n (range number-of-shards)]
-                             (future
-                               (store-on-shard (sharded (resolve-alias index) n)
-                                               (filter (fn [doc]
-                                                         (let [hashCode (if-let [id (:id doc)]
-                                                                          (hash id)
-                                                                          (hash doc))]
-                                                           (= n (mod hashCode number-of-shards))))
-                                                       documents)
-                                               facets
-                                               analyzer
-                                               force-merge))))]
-      (into [] (for [f futures] @f)))
-    (store-on-shard (sharded (resolve-alias index) (or shard 0))
-                    documents
-                    facets
-                    analyzer
-                    force-merge)))
+    (if number-of-shards
+      (let [futures (into [] (for [n (range number-of-shards)]
+                               (future
+                                 (store-on-shard (sharded (resolve-alias index) n)
+                                                 (filter (fn [doc]
+                                                           (let [hashCode (if-let [id (:id doc)]
+                                                                            (hash id)
+                                                                            (hash doc))]
+                                                             (= n (mod hashCode number-of-shards))))
+                                                         documents)
+                                                 facets
+                                                 analyzer
+                                                 force-merge))))]
+        (into [] (for [f futures] @f)))
+      (store-on-shard (sharded (resolve-alias index) (or shard 0))
+                      documents
+                      facets
+                      analyzer
+                      force-merge))))
 
 (defn delete-from-query
   [index input]

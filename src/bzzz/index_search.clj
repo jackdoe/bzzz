@@ -311,22 +311,23 @@
         analyzer (extract-analyzer (:analyzer input)) ;; fixme: are all analyzers thread safe?
         facet-config (get-facet-config facets)        ;; fixme: check if it is thread safe
         futures (into [] (for [shard (index-name-matching (resolve-alias index))]
-                           (use-searcher shard
-                                         (get input :must-refresh false)
-                                         (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
-                                           (shard-search :searcher searcher
-                                                         :taxo-reader taxo-reader
-                                                         :analyzer analyzer
-                                                         :facet-config facet-config
-                                                         :highlight (:highlight input)
-                                                         :query (parse-query ;; some queries are not thread safe
-                                                                 (:query input)
-                                                                 analyzer)
-                                                         :page (get input :page 0)
-                                                         :size (get input :size default-size)
-                                                         :sort (:sort input)
-                                                         :spatial-filter (get input :spatial-filter nil)
-                                                         :facets facets
-                                                         :explain (get input :explain false)
-                                                         :fields (:fields input))))))]
+                           (future
+                             (use-searcher shard
+                                           (get input :must-refresh false)
+                                           (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
+                                             (shard-search :searcher searcher
+                                                           :taxo-reader taxo-reader
+                                                           :analyzer analyzer
+                                                           :facet-config facet-config
+                                                           :highlight (:highlight input)
+                                                           :query (parse-query ;; some queries are not thread safe
+                                                                   (:query input)
+                                                                   analyzer)
+                                                           :page (get input :page 0)
+                                                           :size (get input :size default-size)
+                                                           :sort (:sort input)
+                                                           :spatial-filter (get input :spatial-filter nil)
+                                                           :facets facets
+                                                           :explain (get input :explain false)
+                                                           :fields (:fields input)))))))]
     (reduce-collection futures input ms-start)))

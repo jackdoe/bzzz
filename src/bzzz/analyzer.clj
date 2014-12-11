@@ -117,12 +117,7 @@
       "custom" (token-filter-chain obj))))
 
 (defn parse-analyzer [input]
-  (PerFieldAnalyzerWrapper. (WhitespaceAnalyzer. *version*)
+  (PerFieldAnalyzerWrapper. (StandardAnalyzer. *version*)
                             (into { id-field (KeywordAnalyzer.) }
-                                  (for [[key value] input]
+                                  (for [[key value] (if (nil? input) {} input)]
                                     { (as-str key) (parse-lucene-analyzer value) }))))
-
-(def analyzer* (atom (parse-analyzer {}))) ;; FIXME - move to top
-
-(defn analyzer-stat []
-  { :last-index-analyzer (.toString ^PerFieldAnalyzerWrapper @analyzer*) })

@@ -96,7 +96,6 @@
 (defn stat []
   {:index (index-directory/index-stat)
    :alias @index-directory/alias*
-   :analyzer (analyzer/analyzer-stat)
    :identifier @index-directory/identifier*
    :discover-hosts @discover-hosts*
    :peers @peers*

@@ -90,9 +90,10 @@
       (.close stream))
     (add-facet-field-single doc dim val)))
 
-(defn store-on-shard [index documents facets force-merge]
+(defn store-on-shard [index documents facets analyzer force-merge]
   (if (> (count documents) 0)
     (use-writer index
+                (parse-analyzer analyzer)
                 force-merge
                 (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
                   (let [config (get-facet-config facets)
@@ -101,7 +102,7 @@
                       (let [doc (map->document m spatial-strategy)]
                         (doseq [[dim f-info] facets]
                           (if-let [f-val ((keyword dim) m)]
-                            (add-facet-field doc dim f-val f-info @analyzer*)))
+                            (add-facet-field doc dim f-val f-info (.getAnalyzer writer))))
                         (if (:id m)
                           (.updateDocument writer ^Term (Term. ^String id-field
                                                                (as-str (:id m)))
@@ -117,9 +118,6 @@
   (if (or alias-set alias-del)
     (update-alias index alias-del alias-set))
 
-  (if analyzer
-    (reset! analyzer* (parse-analyzer analyzer)))
-
   (if (and shard number-of-shards)
     (throw (Throwable. "you can specify only one of <shard> or <number-of-shards>")))
 
@@ -134,16 +132,18 @@
                                                            (= n (mod hashCode number-of-shards))))
                                                        documents)
                                                facets
+                                               analyzer
                                                force-merge))))]
       (into [] (for [f futures] @f)))
     (store-on-shard (sharded (resolve-alias index) (or shard 0))
                     documents
                     facets
+                    analyzer
                     force-merge)))
 
 (defn delete-from-query
   [index input]
-  (let [query (parse-query input (extract-analyzer nil))]
+  (let [query (parse-query input (parse-analyzer (:analyzer input)))]
     (use-writer-all (resolve-alias index) (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
                                             (.deleteDocuments writer
                                                               ^"[Lorg.apache.lucene.search.Query;"

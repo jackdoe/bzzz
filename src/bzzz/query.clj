@@ -18,7 +18,8 @@
   (require bzzz.queries.fuzzy)
   (require bzzz.queries.no-zero-score)
   (require bzzz.queries.no-norm)
-  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)))
+  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)
+           (org.apache.lucene.analysis Analyzer)))
 
 (declare resolve-and-call)
 (def unacceptable-method-pattern (re-pattern "[^a-z\\.-]"))
@@ -26,12 +27,7 @@
 
 (def unsafe-queries {"term-payload-clj-score" true})
 
-(defn extract-analyzer [a]
-  (if (nil? a)
-    @analyzer*
-    (parse-analyzer a)))
-
-(defn parse-query ^Query [input analyzer]
+(defn parse-query ^Query [input ^Analyzer analyzer]
   (if (string? input)
     (resolve-and-call "query-parser" {:query input} analyzer)
     (if (= (count input) 1)
@@ -42,7 +38,7 @@
           (.add top (resolve-and-call key val analyzer) BooleanClause$Occur/MUST))
         top))))
 
-(defn resolve-and-call [key val analyzer]
+(defn resolve-and-call [key val ^Analyzer analyzer]
   (let [sanitized (sanitize key unacceptable-method-pattern)
         parse-method (str "bzzz.queries." sanitized "/parse")]
     (if (and (not @allow-unsafe-queries*)

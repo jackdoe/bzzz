@@ -156,7 +156,7 @@
                                     :float_float_no_store "47.383"
                                     :double_double "470.383"
                                     :filterable_no_store_integer "470"
-                                    :name_no_store "with space"}]
+                                    :name_no_store "wth space"}]
                        :analyzer {:name_no_norms {:type "keyword" }})
           ret-1 (store :index test-index-name
                        :documents [{:id "WS baz bar"
@@ -166,7 +166,7 @@
                                     :name_edge_ngram_no_norms "andurilXX"
                                     :name_keyword_no_norms "hello worldXX"
                                     :name_no_html_no_norms "bzbzXX<br><html>"
-                                    :name_no_store "with space"}]
+                                    :name_no_store "wth space"}]
                        :analyzer {:name_no_norms {:type "whitespace" }
                                   :name_keyword_no_norms {:type "custom"
                                                           :tokenizer "keyword"
@@ -341,8 +341,9 @@
   (testing "search-bool-auto"
     (let [ret (search {:index test-index-name
                        :query {:term {:field "id", :value "baz bar"}
-                               :bool {:must ["name_no_store:space",
-                                             {:term {:field "name_no_store", :value "with"}}]}}})]
+                               :bool {:must ["name_no_store:space"
+                                             {:term {:field "name_no_store"
+                                                     :value "wth"}}]}}})]
       (is (= 1 (:total ret)))
       (is (nil? (:name_no_store (first (:hits ret)))))
       (is (= "baz bar" (:id (first (:hits ret)))))))

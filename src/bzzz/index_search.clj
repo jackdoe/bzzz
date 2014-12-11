@@ -68,7 +68,7 @@
                               (int max-fragments))))
 
 (defn make-highlighter
-  [^Query query ^IndexSearcher searcher config analyzer]
+  [^Query query ^IndexSearcher searcher config ^Analyzer analyzer]
   (if config
     (let [indexReader (.getIndexReader searcher)
           scorer (QueryScorer. (.rewrite query indexReader))
@@ -243,13 +243,19 @@
                   :value (nth fd-fields idx)}) sort-fields))
 
 (defn shard-search
-  [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader
-             ^Query query ^Analyzer analyzer
+  [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader query analyzer
              page size explain highlight facets fields facet-config sort spatial-filter]
-      :or {page 0, size default-size, explain false,
-           analyzer nil, facets nil, fields nil sort nil
+      :or {page 0
+           size default-size
+           explain false
+           analyzer nil
+           facets nil
+           fields nil
+           sort nil
            spatial-filter nil}}]
   (let [ms-start (time-ms)
+        analyzer ^Analyzer (parse-analyzer analyzer)
+        query ^Query (parse-query query analyzer)
         highlighter (make-highlighter query searcher highlight analyzer)
         pq-size (+ (* page size) size)
         score-collector (get-score-collector sort pq-size searcher)
@@ -306,28 +312,24 @@
 
 (defn search [input]
   (let [ms-start (time-ms)
-        index (need :index input "need <index>")
         facets (:facets input)
-        analyzer (extract-analyzer (:analyzer input)) ;; fixme: are all analyzers thread safe?
-        facet-config (get-facet-config facets)        ;; fixme: check if it is thread safe
+        index (need :index input "need <index>")
         futures (into [] (for [shard (index-name-matching (resolve-alias index))]
-                           (future
+;;                           (future
                              (use-searcher shard
                                            (get input :must-refresh false)
                                            (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                              (shard-search :searcher searcher
                                                            :taxo-reader taxo-reader
-                                                           :analyzer analyzer
-                                                           :facet-config facet-config
+                                                           :analyzer (:analyzer input)
+                                                           :query (:query input)
+                                                           :facet-config (get-facet-config facets)
+                                                           :facets facets
                                                            :highlight (:highlight input)
-                                                           :query (parse-query ;; some queries are not thread safe
-                                                                   (:query input)
-                                                                   analyzer)
                                                            :page (get input :page 0)
                                                            :size (get input :size default-size)
                                                            :sort (:sort input)
                                                            :spatial-filter (get input :spatial-filter nil)
-                                                           :facets facets
                                                            :explain (get input :explain false)
-                                                           :fields (:fields input)))))))]
+                                                           :fields (:fields input))))))]
     (reduce-collection futures input ms-start)))

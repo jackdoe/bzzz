@@ -13,6 +13,7 @@
            (java.lang OutOfMemoryError)
            (bzzz.java.store RedisDirectory)
            (redis.clients.jedis JedisPool)
+           (org.apache.lucene.analysis Analyzer)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
            (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher)
@@ -113,9 +114,9 @@
       (RedisDirectory. index-name redis)
       (NIOFSDirectory. dir))))
 
-(defn new-index-writer ^IndexWriter [name]
+(defn new-index-writer ^IndexWriter [name ^Analyzer analyzer]
   (IndexWriter. (new-index-directory (root-identifier-path) name)
-                (IndexWriterConfig. *version* @analyzer*)))
+                (IndexWriterConfig. *version* analyzer)))
 
 (defn taxo-dir-prefix ^File [name]
   (io/file (root-identifier-path) (as-str name)))
@@ -139,7 +140,7 @@
           (new-taxo-reader name))))))
 
 (defn new-index-reader ^IndexReader [name]
-  (with-open [writer (new-index-writer name)]
+  (with-open [writer (new-index-writer name nil)]
     (DirectoryReader/open ^IndexWriter writer false)))
 
 (defn new-searcher-manager ^SearcherManager [name]
@@ -209,8 +210,8 @@
     (catch Exception e
       (log/warn (as-str e)))))
 
-(defn use-writer [index force-merge callback]
-  (let [writer (new-index-writer index)
+(defn use-writer [index analyzer force-merge callback]
+  (let [writer (new-index-writer index analyzer)
         taxo (new-taxo-writer index)
         t0 (time-ms)]
     (try
@@ -240,7 +241,7 @@
 
 (defn use-writer-all [index callback]
   (doseq [name (index-name-matching index)]
-    (use-writer name 1 callback)))
+    (use-writer name nil 1 callback)))
 
 (defn bootstrap-indexes []
   (try

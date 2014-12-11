@@ -244,15 +244,7 @@
 
 (defn shard-search
   [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader query analyzer
-             page size explain highlight facets fields facet-config sort spatial-filter]
-      :or {page 0
-           size default-size
-           explain false
-           analyzer nil
-           facets nil
-           fields nil
-           sort nil
-           spatial-filter nil}}]
+             page size explain highlight facets fields facet-config sort spatial-filter]}]
   (let [ms-start (time-ms)
         analyzer ^Analyzer (parse-analyzer analyzer)
         query ^Query (parse-query query analyzer)

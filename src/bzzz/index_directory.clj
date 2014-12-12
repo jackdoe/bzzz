@@ -276,7 +276,9 @@
       (do
         (.maybeRefresh manager)
         (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
-          (swap! name->smanager-taxo* assoc-in [index 1] changed))
+          (do
+            (.close taxo)
+            (swap! name->smanager-taxo* assoc-in [index 1] changed)))
         (stat/update-took-count index "refresh-search-managers" (time-took t0)))
       (catch Throwable e
         (do

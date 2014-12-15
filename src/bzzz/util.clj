@@ -158,6 +158,12 @@
     x
     (Boolean/parseBoolean x)))
 
+(defn read-boolean-setting [input key default]
+  (let [ef (get input key default)]
+    (if (and ef (bool-or-parse ef))
+      true
+      false)))
+
 (defn indexed [coll] (map-indexed vector coll))
 
 (defn delete-recursively [fname]

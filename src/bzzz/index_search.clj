@@ -139,11 +139,17 @@
       c
       (by-score a b))))
 
+(defn enforce-limits? [input]
+  (read-boolean-setting input :enforce-limits true))
+
+(defn can-return-partial? [input]
+    (read-boolean-setting input :can-return-partial false))
+
 (defn limit [input hits sorter]
   (let [size (get input :size default-size)
         sorted (sort sorter hits)]
-    (if (and  (> (count hits) size)
-              (get input :enforce-limits true))
+    (if (and (> (count hits) size)
+             (enforce-limits? input))
       (subvec (vec sorted) 0 size)
       sorted)))
 
@@ -157,7 +163,7 @@
               [k v])))))
 
 (defn input-facet-settings [input dim]
-  (let [global-ef (get-in input [:enforce-limits] true)
+  (let [global-ef (enforce-limits? input)
         config (get-in input [:facets (keyword dim)] {})]
     (if (contains? config :enforce-limits)
       config
@@ -207,7 +213,7 @@
                    {:exception (as-str e)}))
                next)
         ex (if (:exception next)
-             (if-not (:can-return-partial sum)
+             (if-not (can-return-partial? sum)
                (throw (Throwable. (as-str (:exception next))))
                (do
                  (log/info (str "will send partial response: " (as-str (:exception next))))
@@ -227,7 +233,7 @@
                         :facets {}
                         :took -1
                         :failed []
-                        :can-return-partial (get input :can-return-partial false)}
+                        :can-return-partial (can-return-partial? input)}
                        collection)]
     (-> result
         (assoc-in [:facets] (merge-and-limit-facets input (:facets result)))

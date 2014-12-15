@@ -20,7 +20,6 @@ public class TermPayloadClojureScoreQuery extends Query {
     public String expr;
     public String[] field_cache_req;
     public IFn clj_expr;
-    public final ExpressionContext clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE);
     public TermPayloadClojureScoreQuery(Term term, String expr, String[] field_cache_req) throws Exception {
         this.term = term;
         this.expr = expr;
@@ -55,6 +54,7 @@ public class TermPayloadClojureScoreQuery extends Query {
     public Weight createWeight(IndexSearcher searcher) throws IOException {
         final Query query = this;
         return new Weight() {
+            public final ExpressionContext clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE);
             @Override
             public String toString() { return "clojure-payload-score-weight(" + query.toString() + ")"; }
             @Override

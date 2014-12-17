@@ -13,18 +13,26 @@ import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap.Builder;
 import bzzz.java.query.ExpressionContext;
 
 public class TermPayloadClojureScoreQuery extends Query {
+    // THIS QUERY IS NOT THREAD SAFE! at the moment this is ok because of the way we create one (future) per shard
+    // and the query is created in the (future) thread itself.
+
     public static int EXPR_CACHE_CAPACITY = 10000; // TODO: make this a parameter
     public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
     public static Map<Object,Object> GLOBAL_EXPR_CACHE = new Builder<Object,Object>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
+
+    // the clj_context was moved to the query from the Weight easier access for dynamic facets
+    public final ExpressionContext clj_context;
     public Term term;
     public String expr;
     public String[] field_cache_req;
     public IFn clj_expr;
-    public TermPayloadClojureScoreQuery(Term term, String expr, String[] field_cache_req) throws Exception {
+
+    public TermPayloadClojureScoreQuery(Term term, String expr, String[] field_cache_req, List<Map<Object,Object>> fba_settings) throws Exception {
         this.term = term;
         this.expr = expr;
         this.field_cache_req = field_cache_req;
         this.clj_expr = eval_and_cache(expr);
+        this.clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE,fba_settings);
     }
 
     public IFn eval_and_cache(String raw) {
@@ -54,7 +62,6 @@ public class TermPayloadClojureScoreQuery extends Query {
     public Weight createWeight(IndexSearcher searcher) throws IOException {
         final Query query = this;
         return new Weight() {
-            public final ExpressionContext clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE);
             @Override
             public String toString() { return "clojure-payload-score-weight(" + query.toString() + ")"; }
             @Override

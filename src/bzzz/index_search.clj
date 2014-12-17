@@ -18,6 +18,7 @@
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.document Document)
            (org.apache.lucene.search Filter)
+           (bzzz.java.query TermPayloadClojureScoreQuery ExpressionContext)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexReader Term IndexableField)
@@ -143,7 +144,7 @@
   (read-boolean-setting input :enforce-limits true))
 
 (defn can-return-partial? [input]
-    (read-boolean-setting input :can-return-partial false))
+  (read-boolean-setting input :can-return-partial false))
 
 (defn limit [input hits sorter]
   (let [size (get input :size default-size)
@@ -248,6 +249,33 @@
                   :name (.getField f)
                   :value (nth fd-fields idx)}) sort-fields))
 
+
+
+(defn hack-merge-dynamic-facets-counts [current-result ^Query query facets]
+  (if (instance? bzzz.java.query.TermPayloadClojureScoreQuery query)
+    (let [fba (.fba_get_results ^ExpressionContext (.clj_context ^TermPayloadClojureScoreQuery query))]
+      (merge (zipmap (.keySet fba)
+                     (map (fn [f]
+                            (map (fn [^java.util.HashMap v]
+                                   {:count (.get v "count")
+                                    :label (.get v "label")})
+                                 (into [] f)))
+                          (.values fba)))
+             current-result))
+    current-result))
+
+(defn get-facet-collector-counts [^FastTaxonomyFacetCounts fc facets]
+  (into {} (for [[k v] facets]
+             (if-let [fr (.getTopChildren fc
+                                          (get v :size default-size)
+                                          (as-str k)
+                                          ^"[Ljava.lang.String;" (into-array
+                                                                  String []))]
+               [(keyword (.dim fr))
+                (into [] (for [^LabelAndValue lv (.labelValues fr)]
+                           {:label (.label lv)
+                            :count (.value lv)}))]))))
+
 (defn shard-search
   [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader query analyzer
              page size explain highlight facets fields facet-config sort spatial-filter]}]
@@ -276,16 +304,9 @@
                  (let [fc (FastTaxonomyFacetCounts. taxo-reader
                                                     facet-config
                                                     facet-collector)]
-                   (into {} (for [[k v] facets]
-                              (if-let [fr (.getTopChildren fc
-                                                           (get v :size default-size)
-                                                           (as-str k)
-                                                           ^"[Ljava.lang.String;" (into-array
-                                                                                   String []))]
-                                [(keyword (.dim fr))
-                                 (into [] (for [^LabelAndValue lv (.labelValues fr)]
-                                            {:label (.label lv)
-                                             :count (.value lv)}))]))))
+                   (hack-merge-dynamic-facets-counts (get-facet-collector-counts fc facets)
+                                                     query
+                                                     facets))
                  (catch Throwable e
                    (let [ex (ex-str e)]
                      (log/warn (ex-str e))

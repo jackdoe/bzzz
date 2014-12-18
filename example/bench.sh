@@ -18,17 +18,20 @@ curl -XGET -d '{
 
 
 curl -XGET -d '{
+    "explain": false,
     "query": {"term-payload-clj-score": {
+    "fixed-bucket-aggregation": [{"name":"bzbzbzbz","buckets": 10}],
     "field": "name",
     "value": "doe",
     "clj-eval": "
      (fn [^bzzz.java.query.ExpressionContext ctx]
        (let [payload (.payload_get_int ctx)]
-;;         (.local-state_get ctx (.docID ctx))
-;;         (.local-state_set ctx (.docID ctx) payload)
+           (.fba_aggregate_into_bucket ctx 0 (mod (.docID ctx) 10))
+;;         (.local_state_get ctx (.docID ctx))
+;;         (.local_state_set ctx (.docID ctx) payload)
          (float payload)))
 "}},
-    "index": "bzzz-bench"
+    "index": "bzzz-sharded-bench"
 }' http://localhost:3000/ | json_xs | grep took
 
 boom -n 100000 -c 20 -m GET -d '{

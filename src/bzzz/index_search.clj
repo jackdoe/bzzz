@@ -251,18 +251,17 @@
 
 
 
-(defn hack-merge-dynamic-facets-counts [current-result ^Query query facets]
+(defn hack-merge-dynamic-facets-counts [^Query query]
   (if (instance? bzzz.java.query.TermPayloadClojureScoreQuery query)
     (let [fba (.fba_get_results ^ExpressionContext (.clj_context ^TermPayloadClojureScoreQuery query))]
-      (merge (zipmap (.keySet fba)
-                     (map (fn [f]
-                            (map (fn [^java.util.HashMap v]
-                                   {:count (.get v "count")
-                                    :label (.get v "label")})
-                                 (into [] f)))
-                          (.values fba)))
-             current-result))
-    current-result))
+      (zipmap (.keySet fba)
+              (map (fn [f]
+                     (map (fn [^java.util.HashMap v]
+                            {:count (.get v "count")
+                             :label (.get v "label")})
+                          (into [] f)))
+                   (.values fba))))
+    {}))
 
 (defn get-facet-collector-counts [^FastTaxonomyFacetCounts fc facets]
   (into {} (for [[k v] facets]
@@ -299,22 +298,24 @@
              spatial-filter
              wrap)
     {:total (.getTotalHits score-collector)
-     :facets (if (and taxo-reader (> (count facets) 0))
-               (try
-                 (let [fc (FastTaxonomyFacetCounts. taxo-reader
-                                                    facet-config
-                                                    facet-collector)]
-                   (hack-merge-dynamic-facets-counts (get-facet-collector-counts fc facets)
-                                                     query
-                                                     facets))
-                 (catch Throwable e
-                   (let [ex (ex-str e)]
-                     (log/warn (ex-str e))
-                     {}))) ;; do not send the error back,
-               {}) ;; no taxo reader, probably problem with open, exception is thrown
+
+     ;; facets:
+     ;; do not send the error back,
+     ;; for example with no taxo reader, probably problem with open and exception is thrown
      ;; even though we might fake a facet result
      ;; it could really surprise the client
-
+     :facets (merge
+              (hack-merge-dynamic-facets-counts query)
+              (if (and taxo-reader (> (count facets) 0))
+                (try
+                  (let [fc (FastTaxonomyFacetCounts. taxo-reader
+                                                     facet-config
+                                                     facet-collector)]
+                    (get-facet-collector-counts fc facets))
+                  (catch Throwable e
+                    (let [ex (ex-str e)]
+                      (log/warn (ex-str e))
+                      {})))))
      :hits (let [top (.topDocs score-collector (* page size))]
              (into [] (for [^ScoreDoc hit (.scoreDocs top)]
                         (let [doc (document->map (.doc searcher (.doc hit))

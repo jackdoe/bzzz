@@ -474,6 +474,7 @@ curl -XGET -d '{
       "field": "name",
       "value": "doe",
       "field-cache": ["popularity_integer"],
+      "fixed-bucket-aggregation": [{"name":"bzbzbzbz","buckets": 10}],
       "clj-eval": "
        (fn [^bzzz.java.query.ExpressionContext ctx]
          (let [popularity_integer (.fc_get_int ctx \"popularity_integer\")
@@ -488,6 +489,8 @@ curl -XGET -d '{
                (.explanation_add ctx popularity_integer (str \"because of popularity_integer: \" popularity_integer))))
            (.local_state_get ctx \"something\")         ;; access to per-shard state (destroyed after the query execution is done)
            (.local_state_set ctx \"something\" payload) ;; it is just a Map<Object,Object>
+           (.fba_aggregate_into_bucket ctx 0 (mod (.docID ctx) 10))  ;; add the document to one of the 10 buckets created for 
+                                                                     ;; the "bzbzbzbz" fixed bucket aggregation
 
            (.global_state_get ctx \"something_uniq_id_0x4\")         ;; global LRU Map that has 10k key capacity
            (.global_state_set ctx \"something_uniq_id_0x4\" payload) ;; destroyed on server restart (it is also just a Map<Object,Object>)
@@ -506,6 +509,33 @@ the query needs:
 * field,value: that define the actual Term
 * field-cache(optional): array of field names that will be requested from FieldCache/DEFAULT, and mapped into Map<String,Object>, that will can be used from  if you want to access some of the field-cache data from the clojure expression
 * clj-eval: string that is the actuall expression, it is compiled only once and there is LRU cache that takes 10_000 expressions, so it wont be compiled again for quite some time, this LRU cache is shared through all threads/shards/indexes, so you dont have to worry too much about time spend while clj evaluating the expression
+
+optional:
+
+* fixed-bucket-aggregation - array of hashes, that allows you to use .fba_aggregate_into_bucket so you can create dynamic aggregations
+from the query expression:
+
+```
+curl -XGET -d '
+{"query": {
+    "term-payload-clj-score": {
+        "fixed-bucket-aggregation": [{"name":"bzbzbzbz","buckets": 10}],
+        "field": "name",
+        "value": "doe",
+        "clj-eval": "
+(fn [^bzzz.java.query.ExpressionContext ctx]
+    (.fba_aggregate_into_bucket ctx 0 (mod (.docID ctx) 10))
+    (float 1))"
+    }
+}}' http://localhost:3000/bzzz-sharded-bench | json_xs
+```
+notice how the `fixed-bucket-aggregation` argument lives within the `term-payload-clj-score`, not outside of it
+this is beacuse the implementation is very hacky, on reduce it will basically check if the top level query is term-payload-clj-score
+and will ask for the aggregated information (hopefully this will be fixed soon)
+
+the arguments to `.fba_aggregate_into_bucket` are the facet index from the `fixed-bucket-aggregation` array (0 based) and the actual bucket
+to be incremented, in the example `(.fba_aggregate_into_bucket ctx 0 (mod (.docID ctx) 10))` it is index 0 bucket (docID % 10)
+
 
 The expression has to return a function, that takes 1 argument, and returns a float:
 ```

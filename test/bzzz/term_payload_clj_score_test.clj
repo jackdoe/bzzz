@@ -40,6 +40,30 @@
                                                    :tokenizer "whitespace"
                                                    :filter [{:type "delimited-payload"}]}}})
 
+          r-no-zero (search {:index test-index-name
+                             :explain true
+                             :facets {:name_payload {}}
+                             :query {:no-zero-score
+                                     {:query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
+                                                                       :field-cache ["some_integer","some_float","some_double","some_long"]
+                                                                       :fixed-bucket-aggregation [{:name "some_integer"
+                                                                                                   :buckets 3},
+                                                                                                  {:name "some_other"
+                                                                                                   :buckets 31}]
+                                                                       :clj-eval "
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [some_integer (.fc_get_int ctx \"some_integer\")
+        some_float (.fc_get_float ctx \"some_float\")
+        some_long (.fc_get_long ctx \"some_long\")
+        some_double (.fc_get_double ctx \"some_double\")
+        existed (.local_state_get ctx some_integer)
+        payload (.payload_get_int ctx)]
+    (.fba_aggregate_into_bucket ctx 0 some_integer 1)
+    (.fba_aggregate_into_bucket ctx 1 some_long 1)
+    (float
+      1)))
+"
+                                                                       }}}}})
           r0 (search {:index test-index-name
                       :explain true
                       :facets {:name_payload {}}
@@ -62,15 +86,37 @@
     (float
       1)))
 "
-                                                       }}})]
-      (is (= 4 (:count (first (:name_payload (:facets r0))))))
+                                                       }}})
+          r-no-facet (search {:index test-index-name
+                              :explain true
+                              :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
+                                                               :field-cache ["some_integer","some_float","some_double","some_long"]
+                                                               :fixed-bucket-aggregation [{:name "some_integer"
+                                                                                           :buckets 3},
+                                                                                          {:name "some_other"
+                                                                                           :buckets 31}]
+                                                               :clj-eval "
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [some_integer (.fc_get_int ctx \"some_integer\")
+        some_float (.fc_get_float ctx \"some_float\")
+        some_long (.fc_get_long ctx \"some_long\")
+        some_double (.fc_get_double ctx \"some_double\")
+        existed (.local_state_get ctx some_integer)
+        payload (.payload_get_int ctx)]
+    (.fba_aggregate_into_bucket ctx 0 some_integer 1)
+    (.fba_aggregate_into_bucket ctx 1 some_long 1)
+    (float
+      1)))
+"
+                                                               }}})]
       (is (= "zzzxxx" (:label (first (:name_payload (:facets r0))))))
-      (is (= 3 (:count (first (:some_integer (:facets r0))))))
-      (is (= 2 (:label (first (:some_integer (:facets r0))))))
-      (is (= 30 (:label (first (:some_other (:facets r0))))))
-      (is (= 4 (:count (first (:some_other (:facets r0))))))
-      (reset! allow-unsafe-queries* false)
-      ))
+      (is (= 4 (:count (first (:name_payload (:facets r0))))))
+      (doseq [r [r0 r-no-facet r-no-zero]]
+        (is (= 3 (:count (first (:some_integer (:facets r))))))
+        (is (= 2 (:label (first (:some_integer (:facets r))))))
+        (is (= 30 (:label (first (:some_other (:facets r))))))
+        (is (= 4 (:count (first (:some_other (:facets r)))))))
+      (reset! allow-unsafe-queries* false)))
 
   (testing "cleanup-after"
     (delete-all test-index-name)))

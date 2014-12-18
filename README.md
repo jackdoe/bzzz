@@ -530,8 +530,8 @@ curl -XGET -d '
 }}' http://localhost:3000/bzzz-sharded-bench | json_xs
 ```
 notice how the `fixed-bucket-aggregation` argument lives within the `term-payload-clj-score`, not outside of it
-this is beacuse the implementation is very hacky, on reduce it will basically check if the top level query is term-payload-clj-score
-and will ask for the aggregated information (hopefully this will be fixed soon)
+this is beacuse the implementation is very hacky, on reduce it will basically get all queries from boolean/dismax/constant score/..
+and merge all the fixed-bucket-aggregations from all term-payload-clj-score it finds. If multiple queries try to output aggregations with the same name, they will overwrite each other.
 
 the arguments to `.fba_aggregate_into_bucket` are the facet index from the `fixed-bucket-aggregation` array (0 based) and the actual bucket
 to be incremented, in the example `(.fba_aggregate_into_bucket ctx 0 (mod (.docID ctx) 10))` it is index 0 bucket (docID % 10)

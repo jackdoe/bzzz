@@ -18,7 +18,8 @@
   (require bzzz.queries.fuzzy)
   (require bzzz.queries.no-zero-score)
   (require bzzz.queries.no-norm)
-  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)
+  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur BooleanClause ConstantScoreQuery DisjunctionMaxQuery)
+           (bzzz.java.query NoZeroQuery NoNormQuery TermPayloadClojureScoreQuery Helper)
            (org.apache.lucene.analysis Analyzer)))
 
 (declare resolve-and-call)
@@ -45,3 +46,13 @@
              (get unsafe-queries sanitized))
       (throw (Throwable. (str "request for unsafe query <" sanitized ">, run the server with --allow-unsafe-queries to execute it")))
       (call parse-method parse-query val analyzer))))
+
+(defn hack-merge-dynamic-facets-counts [^Query query]
+  (let [sub-queries (Helper/collect_possible_subqueries query nil)]
+    (reduce (fn [sum ^Query query]
+              (if (instance? TermPayloadClojureScoreQuery query)
+                (merge sum
+                       (bzzz.queries.term-payload-clj-score/fixed-bucket-aggregation-result ^TermPayloadClojureScoreQuery query))
+                sum))
+            {}
+            sub-queries)))

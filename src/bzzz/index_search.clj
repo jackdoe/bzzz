@@ -18,7 +18,6 @@
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.document Document)
            (org.apache.lucene.search Filter)
-           (bzzz.java.query TermPayloadClojureScoreQuery ExpressionContext NoZeroQuery)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter TextFragment)
            (org.apache.lucene.index IndexReader Term IndexableField)
@@ -248,21 +247,6 @@
                  {:reverse (.getReverse f)
                   :name (.getField f)
                   :value (nth fd-fields idx)}) sort-fields))
-
-
-
-(defn hack-merge-dynamic-facets-counts [^Query query]
-  (let [query (if (instance? bzzz.java.query.NoZeroQuery query) (.query ^NoZeroQuery query) query)]
-    (if (instance? bzzz.java.query.TermPayloadClojureScoreQuery query)
-      (let [fba (.fba_get_results ^ExpressionContext (.clj_context ^TermPayloadClojureScoreQuery query))]
-        (zipmap (.keySet fba)
-                (map (fn [f]
-                       (map (fn [^java.util.HashMap v]
-                              {:count (.get v "count")
-                               :label (.get v "label")})
-                            (into [] f)))
-                     (.values fba))))
-      {})))
 
 (defn get-facet-collector-counts [^FastTaxonomyFacetCounts fc facets]
   (into {} (for [[k v] facets]

@@ -126,7 +126,17 @@
       (is (= 2 (:label (first (:some_integer_top (:facets r-nested))))))
       (is (= 30 (:label (first (:some_other_top (:facets r-nested))))))
       (is (= 4 (:count (first (:some_other_top (:facets r-nested))))))
-
+      (is (thrown-with-msg? Throwable
+                            #"<fixed-bucket-aggregation>"
+                            (search {:index test-index-name
+                                     :explain true
+                                     :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
+                                                                      :field-cache ["some_integer","some_float","some_double","some_long"]
+                                                                      :clj-eval clj-eval
+                                                                      :fixed-bucket-aggregation-typo [{:name "some_integer"
+                                                                                                       :buckets 3},
+                                                                                                      {:name "some_other"
+                                                                                                :buckets 31}]}}})))
       (doseq [r [r0 r-no-facet r-no-zero]]
         (is (= 3 (:count (first (:some_integer (:facets r))))))
         (is (= 2 (:label (first (:some_integer (:facets r))))))

@@ -177,6 +177,8 @@ public class ExpressionContext {
     }
 
     public void fba_aggregate_into_bucket(int aggregation_index, int bucket, int increment) {
+        if (fba_counts == null)
+            throw new IllegalStateException("<fixed-bucket-aggregation> parameter was not sent, and yet there is an attempt to fba_aggregate_into_bucket");
         fba_counts[(aggregation_index * fba_max_buckets_per_aggregation) + bucket] += increment;
     }
 

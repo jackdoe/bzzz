@@ -104,16 +104,20 @@ def walk_and_index(path, every)
     content = File.read(f)
     tokenized = tokenize_and_encode_payload(content,true)
     tokenized.push(tokenize_and_encode_payload(f,true,F_IS_IN_PATH))
+
     doc = {
       id: name,
       DISPLAY_FIELD => content,
       SEARCH_FIELD => tokenized.join(" ")
     }
+
     docs << doc
+
     if docs.length > every
       yield docs
       docs = []
     end
+
   end
   yield docs
 end

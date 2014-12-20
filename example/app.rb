@@ -366,7 +366,7 @@ __END__
         %br
         <pre>#{@err}</pre>
 
-  - if @results.count > 0
+  - if @params[:id].empty? && @results.count > 0
     %tr
       %td
         %ul

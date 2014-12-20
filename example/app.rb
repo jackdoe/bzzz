@@ -8,6 +8,13 @@ require 'haml'
 require 'cgi'
 require 'ripper'
 
+set :sessions, false
+set :logging, false
+set :dump_errors, false
+set :environment, :production
+set :raise_errors, false
+set :show_exceptions, false
+
 PER_PAGE = 15
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
@@ -134,6 +141,11 @@ if ARGV[0] == 'do-index'
   end
   p Store.stat
   exit 0
+end
+
+get '/:page' do |page|
+  status 404
+  "not found"
 end
 
 get '/' do
@@ -272,16 +284,7 @@ get '/' do
     end
   end
 
-  result = haml :index
-  headers['Content-Encoding'] = 'gzip'
-  StringIO.new.tap do |io|
-    gz = Zlib::GzipWriter.new(io)
-    begin
-      gz.write(result)
-    ensure
-      gz.close
-    end
-  end.string
+  haml :index
 end
 
 __END__

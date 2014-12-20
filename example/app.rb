@@ -15,7 +15,7 @@ set :environment, :production
 set :raise_errors, false
 set :show_exceptions, true
 
-PER_PAGE = 15
+PER_PAGE = 5
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 IN_FILE_PATH_SCORE = 10

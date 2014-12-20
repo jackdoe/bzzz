@@ -75,8 +75,17 @@ end
 def is_important(x)
   return x.match(/\b(sub|public|private|package)\b/)
 end
+
 def encode(content)
   content.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
+end
+
+def bold_and_color(x)
+  line = x[:line]
+  if !x[:color].empty?
+    line = "<font color='#{x[:color]}'>#{line}</font>"
+  end
+  "#{x[:bold] ? '<b>' : ''}#{line}#{x[:bold] ? '</b>' : ''}"
 end
 
 def tokenize_and_encode_payload(content,encode, init_flags = 0)
@@ -111,7 +120,7 @@ end
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
-  pattern = "#{path}/**/*\.{c,java,pm,pl,rb}"
+  pattern = "#{path}/**/*\.{c,java,pm,pl,rb,clj}"
   puts "indexing #{pattern}"
   Dir.glob(pattern).each do |f|
     name = f.gsub(path,'')
@@ -141,7 +150,7 @@ if ARGV[0] == 'do-index'
   v.shift
   v = ["/usr/src/linux"] unless ARGV.count > 0
   v.each do |dir|
-    walk_and_index(dir,100) do |slice|
+    walk_and_index(dir,1000) do |slice|
       puts "sending #{slice.length} docs"
       Store.save(slice)
     end
@@ -164,11 +173,11 @@ get '/' do
   @pages = 0
   if !@q.empty?
     queries = []
-    if !params[:id].empty?
+    if !@params[:id].empty?
       queries << {
         term: {
           field: "id",
-          value: params[:id]
+          value: @params[:id]
         }
       }
     end
@@ -254,19 +263,21 @@ get '/' do
 
         highlighted = []
         around = 0
+        colors = ["#3B4043","#666699"]
         h["content_no_index"].split(LINE_SPLITTER).each_with_index do |line,line_index|
           item = { show: false, bold: false, line_no: line_index, line: line.escape }
 
           if matching[line_index]
             item[:bold] = true
             item[:show] = matching[line_index].count == best_line_nr_matches
-
+            item[:color] = colors[0]
             row[:n_matches] += 1
             if item[:show]
-              if highlighted.count > 1
+              if @params[:id].empty? && highlighted.count > 1
                 1.upto(SHOW_AROUND_MATCHING_LINE).each do |i|
                   begin
                     highlighted[-i][:show] = true
+                    highlighted[-i][:color] ||= colors[0]
                   rescue
                   end
                 end
@@ -277,21 +288,21 @@ get '/' do
           else
             if around > 0
               item[:show] = true
+              item[:color] = colors[0]
+              around -= 1
+              if around == 0
+                colors.rotate!
+              end
             end
-            around -= 1
           end
 
           highlighted << item
         end
 
-        highlighted.each do |x|
-          x[:line] = "#{x[:bold] ? '<b>' : ''}#{x[:line]}#{x[:bold] ? '</b>' : ''}"
-        end
-
-        if params[:id].empty?
-          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| x[:line] }.join("\n")
+        if @params[:id].empty?
+          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| bold_and_color(x) }.join("\n")
         else
-          row[:highlight] = highlighted.map { |x| x[:line] }.join("\n")
+          row[:highlight] = highlighted.map { |x| bold_and_color(x) }.join("\n")
         end
 
         @results << row
@@ -347,7 +358,7 @@ __END__
       %td{align: "left", valign: "left" }
         -if @err["ParseException"]
           %br
-          oops, seems like we received a <b>ParseException</b>, some type of queries are not parsable by the 
+          oops, seems like we received a <b>ParseException</b>, some type of queries are not parsable by the
           %a(href="https://lucene.apache.org/core/4_9_0/queryparser/org/apache/lucene/queryparser/classic/QueryParser.html") Lucene QueryParser
           %br
           For example <a href="?q=Time::HiRes">Time::HiRes</a> breaks it because of <b>:</b>. You can search for those using quotes like: <a href='?q="Time::HiRes"'>"Time::HiRes"</a>
@@ -370,12 +381,15 @@ __END__
     %tr
       %td{id: r[:id]}
         %div{id: "menu_#{r_index}"}
-          %a{ href: "#menu_#{r_index - 1}"} &#9668;
-          %a{ href: "#top"} &#9650;
-          %a{ href: "#menu_#{r_index + 1}"} &#9658;
+          -if @params[:id].empty?
+            %a{ href: "#menu_#{r_index - 1}"} &#9668;
+            %a{ href: "#top"} &#9650;
+            %a{ href: "#menu_#{r_index + 1}"} &#9658;
+          - else
+            %a{ href: "?q=#{@q}"} &#9650;
 
           %a{ href: "#explain_#{r_index}"} explain score: #{r[:score]}
-          file: <a href="?q=#{@q}&id=#{r[:id]}">#{r[:id]}</a>
+          file: <a href="?q=#{@q}&id=#{r[:id]}&back=#{r_index}">#{r[:id]}</a>
 
         %pre.section{id: "explain_#{r_index}"}
           <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}

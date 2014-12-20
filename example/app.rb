@@ -15,7 +15,7 @@ set :environment, :production
 set :raise_errors, false
 set :show_exceptions, true
 
-PER_PAGE = 5
+PER_PAGE = 10
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 IN_FILE_PATH_SCORE = 10
@@ -164,6 +164,14 @@ get '/' do
   @pages = 0
   if !@q.empty?
     queries = []
+    if !params[:id].empty?
+      queries << {
+        term: {
+          field: "id",
+          value: params[:id]
+        }
+      }
+    end
     tokens = tokenize_and_encode_payload(@q,false)
     tokens.each_with_index do |t,t_index|
       queries << {
@@ -279,8 +287,12 @@ get '/' do
         highlighted.each do |x|
           x[:line] = "#{x[:bold] ? '<b>' : ''}#{x[:line]}#{x[:bold] ? '</b>' : ''}"
         end
-        row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| x[:line] }.join("\n")
-        row[:full] = highlighted.map { |x| x[:line] }.join("\n")
+
+        if params[:id].empty?
+          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| x[:line] }.join("\n")
+        else
+          row[:highlight] = highlighted.map { |x| x[:line] }.join("\n")
+        end
 
         @results << row
       end
@@ -358,12 +370,12 @@ __END__
     %tr
       %td{id: r[:id]}
         %div{id: "menu_#{r_index}"}
-          %a{ href: "#explain_#{r_index}"} explain
-          %a{ href: "#show_#{r_index}"} show-whole-file
           %a{ href: "#menu_#{r_index - 1}"} &#9668;
           %a{ href: "#top"} &#9650;
           %a{ href: "#menu_#{r_index + 1}"} &#9658;
-          score: #{r[:score]} file: <b>#{r[:id]}</b>
+
+          %a{ href: "#explain_#{r_index}"} explain score: #{r[:score]}
+          file: <a href="?q=#{@q}&id=#{r[:id]}">#{r[:id]}</a>
 
         %pre.section{id: "explain_#{r_index}"}
           <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}
@@ -371,8 +383,6 @@ __END__
         = preserve do
           <pre id="highlighted_#{r_index}">#{r[:highlight]}</pre>
 
-        = preserve do
-          <pre class="section" id="show_#{r_index}"><br><a href="##{r[:id]}">hide #{r[:id]}</a><br><font color="red">---</font><br>#{r[:full]}</pre>
   -if @results.count > 0
     %tr
       %td

@@ -44,9 +44,22 @@ if [ ! -x "$JAVA" ]; then
     exit 1
 fi
 
+if [ "x$BZZZ_IDENTIFIER" = "x" ]; then
+    echo "need to setup BZZZ_IDENTIFIER"
+    exit 1
+fi
+
+if [ "x$BZZZ_PORT" = "x" ]; then
+    echo "need to setup BZZZ_PORT"
+    exit 1
+fi
+
+if [ "x$BZZZ_DIRECTORY" = "x" ]; then
+    echo "need to setup BZZZ_DIRECTORY"
+    exit 1
+fi
 $JAVA -Dlog4j.configuration=file:/etc/bzzz/log4j.properties $JAVA_OPTS \
       -jar /usr/lib/bzzz/bzzz.jar \
       --directory $BZZZ_DIRECTORY \
       --port $BZZZ_PORT \
-      --hosts $BZZZ_HOSTS \
       --identifier $BZZZ_IDENTIFIER $BZZZ_OPTIONS

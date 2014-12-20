@@ -114,7 +114,7 @@
         (swap! discover-hosts* merge (into {} (for [host (keys x)]
                                                 [(validate-discover-url host) true])))))
     (catch Exception e
-      (log/warn "merge-discovery-hosts" x (.getMessage e))))
+      (log/warn "merge-discovery-hosts" x (ex-str e))))
   {:identifier @index-directory/identifier*
    :discover-hosts @discover-hosts*
    :next-gc @next-gc*})
@@ -246,8 +246,8 @@
     :id :identifier
     :default const/default-identifier]
    ["-b" "--bind 'string'" "bind only on specific ip address"
-    :bind :bind
-    :default nil]
+    :id :bind
+    :default "0.0.0.0"]
    ["-o" "--hosts host:port,host:port" "initial hosts that will be queried for identifiers for auto-resolve"
     :id :discover-hosts
     :default ""]
@@ -276,7 +276,7 @@
     (index-directory/initial-read-alias-file)
     (index-stat/initial-setup)
     (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
-    (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--allow-unsafe-queries" @query/allow-unsafe-queries*)
+    (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--allow-unsafe-queries" @query/allow-unsafe-queries* " .. dumping the raw options: " options)
     (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
     (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
     (every 1000 #(attempt-gc) (mk-pool) :desc "attempt-gc")

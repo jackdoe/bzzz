@@ -323,7 +323,7 @@
         facets (:facets input)
         index (need :index input "need <index>")
         futures (into [] (for [shard (index-name-matching (resolve-alias index))]
-;;                           (future
+                           (future
                              (use-searcher shard
                                            (get input :must-refresh false)
                                            (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
@@ -339,5 +339,5 @@
                                                            :sort (:sort input)
                                                            :spatial-filter (get input :spatial-filter nil)
                                                            :explain (get input :explain false)
-                                                           :fields (:fields input))))))]
+                                                           :fields (:fields input)))))))]
     (reduce-collection futures input ms-start)))

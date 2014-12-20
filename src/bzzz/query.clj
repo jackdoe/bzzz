@@ -70,4 +70,4 @@
   (when (> (count queries) 0)
     (let [first-query (first queries)]
       (doseq [^TermPayloadClojureScoreQuery query (rest queries)]
-        (bzzz.queries.term-payload-clj-score/share-local-state query first-query)))))
+        (bzzz.queries.term-payload-clj-score/share-local-state first-query query)))))

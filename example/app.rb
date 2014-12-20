@@ -11,7 +11,7 @@ require 'ripper'
 PER_PAGE = 15
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
-IN_FILE_PATH_SCORE = 1
+IN_FILE_PATH_SCORE = 10
 
 SEARCH_FIELD = "content_payload_no_norms_no_store"
 DISPLAY_FIELD = "content_no_index"
@@ -162,20 +162,21 @@ get '/' do
           pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
 
       (if-not in-file-path
-        (.result-state-append ctx {:payload payload, :query-token-index #{t_index}})
-        (.local-state-set ctx line-key (+ 1 seen-on-this-line)))
+        (do
+          (.result-state-append ctx {:payload payload, :query-token-index #{t_index}})
+          (.local-state-set ctx line-key (+ 1 seen-on-this-line))))
 
-      (when (> seen-on-this-line 0)
-          (.explanation-add ctx seen-on-this-line (str "seen <" seen-on-this-line "> on line <" line-no "> line-key <" line-key ">"))
-          (.current-score-add ctx seen-on-this-line))
+      (.explanation-add ctx seen-on-this-line (str "seen (" seen-on-this-line ") on line (" line-no ") line-key (" line-key ")"))
+      (.current-score-add ctx seen-on-this-line)
 
-      (when (> on-important-line 0)
-        (.explanation-add ctx on-important-line (str "important line: " line-no))
-        (.current-score-add ctx on-important-line))
+      (if (> on-important-line 0)
+        (do
+          (.explanation-add ctx on-important-line (str "important line: (" line-no ")"))
+          (.current-score-add ctx on-important-line)))
 
       (when in-file-path
         (let [in-file-path-score (+ #{IN_FILE_PATH_SCORE} pos-in-line)]
-          (.explanation-add ctx in-file-path-score (str "in-file-path, #{IN_FILE_PATH_SCORE} + pos in path<" pos-in-line ">"))
+          (.explanation-add ctx in-file-path-score (str "in-file-path, #{IN_FILE_PATH_SCORE} + pos in path (" pos-in-line ")"))
           (.current-score-add ctx in-file-path-score)))
 
       (.postings-next-position ctx)))
@@ -354,4 +355,7 @@ __END__
 
         = preserve do
           <pre class="section" id="show_#{r_index}"><br><a href="##{r[:id]}">hide #{r[:id]}</a><br><font color="red">---</font><br>#{r[:full]}</pre>
-
+  -if @results.count > 0
+    %tr
+      %td
+        #{haml :form}

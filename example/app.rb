@@ -10,10 +10,10 @@ require 'cgi'
 
 set :sessions, false
 set :logging, false
-set :dump_errors, false
+set :dump_errors, true
 set :environment, :production
 set :raise_errors, false
-set :show_exceptions, false
+set :show_exceptions, true
 
 PER_PAGE = 15
 SHOW_AROUND_MATCHING_LINE = 2
@@ -25,7 +25,11 @@ DISPLAY_FIELD = "content_no_index"
 F_IMPORTANT_LINE = 1 << 29
 F_IS_IN_PATH = 1 << 30
 LINE_SPLITTER = /[\r\n]/
-
+class NilClass
+  def empty?
+    true
+  end
+end
 class String
   def escape
     CGI::escapeHTML(self)
@@ -158,7 +162,7 @@ get '/' do
   @took = -1
   @page = @params[:page].to_i || 0
   @pages = 0
-  if @q
+  if !@q.empty?
     queries = []
     tokens = tokenize_and_encode_payload(@q,false)
     tokens.each_with_index do |t,t_index|
@@ -212,9 +216,9 @@ get '/' do
 
     begin
       res = Store.find({ bool: { must: queries } },explain: true, page: @page)
-
+      raise res["exception"] if res["exception"]
       @err = nil
-      @total = res["total"]
+      @total = res["total"] || 0
       @took = res["took"]
       @pages = @total/PER_PAGE
 
@@ -295,7 +299,7 @@ __END__
 @@ form
 %form{ action: '/', method: 'GET' }
   %input{ type: "text", name: "q", value: @q, autofocus: true}
-  %input{ type: "submit", name: "submit", value: "search" }
+  %input{ type: "submit", value: "search" }
   &nbsp;
   - if @pages > 0
     - if @page - 1 > -1
@@ -373,3 +377,18 @@ __END__
     %tr
       %td
         #{haml :form}
+
+  %tr
+    %td
+      - if @results.count == 0 && @q.empty?
+        %ul <b>case sensitive</b> indexed: linux-git, glibc-2.2.0, perl-git, lucene-solar-git, hadoop-git, zookeeper-git, clojure-git.
+        %li
+          %a{ href: "?q=goto+drop+udp"} goto drop udp
+        %li
+          %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
+        %li
+          %a{ href: "?q=IndexSearcher"} IndexSearcher
+        %li
+          %a{ href: "?q=postings+nextPosition"} postings nextPosition
+
+      using <a href="https://github.com/jackdoe/bzzz">github.com/jackdoe/bzzz</a> lucene wrapper, __FILE__ lives at: <a href="https://github.com/jackdoe/bzzz/blob/master/example/app.rb">https://github.com/jackdoe/bzzz/blob/master/example/app.rb</a> <b>patches/issues welcome</b>

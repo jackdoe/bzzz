@@ -12,6 +12,8 @@ after that run:
 open:
   http://localhost:4567/?q=void+foo
 
+  also this lives at http://zearch.io
+
 screenshot:
   https://raw.githubusercontent.com/jackdoe/bzzz/master/example/screenshot.png
   https://raw.githubusercontent.com/jackdoe/bzzz/master/example/screenshot-explain.png

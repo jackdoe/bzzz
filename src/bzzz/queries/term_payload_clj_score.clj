@@ -13,6 +13,13 @@
                         (into [] f)))
                  (.values fba)))))
 
+(defn extract-result-state [^TermPayloadClojureScoreQuery query doc-id]
+  (.result_state_get_for_doc ^ExpressionContext (.clj_context query) doc-id))
+
+(defn share-local-state [^TermPayloadClojureScoreQuery source ^TermPayloadClojureScoreQuery dest]
+  (.swap-local-state ^ExpressionContext (.clj_context dest)
+                     (.local-state ^ExpressionContext (.clj_context source))))
+
 (defn parse
   [generic input analyzer]
   (let [{:keys [field value clj-eval field-cache fixed-bucket-aggregation]

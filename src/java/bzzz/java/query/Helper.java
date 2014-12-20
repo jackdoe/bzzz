@@ -28,24 +28,34 @@ public class Helper {
         return n;
     }
 
-    public static List<Query> collect_possible_subqueries(Query top, List<Query> result) {
+    public static List<Query> collect_possible_subqueries(Query top, List<Query> result, Class filter) {
         if (result == null)
             result = new ArrayList<Query>();
         if (top instanceof BooleanQuery) {
             for (BooleanClause bq : ((BooleanQuery)top).clauses())
-                collect_possible_subqueries(bq.getQuery(), result);
+                collect_possible_subqueries(bq.getQuery(), result, filter);
         } else if (top instanceof DisjunctionMaxQuery) {
             for (Query q : ((DisjunctionMaxQuery)top).getDisjuncts())
-                collect_possible_subqueries(q, result);
+                collect_possible_subqueries(q, result,filter);
         } else if (top instanceof ConstantScoreQuery) {
-            collect_possible_subqueries(((ConstantScoreQuery)top).getQuery(), result);
+            collect_possible_subqueries(((ConstantScoreQuery)top).getQuery(), result,filter);
         } else if (top instanceof NoZeroQuery) {
-            collect_possible_subqueries(((NoZeroQuery)top).query, result);
+            collect_possible_subqueries(((NoZeroQuery)top).query, result,filter);
         } else if (top instanceof NoNormQuery) {
-            collect_possible_subqueries(((NoNormQuery)top).query, result);
+            collect_possible_subqueries(((NoNormQuery)top).query, result,filter);
         } else {
-            result.add(top);
+            if (filter == null || top.getClass() == filter)
+                result.add(top);
         }
         return result;
+    }
+
+    public static float object_to_float(Object s) {
+        if (s instanceof Integer)
+            return ((Integer) s).floatValue();
+        else if (s instanceof Long)
+            return ((Long) s).floatValue();
+        else
+            return (Float) s;
     }
 }

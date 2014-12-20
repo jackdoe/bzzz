@@ -14,3 +14,4 @@ open:
 
 screenshot:
   https://raw.githubusercontent.com/jackdoe/bzzz/master/example/screenshot.png
+  https://raw.githubusercontent.com/jackdoe/bzzz/master/example/screenshot-explain.png

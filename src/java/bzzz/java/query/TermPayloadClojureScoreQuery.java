@@ -22,7 +22,7 @@ public class TermPayloadClojureScoreQuery extends Query {
 
     // the clj_context was moved to the query from the Weight easier access for dynamic facets
     public final ExpressionContext clj_context;
-    public Term term;
+    final public Term term;
     public String expr;
     public String[] field_cache_req;
     public IFn clj_expr;
@@ -59,8 +59,10 @@ public class TermPayloadClojureScoreQuery extends Query {
     public String toString(String field) { return term.toString() + "@" + expr; }
 
     @Override
-    public Weight createWeight(IndexSearcher searcher) throws IOException {
+    public Weight createWeight(final IndexSearcher searcher) throws IOException {
         final Query query = this;
+        clj_context.collection_statistics = searcher.collectionStatistics(term.field());
+
         return new Weight() {
             @Override
             public String toString() { return "clojure-payload-score-weight(" + query.toString() + ")"; }
@@ -82,7 +84,7 @@ public class TermPayloadClojureScoreQuery extends Query {
                     clj_context.explanation = new Explanation();
                     float score = s.score();
                     clj_context.explanation.setValue(score);
-                    clj_context.explanation.setDescription("result of: " + expr);
+                    clj_context.explanation.setDescription("result of: " + term.toString() + " @ " + expr);
                     return clj_context.explanation;
                 }
                 return new Explanation(0f,"no matching term");
@@ -106,24 +108,25 @@ public class TermPayloadClojureScoreQuery extends Query {
 
                 clj_context.postings = postings;
                 clj_context.fill_field_cache(context.reader(),field_cache_req);
-
+                clj_context.doc_freq = termsEnum.docFreq(); // FIXME: wrong, poc
+                clj_context.docBase = context.docBase;
                 return new Scorer(weight) {
                     @Override
                     public int docID() { return postings.docID(); }
                     @Override
                     public int freq() throws IOException { return postings.freq(); }
                     @Override
-                    public int nextDoc() throws IOException { return Helper.next_doc_and_next_position(postings); }
+                    public int nextDoc() throws IOException { return postings.nextDoc(); }
                     @Override
-                    public int advance(int target) throws IOException { return Helper.advance_and_next_position(postings,target); }
+                    public int advance(int target) throws IOException { return postings.advance(target); }
                     @Override
                     public long cost() { return postings.cost(); }
                     @Override
                     public String toString() { return "scorer(" + weight.getQuery().toString() + ")"; }
                     @Override
                     public float score() throws IOException {
-                        clj_context.freq = freq();
-                        clj_context.docID = docID();
+                        clj_context.reset();
+                        clj_context.postings_next_position();
                         return (float) clj_expr.invoke(clj_context);
                     }
                 };

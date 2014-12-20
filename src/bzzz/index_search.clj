@@ -266,6 +266,7 @@
   (let [ms-start (time-ms)
         analyzer ^Analyzer (parse-analyzer analyzer)
         query ^Query (parse-query query analyzer)
+        hackish-queries (hack-extract-hackish-queries query)
         highlighter (make-highlighter query searcher highlight analyzer)
         pq-size (+ (* page size) size)
         score-collector (get-score-collector sort pq-size searcher)
@@ -278,19 +279,19 @@
               (into-array Collector
                           [score-collector
                            facet-collector]))]
+    (hack-share-local-state hackish-queries)
     (.search searcher
              query
              spatial-filter
              wrap)
     {:total (.getTotalHits score-collector)
-
      ;; facets:
      ;; do not send the error back,
      ;; for example with no taxo reader, probably problem with open and exception is thrown
      ;; even though we might fake a facet result
      ;; it could really surprise the client
      :facets (merge
-              (hack-merge-dynamic-facets-counts query)
+              (hack-merge-dynamic-facets-counts hackish-queries)
               (if (and taxo-reader (> (count facets) 0))
                 (try
                   (let [fc (FastTaxonomyFacetCounts. taxo-reader
@@ -303,12 +304,14 @@
                       {})))))
      :hits (let [top (.topDocs score-collector (* page size))]
              (into [] (for [^ScoreDoc hit (.scoreDocs top)]
-                        (let [doc (document->map (.doc searcher (.doc hit))
-                                                 fields
-                                                 (.score hit)
-                                                 highlighter
-                                                 (when explain
-                                                   (.explain searcher query (.doc hit))))]
+                        (let [doc (hack-merge-result-state hackish-queries
+                                                           (.doc hit)
+                                                           (document->map (.doc searcher (.doc hit))
+                                                                          fields
+                                                                          (.score hit)
+                                                                          highlighter
+                                                                          (when explain
+                                                                            (.explain searcher query (.doc hit)))))]
                           (if sort
                             (assoc doc :_sort (sorted-fields->map (.fields ^TopFieldDocs top)
                                                                   (.fields ^FieldDoc hit)))
@@ -320,7 +323,7 @@
         facets (:facets input)
         index (need :index input "need <index>")
         futures (into [] (for [shard (index-name-matching (resolve-alias index))]
-                           (future
+;;                           (future
                              (use-searcher shard
                                            (get input :must-refresh false)
                                            (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
@@ -336,5 +339,5 @@
                                                            :sort (:sort input)
                                                            :spatial-filter (get input :spatial-filter nil)
                                                            :explain (get input :explain false)
-                                                           :fields (:fields input)))))))]
+                                                           :fields (:fields input))))))]
     (reduce-collection futures input ms-start)))

@@ -9,13 +9,22 @@ import java.util.*;
 
 public class ExpressionContext {
     public Explanation explanation = null;
+
+    public int docBase;
     public int docID;
+    public int global_docID;
     public int freq;
+    public int doc_freq;
+
     public DocsAndPositionsEnum postings;
-
-
+    public CollectionStatistics collection_statistics;
+    public float current_score = 0f;
+    public float current_decay = 1f;
+    public long current_counter = 0;
+    public int current_freq_left;
     public Map<String,Object> fc = new HashMap<String,Object>();
     public Map<Object,Object> local_state = new HashMap<Object,Object>();
+    public Map<Integer,List<Object>> result_state = null;
     public Map<Object,Object> global_state;
 
     // "fixed_bucket_aggregations": [
@@ -27,6 +36,36 @@ public class ExpressionContext {
     int fba_max_buckets_per_aggregation = 0;
     public static final Keyword FBA_KW_NAME = Keyword.intern(null, "name");
     public static final Keyword FBA_KW_BUCKETS = Keyword.intern(null, "buckets");
+
+    public void swap_local_state(Map<Object,Object> replacement) {
+        local_state = replacement;
+    }
+    public void reset() throws IOException {
+        freq = postings.freq();
+        current_freq_left = freq;
+        docID = postings.docID();
+        global_docID = docID + docBase;
+        current_score = 0f;
+        current_decay = 1f;
+        current_counter = 0;
+    }
+
+    public float idf(long docFreq, long numDocs) {
+        return (float)(Math.log(numDocs/(double)(docFreq+1)) + 1.0);
+    }
+
+    public float tf_idf() {
+        return freq * idf(doc_freq, cs_max_doc());
+    }
+
+    public float maxed_tf_idf() {
+        return 1 - (1 / (float) Math.sqrt(tf_idf()));
+    }
+
+    public long cs_doc_count() { return collection_statistics.docCount(); }
+    public long cs_max_doc() { return collection_statistics.maxDoc(); }
+    public long cs_sum_doc_freq() { return collection_statistics.sumDocFreq(); }
+    public long cs_sum_total_term_freq() { return collection_statistics.sumTotalTermFreq(); }
 
     public ExpressionContext(Map<Object,Object> global_state,List<Map<Object,Object>> fba_settings) throws Exception {
         this.global_state = global_state;
@@ -44,7 +83,9 @@ public class ExpressionContext {
     }
 
     public int postings_next_position() throws IOException {
-        return postings.nextPosition();
+        if (--current_freq_left >= 0)
+            return postings.nextPosition();
+        return -1;
     }
 
     public void fill_field_cache(AtomicReader r, String[] field_cache_req) throws IOException {
@@ -101,7 +142,14 @@ public class ExpressionContext {
     }
 
     public Object local_state_get(Object key) {
-        return local_state.get(key);
+        return local_state_get(key,null);
+    }
+
+    public Object local_state_get(Object key,Object def) {
+        Object r = local_state.get(key);
+        if (r == null)
+            return def;
+        return r;
     }
     public Object local_state_set(Object key, Object val) {
         return local_state.put(key,val);
@@ -112,6 +160,29 @@ public class ExpressionContext {
     }
     public Object global_state_set(Object key, Object val) {
         return global_state.put(key,val);
+    }
+
+    public List<Object> result_state_get_for_doc(Integer doc) {
+        if (result_state != null && explanation != null)
+            return result_state.get(doc);
+        return null;
+    }
+
+    public void result_state_append(Object val) {
+        if (explanation == null)
+            return;
+
+        if (result_state == null)
+            result_state = new HashMap<Integer,List<Object>>();
+
+        List<Object> values = result_state.get(global_docID);
+        if (values == null) {
+            values = new ArrayList<Object>();
+            values.add(val);
+            result_state.put(global_docID,values);
+        } else {
+            values.add(val);
+        }
     }
 
     public void explanation_add(float s, String e) {
@@ -135,15 +206,22 @@ public class ExpressionContext {
     }
 
     public void explanation_add(Object s, String e) {
-        if (explanation != null) {
-            if (s instanceof Integer)
-                explanation_add(((Integer) s).floatValue(), e);
-            else if (s instanceof Long)
-                explanation_add(((Long) s).floatValue(), e);
-            else
-                explanation_add((Float) s, e);
-        }
+        if (explanation != null)
+            explanation.addDetail(new Explanation(Helper.object_to_float(s),e));
     }
+
+    public void current_score_add(float s) { current_score += s; }
+    public void current_score_add(double s) { current_score += (float) s; }
+    public void current_score_add(int s) { current_score += (float) s; }
+    public void current_score_add(long s) { current_score += (float) s; }
+    public void current_score_add(Object s) { current_score += Helper.object_to_float(s); }
+
+    public void current_decay_mul(float s) { current_decay *= s; }
+    public void current_decay_mul(double s) { current_decay *= (float) s; }
+    public void current_decay_mul(int s) { current_decay *= (float) s; }
+    public void current_decay_mul(long s) { current_decay *= (float) s; }
+    public void current_decay_mul(Object s) { current_decay *= Helper.object_to_float(s); }
+
     // FIXED_BUCKET_AGGREGATION
     public Object fba_read_key(Map<Object,Object> item, String x, Keyword fallback) {
         Object result = item.get(x);

@@ -47,12 +47,27 @@
       (throw (Throwable. (str "request for unsafe query <" sanitized ">, run the server with --allow-unsafe-queries to execute it")))
       (call parse-method parse-query val analyzer))))
 
-(defn hack-merge-dynamic-facets-counts [^Query query]
-  (let [sub-queries (Helper/collect_possible_subqueries query nil)]
-    (reduce (fn [sum ^Query query]
-              (if (instance? TermPayloadClojureScoreQuery query)
-                (merge sum
-                       (bzzz.queries.term-payload-clj-score/fixed-bucket-aggregation-result ^TermPayloadClojureScoreQuery query))
-                sum))
-            {}
-            sub-queries)))
+(defn hack-extract-hackish-queries [^Query top]
+  (Helper/collect_possible_subqueries top nil TermPayloadClojureScoreQuery))
+
+(defn hack-merge-dynamic-facets-counts [queries]
+  (reduce (fn [sum ^TermPayloadClojureScoreQuery query]
+            (merge sum (bzzz.queries.term-payload-clj-score/fixed-bucket-aggregation-result query)))
+          {}
+          queries))
+
+(defn hack-merge-result-state [queries doc-id doc]
+  (if (> (count queries) 0)
+    (assoc doc :_result_state
+           (reduce (fn [sum ^TermPayloadClojureScoreQuery query]
+                     (if-let [state (bzzz.queries.term-payload-clj-score/extract-result-state query doc-id)]
+                       (conj sum state)))
+                   []
+                   queries))
+    doc))
+
+(defn hack-share-local-state [queries]
+  (when (> (count queries) 0)
+    (let [first-query (first queries)]
+      (doseq [^TermPayloadClojureScoreQuery query (rest queries)]
+        (bzzz.queries.term-payload-clj-score/share-local-state query first-query)))))

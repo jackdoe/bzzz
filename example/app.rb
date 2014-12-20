@@ -166,22 +166,26 @@ get '/' do
           (.result-state-append ctx {:payload payload, :query-token-index #{t_index}})
           (.local-state-set ctx line-key (+ 1 seen-on-this-line))))
 
-      (.explanation-add ctx seen-on-this-line (str "seen (" seen-on-this-line ") on line (" line-no ") line-key (" line-key ")"))
+      (when (.explanation ctx)
+        (.explanation-add ctx seen-on-this-line (str "seen (" seen-on-this-line ") on line (" line-no ") line-key (" line-key ")")))
+
       (.current-score-add ctx seen-on-this-line)
 
       (if (> on-important-line 0)
         (do
-          (.explanation-add ctx on-important-line (str "important line: (" line-no ")"))
+          (when (.explanation ctx)
+            (.explanation-add ctx on-important-line (str "important line: (" line-no ")")))
           (.current-score-add ctx on-important-line)))
 
       (when in-file-path
         (let [in-file-path-score (+ #{IN_FILE_PATH_SCORE} pos-in-line)]
-          (.explanation-add ctx in-file-path-score (str "in-file-path, #{IN_FILE_PATH_SCORE} + pos in path (" pos-in-line ")"))
+          (when (.explanation ctx)
+            (.explanation-add ctx in-file-path-score (str "in-file-path, #{IN_FILE_PATH_SCORE} + pos in path (" pos-in-line ")")))
           (.current-score-add ctx in-file-path-score)))
 
       (.postings-next-position ctx)))
-
-  (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf")
+  (when (.explanation ctx)
+    (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf"))
   (float (+ (.maxed_tf_idf ctx) (.current-score ctx))))}
         }
       }

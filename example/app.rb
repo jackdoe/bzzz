@@ -1,12 +1,12 @@
-#!/usr/bin/ruby
-# encoding: UTF-8
+#!/usr/bin/env ruby
+# encoding: utf-8
+
 require 'zlib'
 require 'curb'
 require 'json'
 require 'sinatra'
 require 'haml'
 require 'cgi'
-require 'ripper'
 
 set :sessions, false
 set :logging, false
@@ -24,8 +24,8 @@ SEARCH_FIELD = "content_payload_no_norms_no_store"
 DISPLAY_FIELD = "content_no_index"
 F_IMPORTANT_LINE = 1 << 29
 F_IS_IN_PATH = 1 << 30
-
 LINE_SPLITTER = /[\r\n]/
+
 class String
   def escape
     CGI::escapeHTML(self)
@@ -71,9 +71,12 @@ end
 def is_important(x)
   return x.match(/\b(sub|public|private|package)\b/)
 end
+def encode(content)
+  content.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
+end
 
 def tokenize_and_encode_payload(content,encode, init_flags = 0)
-  lines = content.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '').split(LINE_SPLITTER);
+  lines = encode(content).split(LINE_SPLITTER);
 
   tokens = []
 
@@ -108,7 +111,7 @@ def walk_and_index(path, every)
   puts "indexing #{pattern}"
   Dir.glob(pattern).each do |f|
     name = f.gsub(path,'')
-    content = File.read(f)
+    content = encode(File.read(f))
     tokenized = tokenize_and_encode_payload(content,true)
     tokenized.push(tokenize_and_encode_payload(f,true,F_IS_IN_PATH))
 
@@ -134,7 +137,7 @@ if ARGV[0] == 'do-index'
   v.shift
   v = ["/usr/src/linux"] unless ARGV.count > 0
   v.each do |dir|
-    walk_and_index(dir,2000) do |slice|
+    walk_and_index(dir,100) do |slice|
       puts "sending #{slice.length} docs"
       Store.save(slice)
     end

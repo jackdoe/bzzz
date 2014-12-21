@@ -105,8 +105,8 @@ def tokenize_and_encode_payload(content, encode = false, init_flags = 0, line_in
     end
     line_index += line_index_offset
 
-    line.split(/[^\w]+/).each_with_index do |token,token_index|
-      if token.length > 0
+    line.split(/([^\w])+/).select { |x| !(x =~ /^\s+$/) }.each_with_index do |token,token_index|
+      if token.length > 0 && token != "|" # XXX: | is our payload delimiter
         if encode
           token_flags = flags
           if is_important(token)
@@ -189,6 +189,7 @@ get '/' do
         }
       }
     end
+
     tokens = tokenize_and_encode_payload(@q,false)
 
     all_tokens_match_mask = (0xffffffff >> (32 - tokens.count))
@@ -230,14 +231,7 @@ get '/' do
               (.local-state-set ctx (str "important-" line-key) true)
               (when (.explanation ctx)
                 (.explanation-add ctx on-important-line (str "line: <" line-no "> considered important")))
-              (.current-score-add ctx on-important-line))))
-
-        (when (.explanation ctx)
-          (.explanation-add ctx 0 (str "line: <" line-no "> ignoring token with payload: <"
-                                       payload
-                                       "> because uniq-tokens-seen-on-this-line<"
-                                       uniq-tokens-seen-on-this-line
-                                       "> is != all_tokens_match_mask<#{all_tokens_match_mask}> (yet)"))))))
+              (.current-score-add ctx on-important-line)))))))
 
   (if (> (.current-score ctx) (float 0.0))
     (do
@@ -418,7 +412,7 @@ __END__
       - if @results.count == 0 && @q.empty?
         %ul <b>case sensitive</b> indexed: clojure elasticsearch glibc-2.20 hadoop linux lucene-solr rails ruby zookeeper perl5
         %li
-          %a{ href: "?q=goto+drop+udp"} goto drop udp
+          %a{ href: "?q=struct+rtl8169_private+*"} struct rtl8169_private *
         %li
           %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
         %li

@@ -24,6 +24,8 @@ SEARCH_FIELD = "content_payload_no_norms_no_store"
 DISPLAY_FIELD = "content_no_index"
 F_IMPORTANT_LINE = 1 << 29
 F_IS_IN_PATH = 1 << 30
+F_IS_SYMBOL = 1 << 31
+
 LINE_SPLITTER = /[\r\n]/
 
 class NilClass
@@ -324,7 +326,7 @@ __END__
 
 @@ form
 %form{ action: '/', method: 'GET' }
-  %input{ type: "text", name: "q", value: @q, autofocus: true}
+  %input{ type: "text", name: "q", value: @q, autofocus: @q.empty?, placeholder: "defn reduce"}
   %input{ type: "submit", value: "search" }
   &nbsp;
   - if @pages > 0
@@ -337,7 +339,6 @@ __END__
       %a(href= "?q=#{@q}&page=#{@page + 1}")> next
     -else
       <strike>next</strike>
-
   &nbsp;took: #{@took}ms, matching documents: #{@total}, pages: #{@pages}, page: #{@page}
 
 @@ layout
@@ -346,7 +347,7 @@ __END__
   %head
     %title= "bzzz."
     =preserve do
-      <style>.section { display: none;} .section:target {display: block;} table {border-collapse: collapse;} table, th, td {border: 1px solid black;} a { text-decoration: none; color: gray;}</style>
+      <style>.section { display: none;} .section:target {display: block;} table { border-collapse: collapse; border-style: hidden; } table td, table th { border: 1px solid black; } a { text-decoration: none; color: gray;}</style>
 
   %body
     = yield

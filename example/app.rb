@@ -19,6 +19,7 @@ PER_PAGE = 10
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 IN_FILE_PATH_SCORE = 10
+ALL_TOKENS_MATCH_SCORE = 10
 
 SEARCH_FIELD = "content_payload_no_norms_no_store"
 DISPLAY_FIELD = "content_no_index"
@@ -49,7 +50,7 @@ class Store
 
   def Store.save(docs = [])
     docs = [docs] if !docs.kind_of?(Array)
-    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => 1}.to_json).body_str)
+    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer }.to_json).body_str)
   end
 
   def Store.delete(query)
@@ -92,8 +93,8 @@ def bold_and_color(x)
   "#{x[:bold] ? '<b>' : ''}#{line}#{x[:bold] ? '</b>' : ''}"
 end
 
-def tokenize_and_encode_payload(content,encode, init_flags = 0)
-  lines = encode(content).split(LINE_SPLITTER);
+def tokenize_and_encode_payload(content, encode = false, init_flags = 0, line_index_offset = 0)
+  lines = content.split(LINE_SPLITTER);
 
   tokens = []
 
@@ -102,6 +103,8 @@ def tokenize_and_encode_payload(content,encode, init_flags = 0)
     if is_important(line)
       flags |= F_IMPORTANT_LINE
     end
+    line_index += line_index_offset
+
     line.split(/[^\w]+/).each_with_index do |token,token_index|
       if token.length > 0
         if encode
@@ -129,8 +132,9 @@ def walk_and_index(path, every)
   Dir.glob(pattern).each do |f|
     name = f.gsub(path,'')
     content = encode(File.read(f))
+
     tokenized = tokenize_and_encode_payload(content,true)
-    tokenized.push(tokenize_and_encode_payload(f,true,F_IS_IN_PATH))
+    tokenized.push(tokenize_and_encode_payload(f,true,F_IS_IN_PATH,1000000))
 
     doc = {
       id: name,
@@ -186,12 +190,16 @@ get '/' do
       }
     end
     tokens = tokenize_and_encode_payload(@q,false)
-    tokens.each_with_index do |t,t_index|
-      queries << {
+
+    all_tokens_match_mask = (0xffffffff >> (32 - tokens.count))
+
+    tokens.each_with_index do |user_input_token,t_index|
+      term = {
         "term-payload-clj-score" => {
           field: SEARCH_FIELD,
-          value: t,
+          value: user_input_token,
           "clj-eval" => %{
+;; NOTE: user input here simply leads to RCE!
 (fn [^bzzz.java.query.ExpressionContext ctx]
   (while (>= (.current-freq-left ctx) 0)
     (let [payload (.payload-get-int ctx)
@@ -200,43 +208,50 @@ get '/' do
                         (.global_docID ctx)
                         "-"
                         line-no)
-          seen-on-this-line (.local-state-get ctx line-key 0)
+
+          ;; translates to matches[line] |= current position big
+          uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (bit-shift-left 1 #{t_index}))
+
           on-important-line (if (> (bit-and payload #{F_IMPORTANT_LINE}) 0) #{IMPORTANT_LINE_SCORE} 0)
           in-file-path (> (bit-and payload #{F_IS_IN_PATH}) 0)
           pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
 
-      (if-not in-file-path
+      (.postings-next-position ctx)
+
+      (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
+      (if (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask})
         (do
+          (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
+          (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: <" line-no "> all uniq tokens match with mask #{all_tokens_match_mask}"))
           (.result-state-append ctx {:payload payload, :query-token-index #{t_index}})
-          (.local-state-set ctx line-key (+ 1 seen-on-this-line))))
+          (if (and (> on-important-line 0) (not (.local-state-get ctx (str "important-" line-key))))
+            (do
+              ;; score important lines only once
+              (.local-state-set ctx (str "important-" line-key) true)
+              (when (.explanation ctx)
+                (.explanation-add ctx on-important-line (str "line: <" line-no "> considered important")))
+              (.current-score-add ctx on-important-line))))
 
+        (when (.explanation ctx)
+          (.explanation-add ctx 0 (str "line: <" line-no "> ignoring token with payload: <"
+                                       payload
+                                       "> because uniq-tokens-seen-on-this-line<"
+                                       uniq-tokens-seen-on-this-line
+                                       "> is != all_tokens_match_mask<#{all_tokens_match_mask}> (yet)"))))))
+
+  (if (> (.current-score ctx) (float 0.0))
+    (do
       (when (.explanation ctx)
-        (.explanation-add ctx seen-on-this-line (str "seen (" seen-on-this-line ") on line (" line-no ") line-key (" line-key ")")))
-
-      (.current-score-add ctx seen-on-this-line)
-
-      (if (> on-important-line 0)
-        (do
-          (when (.explanation ctx)
-            (.explanation-add ctx on-important-line (str "important line: (" line-no ")")))
-          (.current-score-add ctx on-important-line)))
-
-      (when in-file-path
-        (let [in-file-path-score (+ #{IN_FILE_PATH_SCORE} pos-in-line)]
-          (when (.explanation ctx)
-            (.explanation-add ctx in-file-path-score (str "in-file-path, #{IN_FILE_PATH_SCORE} + pos in path (" pos-in-line ")")))
-          (.current-score-add ctx in-file-path-score)))
-
-      (.postings-next-position ctx)))
-  (when (.explanation ctx)
-    (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf"))
-  (float (+ (.maxed_tf_idf ctx) (.current-score ctx))))}
+        (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf"))
+      (float (+ (.maxed_tf_idf ctx) (.current-score ctx))))
+    (float 0)))}
         }
       }
+      queries << term
     end
 
     begin
-      res = Store.find({ bool: { must: queries } },explain: true, page: @page)
+      res = Store.find({ "no-zero-score" => { query: { bool: { must: queries } } } } ,explain: true, page: @page)
       raise res["exception"] if res["exception"]
       @err = nil
       @total = res["total"] || 0

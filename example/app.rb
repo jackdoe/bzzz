@@ -25,11 +25,13 @@ DISPLAY_FIELD = "content_no_index"
 F_IMPORTANT_LINE = 1 << 29
 F_IS_IN_PATH = 1 << 30
 LINE_SPLITTER = /[\r\n]/
+
 class NilClass
   def empty?
     true
   end
 end
+
 class String
   def escape
     CGI::escapeHTML(self)
@@ -81,7 +83,7 @@ def encode(content)
 end
 
 def bold_and_color(x)
-  line = x[:line]
+  line = "<span id='line_#{x[:line_no]}'>#{x[:line]}</span>"
   if !x[:color].empty?
     line = "<font color='#{x[:color]}'>#{line}</font>"
   end
@@ -272,6 +274,7 @@ get '/' do
             item[:show] = matching[line_index].count == best_line_nr_matches
             item[:color] = colors[0]
             row[:n_matches] += 1
+            row[:first_match] ||= line_index
             if item[:show]
               if @params[:id].empty? && highlighted.count > 1
                 1.upto(SHOW_AROUND_MATCHING_LINE).each do |i|
@@ -355,15 +358,7 @@ __END__
       #{haml :form}
   - if @err
     %tr
-      %td{align: "left", valign: "left" }
-        -if @err["ParseException"]
-          %br
-          oops, seems like we received a <b>ParseException</b>, some type of queries are not parsable by the
-          %a(href="https://lucene.apache.org/core/4_9_0/queryparser/org/apache/lucene/queryparser/classic/QueryParser.html") Lucene QueryParser
-          %br
-          For example <a href="?q=Time::HiRes">Time::HiRes</a> breaks it because of <b>:</b>. You can search for those using quotes like: <a href='?q="Time::HiRes"'>"Time::HiRes"</a>
-
-        %br
+      %td
         <pre>#{@err}</pre>
 
   - if @params[:id].empty? && @results.count > 0
@@ -389,7 +384,7 @@ __END__
             %a{ href: "?q=#{@q}"} &#9650;
 
           %a{ href: "#explain_#{r_index}"} explain score: #{r[:score]}
-          file: <a href="?q=#{@q}&id=#{r[:id]}&back=#{r_index}">#{r[:id]}</a>
+          file: <a href="?q=#{@q}&id=#{r[:id]}&back=#{r_index}#line_#{r[:first_match]}">#{r[:id]}</a>
 
         %pre.section{id: "explain_#{r_index}"}
           <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}

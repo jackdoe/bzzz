@@ -400,7 +400,7 @@ __END__
   %tr
     %td
       - if @results.count == 0 && @q.empty?
-        %ul <b>case sensitive</b> indexed: linux-git, glibc-2.2.0, perl-git, lucene-solar-git, hadoop-git, zookeeper-git, clojure-git.
+        %ul <b>case sensitive</b> indexed: clojure elasticsearch glibc-2.20 hadoop linux lucene-solr rails ruby zookeeper perl5
         %li
           %a{ href: "?q=goto+drop+udp"} goto drop udp
         %li

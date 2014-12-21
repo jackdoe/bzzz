@@ -1,7 +1,5 @@
 #!/usr/bin/env ruby
 # encoding: utf-8
-
-require 'zlib'
 require 'curb'
 require 'json'
 require 'sinatra'
@@ -26,6 +24,7 @@ DISPLAY_FIELD = "content_no_index"
 
 F_IMPORTANT_LINE = 1 << 28
 F_IS_IN_PATH = 1 << 29
+IMPORTANT = { "sub" => true, "public" => true, "private" => true, "package" => true }
 
 LINE_SPLITTER = /[\r\n]/
 REQUEST_FILE_RE = /\B@\w+/
@@ -78,9 +77,6 @@ class Store
   end
 end
 
-def is_important(x)
-  return x.match(/\b(sub|public|private|package)\b/)
-end
 
 def encode(content)
   content.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
@@ -94,31 +90,72 @@ def bold_and_color(x)
   "#{x[:bold] ? '<b>' : ''}#{line}#{x[:bold] ? '</b>' : ''}"
 end
 
-def tokenize_and_encode_payload(content, encode = false, init_flags = 0, line_index_offset = 0)
+ORD_a = 'a'.ord
+ORD_aa = 'A'.ord
+ORD_z = 'z'.ord
+ORD_zz = 'Z'.ord
+ORD_zero = '0'.ord
+ORD_nine = '9'.ord
+ORD_space = ' '.ord
+ORD_semicolon = ';'.ord
+ORD_colon = ':'.ord
+ORD_at = '@'.ord
+ORD_bang = '!'.ord
+ORD_slash = '/'.ord
+
+def tokenize(line)
+  # well... this is slow :)
+  buf = ""
+  pos = 0
+  flags = 0
+  chars = line.chars
+  chars_max_index = chars.count
+  i = 0
+
+  while i < chars_max_index
+
+    char = chars[i]
+    code = char.ord
+
+    if (code >= ORD_a && code <= ORD_z) || (code >= ORD_aa && code <= ORD_zz) || (code >= ORD_zero && code <= ORD_nine)
+      buf << char
+    else
+      if buf.length > 0
+        yield buf, flags, pos += 1
+        flags |= F_IMPORTANT_LINE if IMPORTANT[buf]
+        buf = ""
+      end
+
+      if code != ORD_space && code != ORD_semicolon && ((code >= ORD_colon && code < ORD_at) || (code >= ORD_bang && code <= ORD_slash))
+        while chars[i] == char && i < chars_max_index
+          buf << chars[i]
+          i += 1
+        end
+        i -= 1 # will be advanced in the bottom of the while loop
+        yield buf, flags, pos += 1
+        buf = ""
+      end
+    end
+
+    i += 1
+  end
+
+  yield buf, flags, pos if buf.length > 0
+  nil
+end
+
+def tokenize_and_encode_payload(content, init_flags = 0, line_index_offset = 0)
   lines = content.split(LINE_SPLITTER);
 
   tokens = []
-
   lines.each_with_index do |line,line_index|
-    flags = init_flags
-    if is_important(line)
-      flags |= F_IMPORTANT_LINE
-    end
+
     line_index += line_index_offset
 
-    line.split(/([^\w])+/).select { |x| !(x =~ /^\s+$/) }.each_with_index do |token,token_index|
-      if token.length > 0 && token != "|" # XXX: | is our payload delimiter
-        if encode
-          token_flags = flags
-          if is_important(token)
-            token_flags &= ~F_IMPORTANT_LINE;
-          end
-          payload = token_flags | ((token_index & 0xFF) << 20) | (line_index & 0xFFFFF)
-          tokens << "#{token}|#{payload}"
-        else
-          tokens << token
-        end
-      end
+    tokenize(line) do |token, token_flags, token_index|
+      token_flags |= init_flags
+      payload = token_flags | ((token_index & 0xFF) << 20) | (line_index & 0xFFFFF)
+      tokens << "#{token}|#{payload}"
     end
   end
 
@@ -130,12 +167,16 @@ def walk_and_index(path, every)
   docs = []
   pattern = "#{path}/**/*\.{c,java,pm,pl,rb,clj}"
   puts "indexing #{pattern}"
+
+  files = Dir.glob(pattern)
+
   Dir.glob(pattern).each do |f|
+
     name = f.gsub(path,'')
     content = encode(File.read(f))
 
-    tokenized = tokenize_and_encode_payload(content,true)
-    tokenized.push(tokenize_and_encode_payload(f,true,F_IS_IN_PATH,1000000))
+    tokenized = tokenize_and_encode_payload(content)
+    tokenized.push(tokenize_and_encode_payload(f,F_IS_IN_PATH,1000000))
 
     doc = {
       id: name,
@@ -159,11 +200,14 @@ if ARGV[0] == 'do-index'
   v.shift
   v = ["/usr/src/linux"] unless ARGV.count > 0
   v.each do |dir|
+    t0 = Time.now
     walk_and_index(dir,1000) do |slice|
-      puts "sending #{slice.length} docs"
+      puts "sending #{slice.length} docs, tokenizing took #{Time.now - t0} to tokenize"
+      t0 = Time.now
       Store.save(slice)
     end
   end
+
   p Store.stat
   exit 0
 end
@@ -171,7 +215,6 @@ end
 
 def clojure_expression_terms(tokens, in_file = false)
   queries = []
-
   all_tokens_match_mask = (0xffffffff >> (32 - tokens.count))
 
   tokens.each_with_index do |user_input_token, t_index|
@@ -258,7 +301,13 @@ get '/' do
     end
 
     in_file_tokens = @q.scan(REQUEST_FILE_RE).map { |x| x.gsub(/^@/,"") }
-    tokens = tokenize_and_encode_payload(@q.gsub(REQUEST_FILE_RE,""),false)
+
+    tokens = []
+
+    tokenize(@q.gsub(REQUEST_FILE_RE,"")) do |token, flags, pos|
+      tokens << token
+    end
+
     queries = []
 
     if in_file_tokens.count > 0

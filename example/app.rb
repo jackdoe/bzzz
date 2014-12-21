@@ -331,12 +331,12 @@ __END__
   &nbsp;
   - if @pages > 0
     - if @page - 1 > -1
-      %a(href= "?q=#{@q}&page=#{@page - 1}")> prev
+      %a(href= "?q=#{@q.escapeCGI}&page=#{@page - 1}")> prev
     - else
       <strike>prev</strike>
     &nbsp;
     - if @page < @pages
-      %a(href= "?q=#{@q}&page=#{@page + 1}")> next
+      %a(href= "?q=#{@q.escapeCGI}&page=#{@page + 1}")> next
     -else
       <strike>next</strike>
   &nbsp;took: #{@took}ms, matching documents: #{@total}, pages: #{@pages}, page: #{@page}
@@ -382,10 +382,10 @@ __END__
             %a{ href: "#top"} &#9650;
             %a{ href: "#menu_#{r_index + 1}"} &#9658;
           - else
-            %a{ href: "?q=#{@q}"} &#9650;
+            %a{ href: "?q=#{@q.escapeCGI}"} &#9650;
 
           %a{ href: "#explain_#{r_index}"} explain score: #{r[:score]}
-          file: <a href="?q=#{@q}&id=#{r[:id]}&back=#{r_index}#line_#{r[:first_match]}">#{r[:id]}</a>
+          file: <a href="?q=#{@q.escapeCGI}&id=#{r[:id]}&back=#{r_index}#line_#{r[:first_match]}">#{r[:id]}</a>
 
         %pre.section{id: "explain_#{r_index}"}
           <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}

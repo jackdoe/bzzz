@@ -23,11 +23,12 @@ ALL_TOKENS_MATCH_SCORE = 10
 
 SEARCH_FIELD = "content_payload_no_norms_no_store"
 DISPLAY_FIELD = "content_no_index"
-F_IMPORTANT_LINE = 1 << 29
-F_IS_IN_PATH = 1 << 30
-F_IS_SYMBOL = 1 << 31
+
+F_IMPORTANT_LINE = 1 << 28
+F_IS_IN_PATH = 1 << 29
 
 LINE_SPLITTER = /[\r\n]/
+REQUEST_FILE_RE = /\B@\w+/
 
 class NilClass
   def empty?
@@ -50,7 +51,7 @@ class Store
 
   def Store.save(docs = [])
     docs = [docs] if !docs.kind_of?(Array)
-    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer }.to_json).body_str)
+    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => 1 }.to_json).body_str)
   end
 
   def Store.delete(query)
@@ -167,6 +168,72 @@ if ARGV[0] == 'do-index'
   exit 0
 end
 
+
+def clojure_expression_terms(tokens, in_file = false)
+  queries = []
+
+  all_tokens_match_mask = (0xffffffff >> (32 - tokens.count))
+
+  tokens.each_with_index do |user_input_token, t_index|
+    term = {
+        "term-payload-clj-score" => {
+          field: SEARCH_FIELD,
+          value: user_input_token,
+          "clj-eval" => %{
+;; NOTE: user input here simply leads to RCE!
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (while (>= (.current-freq-left ctx) 0)
+    (let [payload (.payload-get-int ctx)
+          must-be-in-file #{in_file ? "true" : "false"}
+          line-no (bit-and payload 0xFFFFF)
+          line-key (str "docID:" (.global_docID ctx)
+                        "-line:" line-no
+                        (if (.explanation ctx) "-explain" "-no-explain")
+                        #{in_file ? "\"-in-file\"" : "\"-regular\""})
+
+          ;; translates to matches[line] |= current position bit
+          uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (bit-shift-left 1 #{t_index}))
+
+          on-important-line (if (> (bit-and payload #{F_IMPORTANT_LINE}) 0) #{IMPORTANT_LINE_SCORE} 0)
+          in-file-path (> (bit-and payload #{F_IS_IN_PATH}) 0)
+          valid-match (or (not must-be-in-file) (and must-be-in-file in-file-path))
+          pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
+
+      (.postings-next-position ctx)
+
+      (if valid-match
+        (.local-state-set ctx line-key uniq-tokens-seen-on-this-line))
+
+      (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
+        (do
+          (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
+          (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-key ") all uniq tokens match with mask #{all_tokens_match_mask}"))
+          (.result-state-append ctx {:payload payload, :in-file must-be-in-file, :query-token-index #{t_index}})
+          (if (and (> on-important-line 0) (not (.local-state-get ctx (str "important-" line-key))))
+            (do
+              ;; score important lines only once
+              (.local-state-set ctx (str "important-" line-key) true)
+              (when (.explanation ctx)
+                (.explanation-add ctx on-important-line (str "line: (" line-key ") considered important")))
+              (.current-score-add ctx on-important-line)))))))
+
+  (if (> (.current-score ctx) (float 0.0))
+    (do
+      (when (.explanation ctx)
+        (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf"))
+      (float (+ (.maxed_tf_idf ctx) (.current-score ctx))))
+    (float 0)))}
+
+        }
+      }
+
+    queries << term
+
+  end
+
+  return queries
+end
+
 get '/:page' do |page|
   status 404
   "not found"
@@ -190,63 +257,38 @@ get '/' do
       }
     end
 
-    tokens = tokenize_and_encode_payload(@q,false)
+    in_file_tokens = @q.scan(REQUEST_FILE_RE).map { |x| x.gsub(/^@/,"") }
+    tokens = tokenize_and_encode_payload(@q.gsub(REQUEST_FILE_RE,""),false)
+    queries = []
 
-    all_tokens_match_mask = (0xffffffff >> (32 - tokens.count))
-
-    tokens.each_with_index do |user_input_token,t_index|
-      term = {
-        "term-payload-clj-score" => {
-          field: SEARCH_FIELD,
-          value: user_input_token,
-          "clj-eval" => %{
-;; NOTE: user input here simply leads to RCE!
-(fn [^bzzz.java.query.ExpressionContext ctx]
-  (while (>= (.current-freq-left ctx) 0)
-    (let [payload (.payload-get-int ctx)
-          line-no (bit-and payload 0xFFFFF)
-          line-key (str (if (.explanation ctx) "explain-" "no-explain-")
-                        (.global_docID ctx)
-                        "-"
-                        line-no)
-
-          ;; translates to matches[line] |= current position big
-          uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (bit-shift-left 1 #{t_index}))
-
-          on-important-line (if (> (bit-and payload #{F_IMPORTANT_LINE}) 0) #{IMPORTANT_LINE_SCORE} 0)
-          in-file-path (> (bit-and payload #{F_IS_IN_PATH}) 0)
-          pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
-
-      (.postings-next-position ctx)
-
-      (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
-      (if (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask})
-        (do
-          (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
-          (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: <" line-no "> all uniq tokens match with mask #{all_tokens_match_mask}"))
-          (.result-state-append ctx {:payload payload, :query-token-index #{t_index}})
-          (if (and (> on-important-line 0) (not (.local-state-get ctx (str "important-" line-key))))
-            (do
-              ;; score important lines only once
-              (.local-state-set ctx (str "important-" line-key) true)
-              (when (.explanation ctx)
-                (.explanation-add ctx on-important-line (str "line: <" line-no "> considered important")))
-              (.current-score-add ctx on-important-line)))))))
-
-  (if (> (.current-score ctx) (float 0.0))
-    (do
-      (when (.explanation ctx)
-        (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf"))
-      (float (+ (.maxed_tf_idf ctx) (.current-score ctx))))
-    (float 0)))}
+    if in_file_tokens.count > 0
+      queries << {
+        "no-zero-score"=> {
+          query: {
+            bool: {
+              must: clojure_expression_terms(in_file_tokens,true)
+            }
+          }
         }
       }
-      queries << term
+    end
+
+    if tokens.count > 0
+      queries << {
+        "no-zero-score"=> {
+          query: {
+            bool: {
+              must: clojure_expression_terms(tokens,false)
+            }
+          }
+        }
+      }
     end
 
     begin
-      res = Store.find({ "no-zero-score" => { query: { bool: { must: queries } } } } ,explain: true, page: @page)
+      res = Store.find({bool: { must: queries } } ,explain: true, page: @page)
       raise res["exception"] if res["exception"]
+
       @err = nil
       @total = res["total"] || 0
       @took = res["took"]
@@ -263,15 +305,11 @@ get '/' do
         state = h["_result_state"] || []
 
         matching = {}
-        best_line_nr_matches = 0
         state.flatten.each do |item|
           payload = item["payload"]
           line_no = payload & 0xFFFFF
           matching[line_no] ||= {}
           matching[line_no][item["query-token-index"]] = true
-          if best_line_nr_matches < matching[line_no].count
-            best_line_nr_matches = matching[line_no].count
-          end
         end
 
         highlighted = []
@@ -282,7 +320,7 @@ get '/' do
 
           if matching[line_index]
             item[:bold] = true
-            item[:show] = matching[line_index].count == best_line_nr_matches
+            item[:show] = true
             item[:color] = colors[0]
             row[:n_matches] += 1
             row[:first_match] ||= line_index
@@ -410,9 +448,11 @@ __END__
   %tr
     %td
       - if @results.count == 0 && @q.empty?
-        %ul <b>case sensitive</b> indexed: clojure elasticsearch glibc-2.20 hadoop linux lucene-solr rails ruby zookeeper perl5
+        %ul <b>case sensitive</b> indexed: clojure elasticsearch glibc-2.20 hadoop linux lucene-solr rails ruby zookeeper perl5, use <b>@</b> to request a match within the path name (like <b>@linux</b>)
         %li
           %a{ href: "?q=struct+rtl8169_private+*"} struct rtl8169_private *
+        %li
+          %a{ href: "?q=%40glibc+%40malloc+realloc"} @glibc @malloc realloc
         %li
           %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
         %li

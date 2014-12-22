@@ -233,9 +233,11 @@ def clojure_expression_terms(tokens, in_file = false)
         must-be-in-file #{in_file ? "true" : "false"}
         doc-id (.global_docID ctx)
         token-bit (bit-shift-left 1 #{t_index})]
+
     (while (>= (.current-freq-left ctx) 0)
       (let [payload (.payload-get-int ctx)
             line-no (bit-and payload 0xFFFFF)
+
             ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0) | (in-file ? in-file-bit : 0)
             line-key (bit-or (bit-shift-left doc-id 32)
                              (bit-shift-left line-no 8)

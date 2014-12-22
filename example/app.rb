@@ -247,8 +247,9 @@ def clojure_expression_terms(tokens, in_file = false)
         (if valid-match
           (do
             (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
-            (when (.explanation ctx)
-              (.explanation-add ctx (.maxed_tf_idf ctx) (str "line: (" line-key ") maxed_tf_idf to be used with all matches")))
+;;            produces too much noise, but interesting to look at on demand
+;;            (when (.explanation ctx)
+;;              (.explanation-add ctx (.maxed_tf_idf ctx) (str "line: (" line-key ") maxed_tf_idf to be used with all matches")))
             (.current-score-add ctx maxed-tf-idf)))
 
         (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))

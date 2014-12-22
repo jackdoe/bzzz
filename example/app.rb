@@ -308,8 +308,6 @@ get '/' do
       tokens << token
     end
 
-    queries = []
-
     if in_file_tokens.count > 0
       queries << {
         "no-zero-score"=> {

@@ -260,8 +260,8 @@ def clojure_expression_terms(tokens, in_file = false)
             (set! (. ctx current_counter) 1)
             (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
             (when (.explanation ctx)
-              (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}")))
-            (.result-state-append ctx payload)
+              (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}"))
+              (.result-state-append ctx payload))
             (if (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
               (do
                 ;; score important lines only once

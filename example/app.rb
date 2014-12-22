@@ -231,12 +231,13 @@ def clojure_expression_terms(tokens, in_file = false)
 (fn [^bzzz.java.query.ExpressionContext ctx]
   (let [maxed-tf-idf (.maxed_tf_idf ctx)
         must-be-in-file #{in_file ? "true" : "false"}
+        doc-id (.global_docID ctx)
         token-bit (bit-shift-left 1 #{t_index})]
     (while (>= (.current-freq-left ctx) 0)
       (let [payload (.payload-get-int ctx)
             line-no (bit-and payload 0xFFFFF)
             ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0) | (in-file ? in-file-bit : 0)
-            line-key (bit-or (bit-shift-left (.global_docID ctx) 32)
+            line-key (bit-or (bit-shift-left doc-id 32)
                              (bit-shift-left line-no 8)
                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0)
                              #{in_file ? "#{EXPR_IN_FILE_BIT}" : "0"})
@@ -260,7 +261,7 @@ def clojure_expression_terms(tokens, in_file = false)
             (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
             (when (.explanation ctx)
               (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}")))
-            (.result-state-append ctx {:payload payload, :query-token-index #{t_index}})
+            (.result-state-append ctx payload)
             (if (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
               (do
                 ;; score important lines only once
@@ -358,11 +359,8 @@ get '/' do
         state = h["_result_state"] || []
 
         matching = {}
-        state.flatten.each do |item|
-          payload = item["payload"]
-          line_no = payload & 0xFFFFF
-          matching[line_no] ||= {}
-          matching[line_no][item["query-token-index"]] = true
+        state.flatten.each do |payload|
+          matching[payload & 0xFFFFF] = true
         end
 
         highlighted = []

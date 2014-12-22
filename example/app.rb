@@ -102,7 +102,6 @@ ORD_colon = ':'.ord
 ORD_at = '@'.ord
 ORD_bang = '!'.ord
 ORD_slash = '/'.ord
-ORD_underscore = '_'.ord
 
 def tokenize(line)
   # well... this is slow :)
@@ -118,7 +117,7 @@ def tokenize(line)
     char = chars[i]
     code = char.ord
 
-    if (code >= ORD_a && code <= ORD_z) || (code >= ORD_aa && code <= ORD_zz) || (code >= ORD_zero && code <= ORD_nine) || code == ORD_underscore
+    if (code >= ORD_a && code <= ORD_z) || (code >= ORD_aa && code <= ORD_zz) || (code >= ORD_zero && code <= ORD_nine)
       buf << char
     else
       if buf.length > 0

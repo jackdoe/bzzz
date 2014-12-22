@@ -226,46 +226,47 @@ def clojure_expression_terms(tokens, in_file = false)
           "clj-eval" => %{
 ;; NOTE: user input here simply leads to RCE!
 (fn [^bzzz.java.query.ExpressionContext ctx]
-  (while (>= (.current-freq-left ctx) 0)
-    (let [payload (.payload-get-int ctx)
-          must-be-in-file #{in_file ? "true" : "false"}
-          line-no (bit-and payload 0xFFFFF)
-          line-key (str "docID:" (.global_docID ctx)
-                        "-line:" line-no
-                        (if (.explanation ctx) "-explain" "-no-explain")
-                        #{in_file ? "\"-in-file\"" : "\"-regular\""})
+  (let [maxed-tf-idf (.maxed_tf_idf ctx)]
+    (while (>= (.current-freq-left ctx) 0)
+      (let [payload (.payload-get-int ctx)
+            must-be-in-file #{in_file ? "true" : "false"}
+            line-no (bit-and payload 0xFFFFF)
+            line-key (str "docID:" (.global_docID ctx)
+                          "-line:" line-no
+                          (if (.explanation ctx) "-explain" "-no-explain")
+                          #{in_file ? "\"-in-file\"" : "\"-regular\""})
 
-          ;; translates to matches[line] |= current position bit
-          uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (bit-shift-left 1 #{t_index}))
+            ;; translates to matches[line] |= current position bit
+            uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (bit-shift-left 1 #{t_index}))
 
-          on-important-line (if (> (bit-and payload #{F_IMPORTANT_LINE}) 0) #{IMPORTANT_LINE_SCORE} 0)
-          in-file-path (> (bit-and payload #{F_IS_IN_PATH}) 0)
-          valid-match (or (not must-be-in-file) (and must-be-in-file in-file-path))
-          pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
+            valid-match (or (not must-be-in-file) (and must-be-in-file (> (bit-and payload #{F_IS_IN_PATH}) 0)))
+            pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
 
-      (.postings-next-position ctx)
+        (.postings-next-position ctx)
 
-      (if valid-match
-        (.local-state-set ctx line-key uniq-tokens-seen-on-this-line))
+        (if valid-match
+          (do
+            (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
+            (when (.explanation ctx)
+              (.explanation-add ctx (.maxed_tf_idf ctx) (str "line: (" line-key ") maxed_tf_idf to be used with all matches")))
+            (.current-score-add ctx maxed-tf-idf)))
 
-      (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
-        (do
-          (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
-          (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-key ") all uniq tokens match with mask #{all_tokens_match_mask}"))
-          (.result-state-append ctx {:payload payload, :in-file must-be-in-file, :query-token-index #{t_index}})
-          (if (and (> on-important-line 0) (not (.local-state-get ctx (str "important-" line-key))))
-            (do
-              ;; score important lines only once
-              (.local-state-set ctx (str "important-" line-key) true)
-              (when (.explanation ctx)
-                (.explanation-add ctx on-important-line (str "line: (" line-key ") considered important")))
-              (.current-score-add ctx on-important-line)))))))
+        (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
+          (do
+            (set! (. ctx current_counter ) 1)
+            (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
+            (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-key ") all uniq tokens match with mask #{all_tokens_match_mask}"))
+            (.result-state-append ctx {:payload payload, :in-file must-be-in-file, :query-token-index #{t_index}})
+            (if (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (str "important-" line-key))))
+              (do
+                ;; score important lines only once
+                (.local-state-set ctx (str "important-" line-key) true)
+                (when (.explanation ctx)
+                  (.explanation-add ctx #{IMPORTANT_LINE_SCORE} (str "line: (" line-key ") considered important")))
+                (.current-score-add ctx #{IMPORTANT_LINE_SCORE}))))))))
 
-  (if (> (.current-score ctx) (float 0.0))
-    (do
-      (when (.explanation ctx)
-        (.explanation-add ctx (.maxed_tf_idf ctx) "maxed_tf_idf"))
-      (float (+ (.maxed_tf_idf ctx) (.current-score ctx))))
+  (if (= (.current-counter ctx) 1)
+    (.current-score ctx)
     (float 0)))}
 
         }

@@ -422,7 +422,7 @@ __END__
 
 @@ form
 %form{ action: '/', method: 'GET' }
-  %input{ type: "text", name: "q", value: @q, autofocus: @q.empty?, placeholder: "defn reduce"}
+  %input{ type: "text", name: "q", value: @q, autofocus: (@results.count == 0), placeholder: "defn reduce"}
   %input{ type: "submit", value: "search" }
   &nbsp;
   - if @pages > 0

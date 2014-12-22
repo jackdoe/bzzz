@@ -219,9 +219,11 @@ EXPR_IMPORTANT_BIT = 1
 
 def clojure_expression_terms(tokens, in_file = false)
   queries = []
-  all_tokens_match_mask = (0xffffffff >> (32 - tokens.count))
+  all_tokens_match_mask = (0xffffffff >> (32 - tokens.count)) # used inside the expression
 
   tokens.each_with_index do |user_input_token, t_index|
+    token_bit = 1 << t_index # used inside the expression
+
     term = {
         "term-payload-clj-score" => {
           field: SEARCH_FIELD,
@@ -229,48 +231,40 @@ def clojure_expression_terms(tokens, in_file = false)
           "clj-eval" => %{
 ;; NOTE: user input here simply leads to RCE!
 (fn [^bzzz.java.query.ExpressionContext ctx]
-  (let [maxed-tf-idf (.maxed_tf_idf ctx)
-        must-be-in-file #{in_file ? "true" : "false"}
-        doc-id (.global_docID ctx)
-        token-bit (bit-shift-left 1 #{t_index})]
+  (let [maxed-tf-idf (.maxed_tf_idf ctx)]
+    (.invoke-for-each-int-payload
+     ctx
+     (fn [payload]
+       (let [line-no (bit-and payload 0xFFFFF)
+             ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0) | (in-file ? in-file-bit : 0)
+             line-key (bit-or (bit-shift-left (.global_docID ctx) 32)
+                              (bit-shift-left line-no 8)
+                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0)
+                              #{in_file ? "#{EXPR_IN_FILE_BIT}" : "0"})
 
-    (while (>= (.current-freq-left ctx) 0)
-      (let [payload (.payload-get-int ctx)
-            line-no (bit-and payload 0xFFFFF)
+             ;; translates to matches[line] |= current token position bit
+             uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) #{token_bit})
 
-            ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0) | (in-file ? in-file-bit : 0)
-            line-key (bit-or (bit-shift-left doc-id 32)
-                             (bit-shift-left line-no 8)
-                             (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0)
-                             #{in_file ? "#{EXPR_IN_FILE_BIT}" : "0"})
+             valid-match #{in_file ? "(> (bit-and payload #{F_IS_IN_PATH}))" : "true"}]
 
-            ;; translates to matches[line] |= current token position bit
-            uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) token-bit)
+         (when valid-match
+           (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
+           (.current-score-add ctx maxed-tf-idf))
 
-            valid-match (or (not must-be-in-file) (and must-be-in-file (> (bit-and payload #{F_IS_IN_PATH}) 0)))
-            pos-in-line (bit-and (bit-shift-right payload 20) 0xFF)]
-
-        (.postings-next-position ctx)
-
-        (if valid-match
-          (do
-            (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
-            (.current-score-add ctx maxed-tf-idf)))
-
-        (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
-          (do
-            (set! (. ctx current_counter) 1)
-            (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
-            (when (.explanation ctx)
-              (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}"))
-              (.result-state-append ctx payload))
-            (if (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
-              (do
-                ;; score important lines only once
-                (.local-state-set ctx (str "important-" line-key) true)
-                (when (.explanation ctx)
-                  (.explanation-add ctx #{IMPORTANT_LINE_SCORE} (str "line: (" line-no ") considered important")))
-                (.current-score-add ctx #{IMPORTANT_LINE_SCORE}))))))))
+         (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
+           (do
+             (.current-counter-set ctx 1)
+             (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
+             (when (.explanation ctx)
+               (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}"))
+               (.result-state-append ctx payload))
+             (when (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
+               ;; score important lines only once
+               (.local-state-set ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}) 1)
+               (when (.explanation ctx)
+                 (.explanation-add ctx #{IMPORTANT_LINE_SCORE} (str "line: (" line-no ") considered important")))
+               (.current-score-add ctx #{IMPORTANT_LINE_SCORE})))))
+       nil)))
 
   (if (= (.current-counter ctx) 1)
     (.current-score ctx)

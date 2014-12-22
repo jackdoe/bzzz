@@ -4,6 +4,7 @@ import org.apache.lucene.search.FieldCache.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.util.*;
 import clojure.lang.Keyword;
+import clojure.lang.IFn;
 import java.io.*;
 import java.util.*;
 
@@ -23,7 +24,8 @@ public class ExpressionContext {
     public long current_counter = 0;
     public int current_freq_left;
     public Map<String,Object> fc = new HashMap<String,Object>();
-    public Map<Object,Object> local_state = new HashMap<Object,Object>();
+    public Map<Object,Object> local_state = new HashMap<Object,Object>(1000);
+
     public Map<Integer,List<Object>> result_state = null;
     public Map<Object,Object> global_state;
 
@@ -86,6 +88,14 @@ public class ExpressionContext {
         if (--current_freq_left >= 0)
             return postings.nextPosition();
         return -1;
+
+    }
+    public void invoke_for_each_int_payload(IFn fn) throws IOException {
+        while (current_freq_left >= 0) {
+            int payload = payload_get_int();
+            fn.invoke(payload);
+            postings_next_position();
+        }
     }
 
     public void fill_field_cache(AtomicReader r, String[] field_cache_req) throws IOException {
@@ -216,6 +226,9 @@ public class ExpressionContext {
     public void current_score_add(long s) { current_score += (float) s; }
     public void current_score_add(Object s) { current_score += Helper.object_to_float(s); }
 
+    public void current_counter_set(int s) { current_counter = s; }
+    public void current_counter_set(long s) { current_counter = (int) s; }
+
     public void current_decay_mul(float s) { current_decay *= s; }
     public void current_decay_mul(double s) { current_decay *= (float) s; }
     public void current_decay_mul(int s) { current_decay *= (float) s; }
@@ -229,6 +242,7 @@ public class ExpressionContext {
             return result;
         return item.get(fallback);
     }
+
     public void fba_initialize() throws Exception {
         for (Map<Object,Object> item : fba_settings) {
             String name = (String) fba_read_key(item,"name",FBA_KW_NAME);

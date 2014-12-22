@@ -248,6 +248,15 @@ def clojure_expression_terms(tokens, in_file = false)
              valid-match #{in_file ? "(> (bit-and payload #{F_IS_IN_PATH}))" : "true"}]
 
          (when valid-match
+           ;; TODO(bnikolov):
+           ;; some tokens have matches on every line, so for 10k lines it will actually
+           ;; do 10k sets, the easiest thing to do is just link those tokens to something
+           ;; because they are pointless by themselves.
+           ;; for example "int" or "."
+           ;; so we can tokenize 'int main void' as 'int$main main void'
+           ;; if searched with 'int main void' we look for 'int$main void'
+           ;; but this line wont be findable with 'int' only
+           ;; which greatly improves this case
            (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
            (.current-score-add ctx maxed-tf-idf))
 

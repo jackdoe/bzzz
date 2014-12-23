@@ -216,7 +216,7 @@ end
 EXPR_EXPLAIN_BIT = 4
 EXPR_IN_FILE_BIT = 2
 EXPR_IMPORTANT_BIT = 1
-
+EXPR_SUM_SCORE_BIT = 8
 def clojure_expression_terms(tokens, in_file = false)
   queries = []
   all_tokens_match_mask = (0xffffffff >> (32 - tokens.count)) # used inside the expression
@@ -232,11 +232,11 @@ def clojure_expression_terms(tokens, in_file = false)
 ;; NOTE: user input here simply leads to RCE!
 (fn [^bzzz.java.query.ExpressionContext ctx]
   (let [maxed-tf-idf (.maxed_tf_idf ctx)
-        sum-score (.local-state-get ctx (.global_docID ctx) 0)]
-    (.local-state-set ctx (.global_docID ctx) (+ sum-score maxed-tf-idf))
-    (when (.explanation ctx)
-      (.explanation-add ctx (float sum-score) (str "adding maxed-tf-idf(" maxed-tf-idf ") to the sum-score")))
-
+        sum-score-key (bit-or (bit-shift-left (.global_docID ctx) 32)
+                              #{EXPR_SUM_SCORE_BIT}
+                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0))
+        sum-score (+ maxed-tf-idf (.local-state-get ctx sum-score-key 0))]
+    (.local-state-set ctx sum-score-key sum-score)
     (.invoke-for-each-int-payload
      ctx
      (fn [payload]
@@ -277,11 +277,14 @@ def clojure_expression_terms(tokens, in_file = false)
                (when (.explanation ctx)
                  (.explanation-add ctx #{IMPORTANT_LINE_SCORE} (str "line: (" line-no ") considered important")))
                (.current-score-add ctx #{IMPORTANT_LINE_SCORE})))))
-       nil)))
+       nil))
 
-  (if (= (.current-counter ctx) 1)
-    (float (+ (.local-state-get ctx (.global_docID ctx) 0) (.current-score ctx)))
-    (float 0)))}
+    (if (= (.current-counter ctx) 1)
+      (do
+        (when (.explanation ctx)
+          (.explanation-add ctx sum-score "summed tf-idf scores"))
+        (float (+ (.local-state-get ctx sum-score-key 0) (.current-score ctx))))
+      (float 0))))}
 
         }
       }

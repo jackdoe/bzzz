@@ -86,7 +86,7 @@ def bold_and_color(x, max_line_digts = 0, link = nil)
   line_no = ""
   if max_line_digts > 0
     if link
-      line_no = sprintf "<a style='color: #{x[:color] || 'black'}' href='#{link}#line_%d'>%#{max_line_digts}d</a> | ", x[:line_no],x[:line_no]
+      line_no = sprintf "<a style='color: %s' href='%s#line_%d'>%#{max_line_digts}d</a> | ",x[:color] || 'black', link, x[:line_no], x[:line_no]
     else
       line_no = sprintf "%#{max_line_digts}d | ", x[:line_no]
     end

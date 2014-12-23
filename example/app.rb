@@ -250,7 +250,7 @@ def clojure_expression_terms(tokens, in_file = false)
              ;; translates to matches[line] |= current token position bit
              uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) #{token_bit})
 
-             valid-match #{in_file ? "(> (bit-and payload #{F_IS_IN_PATH}))" : "true"}]
+             valid-match #{in_file ? "(> (bit-and payload #{F_IS_IN_PATH}) 0)" : "true"}]
 
          (when valid-match
            ;; TODO(bnikolov):

@@ -82,8 +82,17 @@ def encode(content)
   content.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
 end
 
-def bold_and_color(x)
-  line = "<span id='line_#{x[:line_no]}'>#{x[:line]}</span>"
+def bold_and_color(x, max_line_digts = 0, link = nil)
+  line_no = ""
+  if max_line_digts > 0
+    format = "%#{max_line_digts}d | "
+    if link
+      line_no = sprintf "<a href='#{link}#line_%d'>#{format}</a>", x[:line_no],x[:line_no]
+    else
+      line_no = sprintf format, x[:line_no]
+    end
+  end
+  line = "#{line_no}<span id='line_#{x[:line_no]}'>#{x[:line]}</span>"
   if !x[:color].empty?
     line = "<font color='#{x[:color]}'>#{line}</font>"
   end
@@ -121,6 +130,7 @@ def tokenize(line)
     if (code >= ORD_a && code <= ORD_z) || (code >= ORD_aa && code <= ORD_zz) || (code >= ORD_zero && code <= ORD_nine) || code == ORD_underscore
       buf << char
     else
+
       if buf.length > 0
         yield buf, flags, pos += 1
         flags |= F_IMPORTANT_LINE if IMPORTANT[buf]
@@ -132,9 +142,11 @@ def tokenize(line)
           buf << chars[i]
           i += 1
         end
+
         i -= 1 # will be advanced in the bottom of the while loop
         yield buf, flags, pos += 1
         buf = ""
+
       end
     end
 
@@ -378,8 +390,11 @@ get '/' do
         highlighted = []
         around = 0
         colors = ["#3B4043","#666699"]
+        max_line_no = 0
+
         h["content_no_index"].split(LINE_SPLITTER).each_with_index do |line,line_index|
           item = { show: false, bold: false, line_no: line_index, line: line.escape }
+          max_line_no = line_index if max_line_no < line_index
 
           if matching[line_index]
             item[:bold] = true
@@ -387,7 +402,7 @@ get '/' do
             item[:color] = colors[0]
             row[:n_matches] += 1
             row[:first_match] ||= line_index
-            if item[:show]
+            if @params[:id].empty? && item[:show]
               if @params[:id].empty? && highlighted.count > 1
                 1.upto(SHOW_AROUND_MATCHING_LINE).each do |i|
                   begin
@@ -414,10 +429,12 @@ get '/' do
           highlighted << item
         end
 
+        max_line_digits = max_line_no.to_s.length
+
         if @params[:id].empty?
-          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| bold_and_color(x) }.join("\n")
+          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| bold_and_color(x,max_line_digits,"?q=#{@q.escapeCGI}&id=#{row[:id]}") }.join("\n")
         else
-          row[:highlight] = highlighted.map { |x| bold_and_color(x) }.join("\n")
+          row[:highlight] = highlighted.map { |x| bold_and_color(x,max_line_digits) }.join("\n")
         end
 
         @results << row

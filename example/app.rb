@@ -166,7 +166,7 @@ end
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
-  pattern = "#{path}/**/*\.{c,java,pm,pl,rb,clj}"
+  pattern = "#{path}/**/*\.{c,java,pm,pl,rb,clj,inc}"
   puts "indexing #{pattern}"
 
   files = Dir.glob(pattern)

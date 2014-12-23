@@ -16,16 +16,12 @@ set :show_exceptions, true
 PER_PAGE = 10
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
-IN_FILE_PATH_SCORE = 10
 ALL_TOKENS_MATCH_SCORE = 10
 
-SEARCH_FIELD = "content_payload_no_norms_no_store"
-DISPLAY_FIELD = "content_no_index"
+SEARCH_FIELD = "content_no_norms"
+FILENAME_FIELD = "filename_no_norms"
 
-F_IMPORTANT_LINE = 1 << 28
-F_IS_IN_PATH = 1 << 29
-IMPORTANT = { "sub" => true, "public" => true, "private" => true, "package" => true }
-
+F_IMPORTANT_LINE = 1 << 31
 LINE_SPLITTER = /[\r\n]/
 REQUEST_FILE_RE = /\B@\w+/
 
@@ -50,7 +46,7 @@ class Store
 
   def Store.save(docs = [])
     docs = [docs] if !docs.kind_of?(Array)
-    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => 1 }.to_json).body_str)
+    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer}.to_json).body_str)
   end
 
   def Store.delete(query)
@@ -68,7 +64,8 @@ class Store
 
   def Store.analyzer
     {
-      SEARCH_FIELD => { type: "custom", tokenizer: "whitespace", filter: [{ type: "delimited-payload" }] },
+      SEARCH_FIELD => { type: "custom", tokenizer: "code" },
+      FILENAME_FIELD => { type: "custom", tokenizer: "code", "line-offset" => 100000 }
     }
   end
 
@@ -116,10 +113,8 @@ ORD_underscore = '_'.ord
 
 def tokenize(line)
   # TODO(bnikolov):
-  # well... this is slow :)
-  # once the basic concepts are figured out, must create pure java analyzer that does the same thing
-  # but for now it is just easier to prototype this way
-
+  # copied into CodeTokenizer.java, will create a simple way to create queries based on
+  # tokens returned from any analyzer.
   buf = ""
   pos = 0
   flags = 0
@@ -138,7 +133,6 @@ def tokenize(line)
 
       if buf.length > 0
         yield buf, flags, pos += 1
-        flags |= F_IMPORTANT_LINE if IMPORTANT[buf]
         buf = ""
       end
 
@@ -162,24 +156,6 @@ def tokenize(line)
   nil
 end
 
-def tokenize_and_encode_payload(content, init_flags = 0, line_index_offset = 0)
-  lines = content.split(LINE_SPLITTER);
-
-  tokens = []
-  lines.each_with_index do |line,line_index|
-
-    line_index += line_index_offset
-
-    tokenize(line) do |token, token_flags, token_index|
-      token_flags |= init_flags
-      payload = token_flags | ((token_index & 0xFF) << 20) | (line_index & 0xFFFFF)
-      tokens << "#{token}|#{payload}"
-    end
-  end
-
-  tokens
-end
-
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
@@ -193,13 +169,10 @@ def walk_and_index(path, every)
     name = f.gsub(path,'')
     content = encode(File.read(f))
 
-    tokenized = tokenize_and_encode_payload(content)
-    tokenized.push(tokenize_and_encode_payload(f,F_IS_IN_PATH,1000000))
-
     doc = {
       id: name,
-      DISPLAY_FIELD => content,
-      SEARCH_FIELD => tokenized.join(" ")
+      SEARCH_FIELD => content,
+      FILENAME_FIELD => name
     }
 
     docs << doc
@@ -231,7 +204,6 @@ if ARGV[0] == 'do-index'
 end
 
 EXPR_EXPLAIN_BIT = 4
-EXPR_IN_FILE_BIT = 2
 EXPR_IMPORTANT_BIT = 1
 EXPR_SUM_SCORE_BIT = 8
 def clojure_expression_terms(tokens, in_file = false)
@@ -243,7 +215,7 @@ def clojure_expression_terms(tokens, in_file = false)
 
     term = {
         "term-payload-clj-score" => {
-          field: SEARCH_FIELD,
+          field: in_file ? FILENAME_FIELD : SEARCH_FIELD,
           value: user_input_token,
           "clj-eval" => %{
 ;; NOTE: user input here simply leads to RCE!
@@ -258,36 +230,32 @@ def clojure_expression_terms(tokens, in_file = false)
      ctx
      (fn [payload]
        (let [line-no (bit-and payload 0xFFFFF)
-             ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0) | (in-file ? in-file-bit : 0)
+             ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0)
              line-key (bit-or (bit-shift-left (.global_docID ctx) 32)
                               (bit-shift-left line-no 8)
-                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0)
-                              #{in_file ? "#{EXPR_IN_FILE_BIT}" : "0"})
+                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0))
 
              ;; translates to matches[line] |= current token position bit
-             uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) #{token_bit})
+             uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) #{token_bit})]
 
-             valid-match #{in_file ? "(> (bit-and payload #{F_IS_IN_PATH}) 0)" : "true"}]
+         ;; TODO(bnikolov):
+         ;; some tokens have matches on every line, so for 10k lines it will actually
+         ;; do 10k sets, the easiest thing to do is just link those tokens to something
+         ;; because they are pointless by themselves.
+         ;; for example "int" or "."
+         ;; so we can tokenize 'int main void' as 'int$main main void'
+         ;; if searched with 'int main void' we look for 'int$main void'
+         ;; but this line wont be findable with 'int' only
+         ;; which greatly improves this case
+         (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
 
-         (when valid-match
-           ;; TODO(bnikolov):
-           ;; some tokens have matches on every line, so for 10k lines it will actually
-           ;; do 10k sets, the easiest thing to do is just link those tokens to something
-           ;; because they are pointless by themselves.
-           ;; for example "int" or "."
-           ;; so we can tokenize 'int main void' as 'int$main main void'
-           ;; if searched with 'int main void' we look for 'int$main void'
-           ;; but this line wont be findable with 'int' only
-           ;; which greatly improves this case
-           (.local-state-set ctx line-key uniq-tokens-seen-on-this-line))
-
-         (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
+         (if (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask})
            (do
              (.current-counter-set ctx 1)
              (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
              (when (.explanation ctx)
                (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}"))
-               (.result-state-append ctx payload))
+               (.result-state-append ctx line-no))
              (when (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
                ;; score important lines only once
                (.local-state-set ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}) 1)
@@ -386,10 +354,9 @@ get '/' do
         }
 
         state = h["_result_state"] || []
-
         matching = {}
-        state.flatten.each do |payload|
-          matching[payload & 0xFFFFF] = true
+        state.flatten.each do |line_no|
+          matching[line_no] = true
         end
 
         highlighted = []
@@ -397,7 +364,7 @@ get '/' do
         colors = ["#3B4043","#666699"]
         max_line_no = 0
 
-        h["content_no_index"].split(LINE_SPLITTER).each_with_index do |line,line_index|
+        h[SEARCH_FIELD].split(LINE_SPLITTER).each_with_index do |line,line_index|
           item = { show: false, bold: false, line_no: line_index, line: line.escape }
           max_line_no = line_index if max_line_no < line_index
 

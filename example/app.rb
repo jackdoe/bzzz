@@ -85,11 +85,10 @@ end
 def bold_and_color(x, max_line_digts = 0, link = nil)
   line_no = ""
   if max_line_digts > 0
-    format = "%#{max_line_digts}d | "
     if link
-      line_no = sprintf "<a href='#{link}#line_%d'>#{format}</a>", x[:line_no],x[:line_no]
+      line_no = sprintf "<a href='#{link}#line_%d'>%#{max_line_digts}d</a> | ", x[:line_no],x[:line_no]
     else
-      line_no = sprintf format, x[:line_no]
+      line_no = sprintf "%#{max_line_digts}d | ", x[:line_no]
     end
   end
   line = "#{line_no}<span id='line_#{x[:line_no]}'>#{x[:line]}</span>"
@@ -114,7 +113,11 @@ ORD_slash = '/'.ord
 ORD_underscore = '_'.ord
 
 def tokenize(line)
+  # TODO(bnikolov):
   # well... this is slow :)
+  # once the basic concepts are figured out, must create pure java analyzer that does the same thing
+  # but for now it is just easier to prototype this way
+
   buf = ""
   pos = 0
   flags = 0

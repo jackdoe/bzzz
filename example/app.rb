@@ -231,7 +231,12 @@ def clojure_expression_terms(tokens, in_file = false)
           "clj-eval" => %{
 ;; NOTE: user input here simply leads to RCE!
 (fn [^bzzz.java.query.ExpressionContext ctx]
-  (let [maxed-tf-idf (.maxed_tf_idf ctx)]
+  (let [maxed-tf-idf (.maxed_tf_idf ctx)
+        sum-score (.local-state-get ctx (.global_docID ctx) 0)]
+    (.local-state-set ctx (.global_docID ctx) (+ sum-score maxed-tf-idf))
+    (when (.explanation ctx)
+      (.explanation-add ctx (float sum-score) (str "adding maxed-tf-idf(" maxed-tf-idf ") to the sum-score")))
+
     (.invoke-for-each-int-payload
      ctx
      (fn [payload]
@@ -257,8 +262,7 @@ def clojure_expression_terms(tokens, in_file = false)
            ;; if searched with 'int main void' we look for 'int$main void'
            ;; but this line wont be findable with 'int' only
            ;; which greatly improves this case
-           (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
-           (.current-score-add ctx maxed-tf-idf))
+           (.local-state-set ctx line-key uniq-tokens-seen-on-this-line))
 
          (if (and valid-match (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask}))
            (do
@@ -276,7 +280,7 @@ def clojure_expression_terms(tokens, in_file = false)
        nil)))
 
   (if (= (.current-counter ctx) 1)
-    (.current-score ctx)
+    (float (+ (.local-state-get ctx (.global_docID ctx) 0) (.current-score ctx)))
     (float 0)))}
 
         }

@@ -33,9 +33,7 @@
                                                                                           fixed-bucket-aggregation)
                            clj_context ^ExpressionContext (.clj_context q)]
                        (.set_token_position clj_context n cnt)
-                       (if no-zero
-                         (NoZeroQuery. q)
-                         q)))]
+                       q))]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
     (if tokenize
@@ -45,6 +43,8 @@
           (MatchAllDocsQuery.)
           (do
             (doseq [[index token] (indexed tokens)]
-              (.add top (generator token index (count tokens)) BooleanClause$Occur/SHOULD))
-            top)))
+              (.add top (generator token index (count tokens)) BooleanClause$Occur/MUST))
+            (if no-zero
+              (NoZeroQuery. top)
+              top))))
       (generator value 0 1))))

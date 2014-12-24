@@ -18,7 +18,7 @@
   (require bzzz.queries.fuzzy)
   (require bzzz.queries.no-zero-score)
   (require bzzz.queries.no-norm)
-  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur BooleanClause ConstantScoreQuery DisjunctionMaxQuery)
+  (:import (org.apache.lucene.search Query BooleanQuery BooleanClause$Occur)
            (bzzz.java.query NoZeroQuery NoNormQuery TermPayloadClojureScoreQuery Helper)
            (org.apache.lucene.analysis Analyzer)))
 

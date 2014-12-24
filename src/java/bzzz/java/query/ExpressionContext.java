@@ -17,6 +17,11 @@ public class ExpressionContext {
     public int freq;
     public int doc_freq;
 
+    public long token_position = 0;
+    public long token_bit_position = 0;
+    public long token_count = 0;
+    public long token_count_mask = 0;
+
     public DocsAndPositionsEnum postings;
     public CollectionStatistics collection_statistics;
     public float current_score = 0f;
@@ -50,6 +55,13 @@ public class ExpressionContext {
         current_score = 0f;
         current_decay = 1f;
         current_counter = 0;
+    }
+
+    public void set_token_position(int n, int count) {
+        token_position = n;
+        token_bit_position = 1 << n;
+        token_count = count;
+        token_count_mask = (0xFFFFFFFF >>> (32 - count));
     }
 
     public float idf(long docFreq, long numDocs) {

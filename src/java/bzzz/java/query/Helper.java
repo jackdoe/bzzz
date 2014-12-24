@@ -62,15 +62,16 @@ public class Helper {
     }
 
     public static List<String> tokenize(String fieldName, String text, Analyzer analyzer) throws IOException {
-        TokenStream stream = analyzer.tokenStream(fieldName, new StringReader(text));
-        CharTermAttribute cattr = stream.addAttribute(CharTermAttribute.class);
-        stream.reset();
         List<String> out = new ArrayList<String>();
+
+        TokenStream stream = analyzer.tokenStream(fieldName, new StringReader(text));
+        stream.reset();
         while (stream.incrementToken()) {
-            out.add(cattr.toString());
+            out.add(stream.getAttribute(CharTermAttribute.class).toString());
         }
         stream.end();
         stream.close();
+
         return out;
     }
 }

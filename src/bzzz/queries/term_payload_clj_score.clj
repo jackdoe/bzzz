@@ -1,7 +1,8 @@
 (ns bzzz.queries.term-payload-clj-score
   (use bzzz.util)
   (:import (org.apache.lucene.index Term)
-           (bzzz.java.query TermPayloadClojureScoreQuery ExpressionContext)))
+           (org.apache.lucene.search BooleanQuery BooleanClause$Occur MatchAllDocsQuery)
+           (bzzz.java.query TermPayloadClojureScoreQuery NoZeroQuery ExpressionContext Helper)))
 
 (defn fixed-bucket-aggregation-result [^TermPayloadClojureScoreQuery query]
   (let [fba (.fba_get_results ^ExpressionContext (.clj_context query))]
@@ -20,13 +21,30 @@
   (.swap-local-state ^ExpressionContext (.clj_context dest)
                      (.local-state ^ExpressionContext (.clj_context source))))
 
+
 (defn parse
   [generic input analyzer]
-  (let [{:keys [field value clj-eval field-cache fixed-bucket-aggregation]
-         :or {field-cache [] fixed-bucket-aggregation nil}} input]
+  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty]
+         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input
+         generator (fn [value n cnt]
+                     (let [q ^TermPayloadClojureScoreQuery (TermPayloadClojureScoreQuery. (Term. ^String field ^String value)
+                                                                                          clj-eval
+                                                                                          ^"[Ljava.lang.String;" (into-array String field-cache)
+                                                                                          fixed-bucket-aggregation)
+                           clj_context ^ExpressionContext (.clj_context q)]
+                       (.set_token_position clj_context n cnt)
+                       (if no-zero
+                         (NoZeroQuery. q)
+                         q)))]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
-    (TermPayloadClojureScoreQuery. (Term. ^String field ^String value)
-                                   clj-eval
-                                   ^"[Ljava.lang.String;" (into-array String field-cache)
-                                   fixed-bucket-aggregation)))
+    (if tokenize
+      (let [top (BooleanQuery. false)
+            tokens (Helper/tokenize field value analyzer)]
+        (if (and match-all-if-empty (= 0 (count tokens)))
+          (MatchAllDocsQuery.)
+          (do
+            (doseq [[index token] (indexed tokens)]
+              (.add top (generator token index (count tokens)) BooleanClause$Occur/SHOULD))
+            top)))
+      (generator value 0 1))))

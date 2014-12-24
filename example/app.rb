@@ -13,13 +13,13 @@ set :environment, :production
 set :raise_errors, false
 set :show_exceptions, true
 
-PER_PAGE = 10
+PER_PAGE = 15
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 ALL_TOKENS_MATCH_SCORE = 10
 
 SEARCH_FIELD = "content_no_norms"
-FILENAME_FIELD = "filename_no_norms"
+FILENAME_FIELD = "filename_no_norms_no_store"
 
 F_IMPORTANT_LINE = 1 << 31
 LINE_SPLITTER = /[\r\n]/
@@ -46,7 +46,7 @@ class Store
 
   def Store.save(docs = [])
     docs = [docs] if !docs.kind_of?(Array)
-    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer}.to_json).body_str)
+    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => ENV["FORCE_MERGE"] || 0}.to_json).body_str)
   end
 
   def Store.delete(query)
@@ -56,6 +56,7 @@ class Store
   def Store.find(query, options = {})
     JSON.parse(Curl.http(:GET, @host, {index: @index,
                                        query: query,
+                                       analyzer: Store.analyzer,
                                        explain: options[:explain] || false,
                                        page: options[:page] || 0,
                                        size: options[:size] || PER_PAGE,
@@ -97,65 +98,6 @@ def bold_and_color(x, max_line_digts = 0, link = nil)
   "#{x[:bold] ? '<b>' : ''}#{line}#{x[:bold] ? '</b>' : ''}"
 end
 
-ORD_a = 'a'.ord
-ORD_aa = 'A'.ord
-ORD_z = 'z'.ord
-ORD_zz = 'Z'.ord
-ORD_zero = '0'.ord
-ORD_nine = '9'.ord
-ORD_space = ' '.ord
-ORD_semicolon = ';'.ord
-ORD_colon = ':'.ord
-ORD_at = '@'.ord
-ORD_bang = '!'.ord
-ORD_slash = '/'.ord
-ORD_underscore = '_'.ord
-
-def tokenize(line)
-  # TODO(bnikolov):
-  # copied into CodeTokenizer.java, will create a simple way to create queries based on
-  # tokens returned from any analyzer.
-  buf = ""
-  pos = 0
-  flags = 0
-  chars = line.chars
-  chars_max_index = chars.count
-  i = 0
-
-  while i < chars_max_index
-
-    char = chars[i]
-    code = char.ord
-
-    if (code >= ORD_a && code <= ORD_z) || (code >= ORD_aa && code <= ORD_zz) || (code >= ORD_zero && code <= ORD_nine) || code == ORD_underscore
-      buf << char
-    else
-
-      if buf.length > 0
-        yield buf, flags, pos += 1
-        buf = ""
-      end
-
-      if code != ORD_space && code != ORD_semicolon && ((code >= ORD_colon && code < ORD_at) || (code >= ORD_bang && code <= ORD_slash))
-        while chars[i] == char && i < chars_max_index
-          buf << chars[i]
-          i += 1
-        end
-
-        i -= 1 # will be advanced in the bottom of the while loop
-        yield buf, flags, pos += 1
-        buf = ""
-
-      end
-    end
-
-    i += 1
-  end
-
-  yield buf, flags, pos if buf.length > 0
-  nil
-end
-
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
@@ -193,7 +135,7 @@ if ARGV[0] == 'do-index'
   v.each do |dir|
     t0 = Time.now
     walk_and_index(dir,1000) do |slice|
-      puts "sending #{slice.length} docs, tokenizing took #{Time.now - t0} to tokenize"
+      puts "sending #{slice.length} docs, took #{Time.now - t0} to create the documents"
       t0 = Time.now
       Store.save(slice)
     end
@@ -206,18 +148,16 @@ end
 EXPR_EXPLAIN_BIT = 4
 EXPR_IMPORTANT_BIT = 1
 EXPR_SUM_SCORE_BIT = 8
-def clojure_expression_terms(tokens, in_file = false)
-  queries = []
-  all_tokens_match_mask = (0xffffffff >> (32 - tokens.count)) # used inside the expression
 
-  tokens.each_with_index do |user_input_token, t_index|
-    token_bit = 1 << t_index # used inside the expression
-
-    term = {
-        "term-payload-clj-score" => {
-          field: in_file ? FILENAME_FIELD : SEARCH_FIELD,
-          value: user_input_token,
-          "clj-eval" => %{
+def clojure_expression_terms(search_string)
+  return {
+    "term-payload-clj-score" => {
+      field: SEARCH_FIELD,
+      value: search_string,
+      tokenize: true,
+      "match-all-if-empty" => true,
+      "no-zero" => true,
+      "clj-eval" => %{
 ;; NOTE: user input here simply leads to RCE!
 (fn [^bzzz.java.query.ExpressionContext ctx]
   (let [maxed-tf-idf (.maxed_tf_idf ctx)
@@ -236,7 +176,7 @@ def clojure_expression_terms(tokens, in_file = false)
                               (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0))
 
              ;; translates to matches[line] |= current token position bit
-             uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) #{token_bit})]
+             uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (.token_bit_position ctx))]
 
          ;; TODO(bnikolov):
          ;; some tokens have matches on every line, so for 10k lines it will actually
@@ -249,12 +189,12 @@ def clojure_expression_terms(tokens, in_file = false)
          ;; which greatly improves this case
          (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
 
-         (if (= uniq-tokens-seen-on-this-line #{all_tokens_match_mask})
+         (if (= uniq-tokens-seen-on-this-line (.token_count_mask ctx))
            (do
              (.current-counter-set ctx 1)
              (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
              (when (.explanation ctx)
-               (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: #{all_tokens_match_mask}"))
+               (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: " (.token_count_mask ctx)))
                (.result-state-append ctx line-no))
              (when (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
                ;; score important lines only once
@@ -270,15 +210,8 @@ def clojure_expression_terms(tokens, in_file = false)
           (.explanation-add ctx sum-score "summed tf-idf scores"))
         (float (+ (.local-state-get ctx sum-score-key 0) (.current-score ctx))))
       (float 0))))}
-
-        }
-      }
-
-    queries << term
-
-  end
-
-  return queries
+    }
+  }
 end
 
 get '/:page' do |page|
@@ -306,35 +239,17 @@ get '/' do
 
     in_file_tokens = @q.scan(REQUEST_FILE_RE).map { |x| x.gsub(/^@/,"") }
 
-    tokens = []
-
-    tokenize(@q.gsub(REQUEST_FILE_RE,"")) do |token, flags, pos|
-      tokens << token
-    end
-
-    if in_file_tokens.count > 0
+    in_file_tokens.each do |token|
       queries << {
-        "no-zero-score"=> {
-          query: {
-            bool: {
-              must: clojure_expression_terms(in_file_tokens,true)
-            }
-          }
+        term: {
+          field: FILENAME_FIELD,
+          value: token
         }
       }
     end
 
-    if tokens.count > 0
-      queries << {
-        "no-zero-score"=> {
-          query: {
-            bool: {
-              must: clojure_expression_terms(tokens,false)
-            }
-          }
-        }
-      }
-    end
+    query_string = @q.gsub(REQUEST_FILE_RE,"")
+    queries << clojure_expression_terms(query_string)
 
     begin
       res = Store.find({bool: { must: queries } } ,explain: true, page: @page)

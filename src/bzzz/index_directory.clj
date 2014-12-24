@@ -15,6 +15,7 @@
            (redis.clients.jedis JedisPool)
            (org.apache.lucene.analysis Analyzer)
            (org.apache.lucene.facet.taxonomy.directory DirectoryTaxonomyWriter DirectoryTaxonomyReader)
+           (org.apache.lucene.facet.taxonomy SearcherTaxonomyManager SearcherTaxonomyManager$SearcherAndTaxonomy)
            (org.apache.lucene.index IndexWriter IndexReader IndexWriterConfig DirectoryReader)
            (org.apache.lucene.search Query ScoreDoc SearcherManager IndexSearcher)
            (org.apache.lucene.store NIOFSDirectory Directory NoSuchDirectoryException)))
@@ -22,8 +23,8 @@
 (declare use-searcher)
 (declare use-writer)
 (declare bootstrap-indexes)
-(declare get-smanager-taxo)
-(declare try-close-manager-taxo)
+(declare get-manager)
+(declare try-close-manager)
 (declare try-create-prefix)
 (declare read-alias-file)
 (declare refresh-searcher-locked)
@@ -32,7 +33,7 @@
 (def alias* (atom {}))
 (def redis* (atom {}))
 (def identifier* (atom default-identifier))
-(def name->smanager-taxo* (atom {}))
+(def name->manager* (atom {}))
 (def unacceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-:]"))
 (def shard-suffix "-shard-")
 (def shard-suffix-sre (str ".*" shard-suffix "\\d+"))
@@ -124,51 +125,34 @@
 (defn new-taxo-writer ^DirectoryTaxonomyWriter [name]
   (DirectoryTaxonomyWriter. (new-index-directory (taxo-dir-prefix name) (str "__" name "_taxo__"))))
 
-(defn new-taxo-reader ^DirectoryTaxonomyReader [name]
-  (DirectoryTaxonomyReader. (new-index-directory (taxo-dir-prefix name) (str "__" name "_taxo__"))))
-
-(defn try-new-taxo-reader ^DirectoryTaxonomyReader [name]
-  (try
-    (new-taxo-reader name)
-    (catch Exception e
-      (if (instance? NoSuchDirectoryException e)
-        (do
-          (log/warn (ex-str e))
-          (let [writer ^DirectoryTaxonomyWriter (new-taxo-writer name)]
-            (.commit writer)
-            (.close writer))
-          (new-taxo-reader name))))))
-
-(defn new-index-reader ^IndexReader [name]
-  (with-open [writer (new-index-writer name nil)]
-    (DirectoryReader/open ^IndexWriter writer false)))
-
-(defn new-searcher-manager ^SearcherManager [name]
-  (SearcherManager. (new-index-directory (root-identifier-path) name) nil))
+(defn new-searcher-manager ^SearcherTaxonomyManager [name]
+  (SearcherTaxonomyManager. (new-index-directory (root-identifier-path) name)
+                            (new-index-directory (taxo-dir-prefix name) (str "__" name "_taxo__"))
+                            nil))
 
 (defn sharded [index x-shard]
   (let [shard (int-or-parse x-shard)]
     (str (as-str index) shard-suffix (str shard))))
 
 (defn reset-search-managers []
-  (doseq [[name [manager taxo]] @name->smanager-taxo*]
+  (doseq [[name manager] @name->manager*]
     (log/info "\tclosing: " name " " manager)
-    (try-close-manager-taxo manager taxo))
-  (reset! name->smanager-taxo* {}))
+    (try-close-manager manager))
+  (reset! name->manager* {}))
 
 (defn use-searcher [index refresh callback]
-  (let [[^SearcherManager manager taxo] (get-smanager-taxo index refresh)
-        searcher ^IndexSearcher (.acquire manager)
+  (let [^SearcherTaxonomyManager manager (get-manager index refresh)
+        pair ^SearcherTaxonomyManager$SearcherAndTaxonomy (.acquire manager)
         t0 (time-ms)]
     (try
-      (callback searcher taxo)
+      (callback (.searcher pair) (.taxonomyReader pair))
       (catch Throwable e
         (do
           (stat/update-error index "use-searcher")
           (throw e)))
       (finally
         (do
-          (.release manager searcher)
+          (.release manager pair)
           (stat/update-took-count index "use-searcher" (time-took t0)))))))
 
 (defn log-close-err [^Directory dir ^Throwable e]
@@ -199,14 +183,9 @@
           (log-close-err (.getDirectory taxo) e)
           (DirectoryTaxonomyWriter/unlock (.getDirectory taxo)))))))
 
-(defn try-close-manager-taxo [^SearcherManager manager ^DirectoryTaxonomyReader taxo]
+(defn try-close-manager [^SearcherTaxonomyManager manager]
   (try
-    (do
-      (try
-        (.close taxo)
-        (catch Exception e
-          (log/warn (as-str e))))
-      (.close manager))
+    (.close manager)
     (catch Exception e
       (log/warn (as-str e)))))
 
@@ -247,63 +226,58 @@
   (try
     (doseq [dir (sub-directories)]
       (try
-        (get-smanager-taxo (.getName ^File dir) false)
+        (get-manager (.getName ^File dir) false)
         (catch Exception e
           (log/warn (ex-str e)))))
     (catch Exception e
       (log/warn (ex-str e)))))
 
-(defn get-smanager-taxo [index refresh]
-  (locking name->smanager-taxo*
-    (when (nil? (@name->smanager-taxo* index))
-      (do
-        (swap! name->smanager-taxo* assoc index [(new-searcher-manager index)
-                                                 (try-new-taxo-reader index)])
+(defn get-manager [index refresh]
+  (when (nil? (@name->manager* index))
+    (locking name->manager*
+      (when (nil? (@name->manager* index))
         ;; to avoid a race in case multiple threads
-        ;; decide to use the index in the very beginning
+        ;; decide to use the index (including creating it) in the very beginning
         ;; before the statistic keys are ready, so we just create them under the lock here
         ;; not doing the same for writers, because of the exclusive write lock there
-        (stat/get-statistics index)))
-    (let [[manager taxo] (@name->smanager-taxo* index)]
-      (when refresh
-        (refresh-searcher-locked index manager taxo))
-      [manager taxo])))
+        (use-writer index nil 0 (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]))
+        (swap! name->manager* assoc index (new-searcher-manager index))
+        (stat/get-statistics index))))
+  (let [manager (@name->manager* index)]
+    (when refresh
+      (refresh-searcher-locked index manager))
+    manager))
 
-(defn refresh-searcher-locked [index ^SearcherManager manager ^DirectoryTaxonomyReader taxo]
-  (log/debug "refreshing: " index " " manager " " taxo)
+(defn refresh-searcher-locked [index ^SearcherTaxonomyManager manager]
+  (log/debug "refreshing: " index " " manager)
   (let [t0 (time-ms)]
     (try
       (do
         (.maybeRefresh manager)
-        (if-let [changed (DirectoryTaxonomyReader/openIfChanged taxo)]
-          (do
-            (.close taxo)
-            (swap! name->smanager-taxo* assoc-in [index 1] changed)))
         (stat/update-took-count index "refresh-search-managers" (time-took t0)))
       (catch Throwable e
         (do
           (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
-          (try-close-manager-taxo manager taxo)
-          (swap! name->smanager-taxo* dissoc index))))))
+          (try-close-manager manager)
+          (swap! name->manager* dissoc index))))))
 
 (defn refresh-search-managers []
   (let [t0 (time-ms)]
     (bootstrap-indexes)
-    (locking name->smanager-taxo*
-      (doseq [[index [^SearcherManager manager
-                      ^DirectoryTaxonomyReader taxo]] @name->smanager-taxo*]
-        (refresh-searcher-locked index manager taxo)))
+    (locking name->manager*
+      (doseq [[index ^SearcherTaxonomyManager manager] @name->manager*]
+        (refresh-searcher-locked index manager)))
     (stat/update-took-count stat/total "refresh-search-managers" (time-took t0))
     (log/debug "refreshing took" (time-took t0))))
 
 (defn shutdown []
-  (locking name->smanager-taxo*
-    (log/info "executing shutdown hook, current mapping: " @name->smanager-taxo*)
+  (locking name->manager*
+    (log/info "executing shutdown hook, current mapping: " @name->manager*)
     (reset-search-managers)
-    (log/info "mapping after cleanup: " @name->smanager-taxo*)))
+    (log/info "mapping after cleanup: " @name->manager*)))
 
 (defn index-stat []
-  (into {} (for [[name [manager taxo]] @name->smanager-taxo*]
+  (into {} (for [[name manager] @name->manager*]
              [name (use-searcher name
                                  false
                                  (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]

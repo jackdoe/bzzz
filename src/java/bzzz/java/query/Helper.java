@@ -1,11 +1,15 @@
 package bzzz.java.query;
+
 import bzzz.java.query.*;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.util.*;
 import org.apache.lucene.analysis.payloads.PayloadHelper;
+import org.apache.lucene.analysis.*;
+import org.apache.lucene.analysis.tokenattributes.*;
 import java.io.*;
 import java.util.*;
+
 public class Helper {
     public static int decode_int_payload(BytesRef p) {
         if (p == null)
@@ -21,9 +25,7 @@ public class Helper {
     }
     public static int advance_and_next_position(DocsAndPositionsEnum postings, int target) throws IOException {
         int n = postings.advance(target);
-        // XXX: in case n != target, maybe we should not do nextPosition()
-        //      it will be ignored anyway
-        if (n != DocsAndPositionsEnum.NO_MORE_DOCS)
+        if (n == target && n != DocsAndPositionsEnum.NO_MORE_DOCS)
             postings.nextPosition();
         return n;
     }
@@ -57,5 +59,18 @@ public class Helper {
             return ((Long) s).floatValue();
         else
             return (Float) s;
+    }
+
+    public static List<String> tokenize(String fieldName, String text, Analyzer analyzer) throws IOException {
+        TokenStream stream = analyzer.tokenStream(fieldName, new StringReader(text));
+        CharTermAttribute cattr = stream.addAttribute(CharTermAttribute.class);
+        stream.reset();
+        List<String> out = new ArrayList<String>();
+        while (stream.incrementToken()) {
+            out.add(cattr.toString());
+        }
+        stream.end();
+        stream.close();
+        return out;
     }
 }

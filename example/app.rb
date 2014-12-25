@@ -19,6 +19,35 @@ SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 ALL_TOKENS_MATCH_SCORE = 10
 
+DEFAULT_SOURCE_ROOT = File.expand_path(File.join("..","..",File.dirname(__FILE__),"SOURCE-TO-INDEX"))
+DEFAULT_SOURCE_ROOT_STATUS_NAME = "git.status"
+DEFAULT_SOURCE_ROOT_STATUS = File.join(DEFAULT_SOURCE_ROOT,DEFAULT_SOURCE_ROOT_STATUS_NAME)
+
+REPOSITORIES = ["https://github.com/apache/lucene-solr",
+                "https://github.com/apache/hadoop",
+                "https://github.com/mysql/mysql-server",
+                "https://github.com/postgres/postgres",
+                "https://github.com/torvalds/linux",
+                "git://sourceware.org/git/glibc.git",
+                "https://github.com/Perl/perl5",
+                "https://github.com/openjdk-mirror/jdk7u-jdk",
+                "https://github.com/ruby/ruby",
+                "https://github.com/clojure/clojure",
+                "https://github.com/elasticsearch/elasticsearch",
+                "https://github.com/rails/rails",
+                "https://github.com/antirez/redis",
+                "https://github.com/antirez/sds",
+                "https://github.com/redis/hiredis",
+                "https://github.com/git/git",
+                "https://github.com/rust-lang/rust",
+                "https://github.com/jemalloc/jemalloc",
+                "https://github.com/balzaczyy/golucene",
+                "https://github.com/nginx/nginx",
+                "https://github.com/unbit/uwsgi",
+                "https://github.com/plack/Plack",
+                "https://github.com/Sereal/Sereal",
+                "https://github.com/golang/go"]
+
 SEARCH_FIELD = "content_no_norms"
 FILENAME_FIELD = "filename_no_norms_no_store"
 HASH_FIELD = "hash"
@@ -34,7 +63,11 @@ class NilClass
     true
   end
 end
-
+class Time
+  def took
+    sprintf "%.4f",Time.now - self
+  end
+end
 class String
   def escape
     CGI::escapeHTML(self)
@@ -61,7 +94,7 @@ class Store
 
     # if we dont want to overwrite everything
     # we just look only for docs with sha changes
-    if !ENV["BZZ_EXAMPLE_OVERWRITE"]
+    if !ENV["BZZZ_EXAMPLE_OVERWRITE"]
       not_changed = {}
 
       # TODO(bnikolov): create fast multi-lookup thing in bzzz itself
@@ -107,7 +140,7 @@ class Store
       x[SEARCH_FIELD] = encode(x[SEARCH_FIELD])
     end
 
-    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => ENV["BZZ_EXAMPLE_FORCE_MERGE"] || 0}.to_json).body_str)
+    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => ENV["BZZZ_EXAMPLE_FORCE_MERGE"] || 0}.to_json).body_str)
     return docs
   end
 
@@ -164,19 +197,15 @@ end
 def walk_and_index(path, every)
   raise "need block" unless block_given?
   docs = []
-  pattern = "#{path}/**/*\.{c,java,pm,pl,rb,clj,inc}"
+  pattern = "#{path}/**/*\.{c,java,pm,pl,rb,clj,inc,go,rs}"
   puts "indexing #{pattern}"
 
   files = Dir.glob(pattern)
-
-  Dir.glob(pattern).each do |f|
-
-    name = f.gsub(path,'')
-    content = File.read(f)
+  Dir.glob(pattern).sort.each do |f|
 
     doc = {
-      SEARCH_FIELD => content,
-      FILENAME_FIELD => name
+      SEARCH_FIELD => File.read(f),
+      FILENAME_FIELD => f.gsub(path,'')
     }
 
     docs << doc
@@ -190,28 +219,46 @@ def walk_and_index(path, every)
   yield docs
 end
 
+def dump_git_status
+  begin
+    File.read(DEFAULT_SOURCE_ROOT_STATUS)
+  rescue
+    ".. unable to open the status file .."
+  end
+end
+
 if ARGV[0] == 'do-index'
+  # FIXME: do this properly
+  system("for i in `ls -1 #{DEFAULT_SOURCE_ROOT} | grep -v #{DEFAULT_SOURCE_ROOT_STATUS_NAME}`; do pushd #{DEFAULT_SOURCE_ROOT}/$i; git pull ; popd; done")
+
   v = ARGV
   v.shift
-  v = ["/usr/src/linux"] unless ARGV.count > 0
+  v = [DEFAULT_SOURCE_ROOT] unless ARGV.count > 0
+
   v.each do |dir|
     t0 = Time.now
     walk_and_index(dir,1000) do |slice|
-      puts "sending #{slice.length} docs, took #{Time.now - t0} to read the documents"
+      print "read/list for #{slice.count} documents took: #{t0.took} to list/read .. "
       t0 = Time.now
       slice = Store.save(slice)
-      puts "save took: #{Time.now - t0} for #{slice.count} changed documents"
+      puts "save took: #{t0.took} for #{slice.count} changed documents"
+      t0 = Time.now
     end
   end
 
+  system("rm -f #{DEFAULT_SOURCE_ROOT_STATUS}.tmp; for i in `ls -1 #{DEFAULT_SOURCE_ROOT} | grep -v #{DEFAULT_SOURCE_ROOT_STATUS_NAME} | sort`; do pushd #{DEFAULT_SOURCE_ROOT}/$i && echo `date` $i `git rev-parse HEAD` >> #{DEFAULT_SOURCE_ROOT_STATUS}.tmp; popd; done; mv #{DEFAULT_SOURCE_ROOT_STATUS}.tmp #{DEFAULT_SOURCE_ROOT_STATUS}")
+
   p Store.stat
+  exit 0
+elsif ARGV[0] == 'source-init'
+  # FIXME: do this properly
+  system("mkdir -p #{DEFAULT_SOURCE_ROOT}; cd #{DEFAULT_SOURCE_ROOT} && for i in #{REPOSITORIES.join(" ")}; do git clone --depth 1 $i; done")
   exit 0
 end
 
 EXPR_EXPLAIN_BIT = 4
 EXPR_IMPORTANT_BIT = 1
 EXPR_SUM_SCORE_BIT = 8
-
 def clojure_expression_terms(search_string)
   return {
     "term-payload-clj-score" => {
@@ -479,9 +526,12 @@ __END__
   %tr
     %td
       - if @results.count == 0 && @q.empty?
-        %ul <b>case sensitive</b> indexed: clojure elasticsearch glibc-2.20 hadoop linux lucene-solr rails ruby zookeeper perl5, use <b>@</b> to request a match within the path name (like <b>@linux</b>)
+        %ul <b>case sensitive</b> indexed the following repositories (date of pull / name / indexed sha):
+        =preserve do
+          <pre>#{dump_git_status}</pre>
+        some examples:
         %li
-          %a{ href: "?q=struct+rtl8169_private+*"} struct rtl8169_private *
+          %a{ href: "?q=struct+rtl8169_private"} struct rtl8169_private
         %li
           %a{ href: "?q=%40glibc+%40malloc+realloc"} @glibc @malloc realloc
         %li

@@ -455,7 +455,8 @@ __END__
 @@ form
 %form{ action: '/', method: 'GET' }
   %input{ type: "text", name: "q", value: @q, autofocus: (@results.count == 0), placeholder: "defn reduce"}
-  %input{ type: "submit", value: "search" }
+  %button{ type: "submit" }
+    search
   &nbsp;
   - if @pages > 0
     - if @page - 1 > -1

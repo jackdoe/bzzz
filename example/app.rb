@@ -603,7 +603,7 @@ __END__
             %li
               %a{ href: "##{r[:id]}"}
                 #{r[:id]}
-              matching lines: #{r[:n_matches]}, updated #{r[:updated]}
+              #{r[:n_matches]} <small>lines matching, updated #{r[:updated]}</small>
 
   - @results.each_with_index do |r,r_index|
     %tr

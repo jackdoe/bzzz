@@ -370,9 +370,11 @@ get '/' do
       @total = res["total"] || 0
       @took = res["took"]
       @pages = @total/PER_PAGE
-
+      first_score = nil
       res["hits"].each do |h|
+        first_score ||= h["_score"]
         row = {
+          score_percent: 100 - ((h["_score"].to_f / first_score) * 100.0),
           score: h["_score"],
           explain: h["_explain"],
           id: h[ID_FIELD],
@@ -467,13 +469,117 @@ __END__
       <strike>next</strike>
   &nbsp;took: #{@took}ms, matching documents: #{@total}, pages: #{@pages}, page: #{@page}
 
+@@ css
+%style
+  :plain
+    body {
+      font-family: "Gill Sans", "Gill Sans MT", "Myriad Pro", "DejaVu Sans Condensed", Helvetica, Arial, sans-serif;
+      font-weight: 100;
+      padding: 0;
+      margin: 0;
+    }
+    form input, form button {
+      font-size: 18px !important;
+      padding: 5px !important;
+      background: #666;
+      color: #fff;
+      border: 0px;
+      margin: 0;
+      padding: 0;
+      float: left;
+      font-weight: 100;
+    }
+    form button {
+      color: #ccc;
+    }
+    .section {
+      display: none;
+    }
+    .section:target {
+      display: block;
+    }
+    table {
+      border-collapse: collapse;
+      border-style: hidden;
+    }
+    table ul {
+      list-style: none;
+      padding: 0;
+    }
+    table ul a {
+      display: inline-block;
+      padding: 2px 6px 2px 8px;
+      color: #fff;
+      background: #666;
+      margin-right: 5px;
+      position: relative;
+      border-radius: 0 0 0 10px ;
+    }
+    a[href*="explain"] {
+      position: absolute;
+      top: 0;
+      transition: right 1s;
+      right: 0;
+      font-size: 12px;
+      padding: 8px 0 0 0;
+      line-height: 1;
+    }
+
+    a[href*="explain"]:before {
+      content:"";
+      position: absolute;
+      right: 0;
+      width: 3000px;
+      top: 0px;
+      border-top: 3px solid #666;
+    }
+    a[href*="explain"]:after {
+      content: "";
+      position: absolute;
+      border-width: 5px 8px;
+      border-style: solid;
+      border-color: #666 transparent transparent transparent;
+      right: 0;
+      top: 11px;
+      margin-top: -8px;
+    }
+
+    table ul li {
+      margin-bottom: 2px;
+    }
+    table ul a:after {
+      content: "";
+      position: absolute;
+      border-width: 11px 5px;
+      border-style: solid;
+      border-color: transparent transparent transparent #666;
+      right: -10px;
+      top: 50%;
+      margin-top: -11px;
+    }
+    table td, table th {
+      border: none;
+      padding: 30px 10px 10px;
+      position: relative;
+    }
+    table tr:nth-child(odd) td {
+      background: #fafafa;
+    }
+    a {
+      text-decoration: none;
+    color: gray;
+    }
+    tr:nth-child(1) td, tr:nth-child(2) td {
+      padding: 5px;
+    }
+
+
 @@ layout
 !!! 5
 %html
   %head
     %title= "bzzz."
-    =preserve do
-      <style>.section { display: none;} .section:target {display: block;} table { border-collapse: collapse; border-style: hidden; } table td, table th { border: 1px solid black; } a { text-decoration: none; color: gray;}</style>
+    #{haml :css}
 
   %body
     = yield
@@ -510,7 +616,7 @@ __END__
           - else
             %a{ href: "?q=#{@q.escapeCGI}"} &#9650;
 
-          %a{ href: "#explain_#{r_index}"} explain score: #{r[:score]}
+          %a{ style: "right: #{r[:score_percent]}%", href: "#explain_#{r_index}"} explain score: #{r[:score]}
           file: <a href="?q=#{@q.escapeCGI}&id=#{r[:id]}&back=#{r_index}#line_#{r[:first_match]}">#{r[:id]}</a>
 
         %pre.section{id: "explain_#{r_index}"}

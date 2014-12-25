@@ -5,6 +5,7 @@ require 'json'
 require 'sinatra'
 require 'haml'
 require 'cgi'
+require 'digest/sha1'
 
 set :sessions, false
 set :logging, false
@@ -20,6 +21,9 @@ ALL_TOKENS_MATCH_SCORE = 10
 
 SEARCH_FIELD = "content_no_norms"
 FILENAME_FIELD = "filename_no_norms_no_store"
+HASH_FIELD = "hash"
+ID_FIELD = "id"
+STAMP_FIELD = "stamp_long"
 
 F_IMPORTANT_LINE = 1 << 31
 LINE_SPLITTER = /[\r\n]/
@@ -35,6 +39,9 @@ class String
   def escape
     CGI::escapeHTML(self)
   end
+  def sha
+    Digest::SHA1.hexdigest(self)
+  end
   def escapeCGI
     CGI::escape(self)
   end
@@ -46,7 +53,62 @@ class Store
 
   def Store.save(docs = [])
     docs = [docs] if !docs.kind_of?(Array)
-    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => ENV["FORCE_MERGE"] || 0}.to_json).body_str)
+    docs.each do |doc|
+      doc[ID_FIELD] = doc[FILENAME_FIELD]
+      doc[HASH_FIELD] = doc[SEARCH_FIELD].sha
+      doc[STAMP_FIELD] = Time.now.to_i
+    end
+
+    # if we dont want to overwrite everything
+    # we just look only for docs with sha changes
+    if !ENV["BZZ_EXAMPLE_OVERWRITE"]
+      not_changed = {}
+
+      # TODO(bnikolov): create fast multi-lookup thing in bzzz itself
+      # will be cool if we can send query: { lookup: .. bunch of id }
+
+      docs.each_slice(512) do |slice|
+
+        queries = []
+        slice.each do |doc|
+          queries << {
+            bool: {
+              must: [
+                {
+                  term: {
+                    field: ID_FIELD,
+                    value: doc[ID_FIELD]
+                  }
+                },
+                {
+                  term: {
+                    field: HASH_FIELD,
+                    value: doc[HASH_FIELD]
+                  }
+                }
+              ]
+            }
+          }
+        end
+
+        res = Store.find({ bool: { should: queries } }, {size: queries.count, fields: {ID_FIELD => true} })
+
+        res["hits"].each do |hit|
+          not_changed[hit[ID_FIELD]] = true
+        end
+
+      end
+
+      docs = docs.select { |x| !not_changed[x[ID_FIELD]] }
+
+    end
+
+    docs.each do |x|
+      x[SEARCH_FIELD] = encode(x[SEARCH_FIELD])
+    end
+
+    JSON.parse(Curl.post(@host, {index: @index, documents: docs, analyzer: Store.analyzer, "force-merge" => ENV["BZZ_EXAMPLE_FORCE_MERGE"] || 0}.to_json).body_str)
+    return docs
   end
 
   def Store.delete(query)
@@ -56,6 +118,7 @@ class Store
   def Store.find(query, options = {})
     JSON.parse(Curl.http(:GET, @host, {index: @index,
                                        query: query,
+                                       fields: options[:fields],
                                        analyzer: Store.analyzer,
                                        explain: options[:explain] || false,
                                        page: options[:page] || 0,
@@ -109,10 +172,9 @@ def walk_and_index(path, every)
   Dir.glob(pattern).each do |f|
 
     name = f.gsub(path,'')
-    content = encode(File.read(f))
+    content = File.read(f)
 
     doc = {
-      id: name,
       SEARCH_FIELD => content,
       FILENAME_FIELD => name
     }
@@ -135,9 +197,10 @@ if ARGV[0] == 'do-index'
   v.each do |dir|
     t0 = Time.now
     walk_and_index(dir,1000) do |slice|
-      puts "sending #{slice.length} docs, took #{Time.now - t0} to create the documents"
+      puts "sending #{slice.length} docs, took #{Time.now - t0} to read the documents"
       t0 = Time.now
-      Store.save(slice)
+      slice = Store.save(slice)
+      puts "save took: #{Time.now - t0} for #{slice.count} changed documents"
     end
   end
 
@@ -231,7 +294,7 @@ get '/' do
     if !@params[:id].empty?
       queries << {
         term: {
-          field: "id",
+          field: ID_FIELD,
           value: @params[:id]
         }
       }
@@ -264,7 +327,8 @@ get '/' do
         row = {
           score: h["_score"],
           explain: h["_explain"],
-          id: h["id"],
+          id: h[ID_FIELD],
+          updated: Time.at(h[STAMP_FIELD].to_i),
           n_matches: 0,
         }
 
@@ -385,7 +449,7 @@ __END__
             %li
               %a{ href: "##{r[:id]}"}
                 #{r[:id]}
-              matching lines: #{r[:n_matches]}
+              matching lines: #{r[:n_matches]}, updated #{r[:updated]}
 
   - @results.each_with_index do |r,r_index|
     %tr

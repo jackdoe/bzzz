@@ -499,6 +499,9 @@ __END__
     .section:target {
       display: block;
     }
+    pre {
+      overflow-y: auto;
+    }
     table {
       border-collapse: collapse;
       border-style: hidden;

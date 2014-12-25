@@ -201,7 +201,7 @@ def walk_and_index(path, every)
   puts "indexing #{pattern}"
 
   files = Dir.glob(pattern)
-  Dir.glob(pattern).sort.each do |f|
+  files.sort.each do |f|
 
     doc = {
       SEARCH_FIELD => File.read(f),

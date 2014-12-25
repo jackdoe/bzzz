@@ -11,11 +11,14 @@ import org.apache.lucene.util.AttributeFactory;
 
 public class CodeTokenizer extends Tokenizer {
     public static int FLAG_IMPORTANT = 1 << 31;
+    public static int MIN_TOKEN_LEN = 2;
     public static int AGAIN = -2;
 
     private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
     private final PayloadAttribute payAtt = addAttribute(PayloadAttribute.class);
     private final CodeToken current_token = new CodeToken();
+
+    public final char[] IGNORE = new char[256];
 
     int line = 0;
     int flags = 0;
@@ -28,11 +31,22 @@ public class CodeTokenizer extends Tokenizer {
         super(input);
         this.flags = flags;
         this.line_offset = line_offset;
+        IGNORE['.'] = 1;
+        IGNORE['$'] = 1;
+        IGNORE[';'] = 1;
+        IGNORE['['] = 1;
+        IGNORE[']'] = 1;
+        IGNORE['('] = 1;
+        IGNORE[')'] = 1;
+        IGNORE['{'] = 1;
+        IGNORE['}'] = 1;
+        IGNORE[' '] = 1;
     }
 
     public boolean emmit(int ov) {
+
         reuse = ov;
-        if (current_token.length > 0) {
+        if (current_token.length >= MIN_TOKEN_LEN) {
             clearAttributes();
             current_token.copy_into_attributes(termAtt,payAtt,(line + line_offset) | flags | line_flags);
 
@@ -43,6 +57,7 @@ public class CodeTokenizer extends Tokenizer {
 
             return true;
         }
+        current_token.reset();
         return false;
     }
 
@@ -74,10 +89,11 @@ public class CodeTokenizer extends Tokenizer {
                         prev_symbol = -1;
                     }
 
-                    if (ch != '.' && ch != ' ' && ch != ';' && ((ch >= ':' && ch <= '@') || (ch >= '!' && ch <= '/'))) {
+                    if (IGNORE[(char) ch] == 0 && ((ch >= ':' && ch <= '@') || (ch >= '!' && ch <= '/'))) {
                         current_token.append(ch);
                         prev_symbol = ch;
                     } else {
+                        // index only symbols that occur more than once, like ==, **
                         if (emmit(0)) return true;
                         prev_symbol = -1;
                     }
@@ -90,12 +106,6 @@ public class CodeTokenizer extends Tokenizer {
 
         return false;
     }
-
-    // keywords:
-    // int main void() {
-    // will emmit int, main, void, void( ()
-    // a = b, should emit a,b,a= =b
-    // void ***, void void***
 
     @Override
     public void reset() throws IOException {

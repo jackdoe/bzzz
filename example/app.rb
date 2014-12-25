@@ -243,7 +243,7 @@ if ARGV[0] == 'do-index'
       slice = Store.save(slice)
       puts "save took: #{t0.took} for #{slice.count} changed documents"
       t0 = Time.now
-      GC.start(full_mark: true, immediate_sweep: true)
+      GC.start
     end
   end
 

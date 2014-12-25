@@ -237,12 +237,13 @@ if ARGV[0] == 'do-index'
 
   v.each do |dir|
     t0 = Time.now
-    walk_and_index(dir,1000) do |slice|
+    walk_and_index(dir,100) do |slice|
       print "read/list for #{slice.count} documents took: #{t0.took} to list/read .. "
       t0 = Time.now
       slice = Store.save(slice)
       puts "save took: #{t0.took} for #{slice.count} changed documents"
       t0 = Time.now
+      GC.start(full_mark: true, immediate_sweep: true)
     end
   end
 

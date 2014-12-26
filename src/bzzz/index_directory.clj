@@ -27,12 +27,13 @@
 (declare try-close-manager)
 (declare try-create-prefix)
 (declare read-alias-file)
-(declare refresh-searcher-locked)
+(declare refresh-single-searcher-manager)
 
 (def root* (atom default-root))
 (def alias* (atom {}))
 (def redis* (atom {}))
 (def identifier* (atom default-identifier))
+(def write-refresh-lock* (atom {}))
 (def name->manager* (atom {}))
 (def unacceptable-name-pattern (re-pattern "[^a-zA-Z_0-9-:]"))
 (def shard-suffix "-shard-")
@@ -189,34 +190,42 @@
     (catch Exception e
       (log/warn (as-str e)))))
 
+(defn get-write-refresh-lock [index]
+  (if-let [obj (get @write-refresh-lock* index)]
+    obj
+    (let [obj (Object.)]
+      (swap! write-refresh-lock* assoc index obj)
+      obj)))
+
 (defn use-writer [index analyzer force-merge callback]
-  (let [writer (new-index-writer index analyzer)
-        taxo (new-taxo-writer index)
-        t0 (time-ms)]
-    (try
-      (do
-        (.prepareCommit writer)
-        (.prepareCommit taxo)
-        (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)
-              force-merge (int-or-parse force-merge)]
-          (.commit taxo)
-          (.commit writer)
-          (if (> force-merge 0)
-            (.forceMerge writer force-merge))
-          rc))
-      (catch Exception e
+  (locking (get-write-refresh-lock index)
+    (let [writer (new-index-writer index analyzer)
+          taxo (new-taxo-writer index)
+          t0 (time-ms)]
+      (try
         (do
-          (stat/update-error index "use-writer")
-          (if-not (instance? OutOfMemoryError e)
-            (do
-              (.rollback taxo)
-              (.rollback writer)))
-          (throw e)))
-      (finally
-        (do
-          (safe-close-taxo taxo)
-          (safe-close-writer writer)
-          (stat/update-took-count index "use-writer"(time-took t0)))))))
+          (.prepareCommit writer)
+          (.prepareCommit taxo)
+          (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)
+                force-merge (int-or-parse force-merge)]
+            (.commit taxo)
+            (.commit writer)
+            (if (> force-merge 0)
+              (.forceMerge writer force-merge))
+            rc))
+        (catch Exception e
+          (do
+            (stat/update-error index "use-writer")
+            (if-not (instance? OutOfMemoryError e)
+              (do
+                (.rollback taxo)
+                (.rollback writer)))
+            (throw e)))
+        (finally
+          (do
+            (safe-close-taxo taxo)
+            (safe-close-writer writer)
+            (stat/update-took-count index "use-writer"(time-took t0))))))))
 
 (defn use-writer-all [index callback]
   (doseq [name (index-name-matching index)]
@@ -233,27 +242,33 @@
       (log/warn (ex-str e)))))
 
 (defn get-manager [index refresh]
-  (when (nil? (@name->manager* index))
+  (if-let [manager (get @name->manager* index)]
+    (do
+      (when refresh
+        (refresh-single-searcher-manager index manager))
+      manager)
     (locking name->manager*
-      (when (nil? (@name->manager* index))
-        ;; to avoid a race in case multiple threads
-        ;; decide to use the index (including creating it) in the very beginning
-        ;; before the statistic keys are ready, so we just create them under the lock here
-        ;; not doing the same for writers, because of the exclusive write lock there
-        (use-writer index nil 0 (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]))
-        (swap! name->manager* assoc index (new-searcher-manager index))
-        (stat/get-statistics index))))
-  (let [manager (@name->manager* index)]
-    (when refresh
-      (refresh-searcher-locked index manager))
-    manager))
+      ;; in case someone created the manager just before we locked it
+      (if-let [manager (get @name->manager* index)]
+        manager
+        ;; creating the searcher manager.
+        ;;
+        ;; to avoid a race just use the index name (including creating empty index)
+        ;; at the very beginning, and also setup some basic stats for it
+        (do
+          (use-writer index nil 0 (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]))
+          (let [created-manager (new-searcher-manager index)]
+            (swap! name->manager* assoc index created-manager)
+            (stat/get-statistics index)
+            created-manager))))))
 
-(defn refresh-searcher-locked [index ^SearcherTaxonomyManager manager]
+(defn refresh-single-searcher-manager [index ^SearcherTaxonomyManager manager]
   (log/debug "refreshing: " index " " manager)
   (let [t0 (time-ms)]
     (try
       (do
-        (.maybeRefresh manager)
+        (locking (get-write-refresh-lock index)
+          (.maybeRefresh manager))
         (stat/update-took-count index "refresh-search-managers" (time-took t0)))
       (catch Throwable e
         (do
@@ -264,9 +279,8 @@
 (defn refresh-search-managers []
   (let [t0 (time-ms)]
     (bootstrap-indexes)
-    (locking name->manager*
-      (doseq [[index ^SearcherTaxonomyManager manager] @name->manager*]
-        (refresh-searcher-locked index manager)))
+    (doseq [[index ^SearcherTaxonomyManager manager] @name->manager*]
+      (refresh-single-searcher-manager index manager))
     (stat/update-took-count stat/total "refresh-search-managers" (time-took t0))
     (log/debug "refreshing took" (time-took t0))))
 

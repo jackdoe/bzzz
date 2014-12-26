@@ -18,6 +18,7 @@ PER_PAGE = 15
 SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 ALL_TOKENS_MATCH_SCORE = 10
+FILEPATH_MATCH_SCORE = 2000
 
 DEFAULT_SOURCE_ROOT = File.realpath(File.join(File.dirname(__FILE__),"..","..","SOURCE-TO-INDEX"))
 DEFAULT_SOURCE_ROOT_STATUS_NAME = "git.status"
@@ -337,8 +338,8 @@ def clojure_expression_path(search_string)
         "clj-eval" => %{
 (fn [^bzzz.java.query.ExpressionContext ctx]
   (when (.explanation ctx)
-    (.explanation-add ctx 1000 "token matching in file path"))
-  (float 1000))
+    (.explanation-add ctx #{FILEPATH_MATCH_SCORE} "token matching in file path"))
+  (float #{FILEPATH_MATCH_SCORE}))
 }
       }
     }
@@ -381,7 +382,12 @@ get '/' do
     query_string = @q.gsub(REQUEST_FILE_RE,"")
 
     begin
-      res = Store.find({bool: { must: queries, should: [clojure_expression_code(query_string), clojure_expression_path(query_string)] } } ,explain: true, page: @page)
+      res = Store.find({bool: {
+                          must: queries,
+                          should: [clojure_expression_code(query_string), clojure_expression_path(query_string)],
+                          "minimum-should-match" => 1
+                        }
+                       } ,explain: true, page: @page)
       raise res["exception"] if res["exception"]
 
       @err = nil

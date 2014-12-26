@@ -44,6 +44,8 @@
           (do
             (doseq [[index token] (indexed tokens)]
               (.add top (generator token index (count tokens)) (if tokenize-occur-should BooleanClause$Occur/SHOULD BooleanClause$Occur/MUST)))
+            (when tokenize-occur-should
+              (.setMinimumNumberShouldMatch top 1))
             (if no-zero
               (NoZeroQuery. top)
               top))))

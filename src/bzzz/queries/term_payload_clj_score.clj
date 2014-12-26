@@ -24,8 +24,8 @@
 
 (defn parse
   [generic input analyzer]
-  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty]
-         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input
+  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty tokenize-occur-should]
+         :or {field-cache [] tokenize false tokenize-occur-should false no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input
          generator (fn [value n cnt]
                      (let [q ^TermPayloadClojureScoreQuery (TermPayloadClojureScoreQuery. (Term. ^String field ^String value)
                                                                                           clj-eval
@@ -43,7 +43,7 @@
           (MatchAllDocsQuery.)
           (do
             (doseq [[index token] (indexed tokens)]
-              (.add top (generator token index (count tokens)) BooleanClause$Occur/MUST))
+              (.add top (generator token index (count tokens)) (if tokenize-occur-should BooleanClause$Occur/SHOULD BooleanClause$Occur/MUST)))
             (if no-zero
               (NoZeroQuery. top)
               top))))

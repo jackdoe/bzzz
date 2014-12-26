@@ -61,7 +61,8 @@
     (assoc doc :_result_state
            (reduce (fn [sum ^TermPayloadClojureScoreQuery query]
                      (if-let [state (bzzz.queries.term-payload-clj-score/extract-result-state query doc-id)]
-                       (conj sum state)))
+                       (conj sum state)
+                       sum))
                    []
                    queries))
     doc))

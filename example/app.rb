@@ -629,9 +629,11 @@ __END__
           current page:
           - @results.each do |r|
             %li
-              %a{ href: "##{r[:id]}"}
+              %a{ href: "?q=#{@q.escapeCGI}&id=#{r[:id]}#line_#{r[:first_match]}"}
                 #{r[:id]}
-              #{r[:n_matches]} <small>lines matching, updated #{r[:updated]}</small>
+              %a{ href: "##{r[:id]}"}
+                #{r[:n_matches]}
+              <small>lines matching, updated #{r[:updated]}</small>
 
   - @results.each_with_index do |r,r_index|
     %tr
@@ -645,7 +647,7 @@ __END__
             %a{ href: "?q=#{@q.escapeCGI}"} &#9650;
 
           %a{ style: "right: #{r[:score_percent]}%", href: "#explain_#{r_index}"} explain score: #{r[:score]}
-          file: <a href="?q=#{@q.escapeCGI}&id=#{r[:id]}&back=#{r_index}#line_#{r[:first_match]}">#{r[:id]}</a>
+          file: <a href="?q=#{@q.escapeCGI}&id=#{r[:id]}#line_#{r[:first_match]}">#{r[:id]}</a>
 
         %pre.section{id: "explain_#{r_index}"}
           <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}

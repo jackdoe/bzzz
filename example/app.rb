@@ -380,12 +380,12 @@ get '/' do
     end
 
     query_string = @q.gsub(REQUEST_FILE_RE,"")
-
+    queries << clojure_expression_code(query_string)
     begin
       res = Store.find({bool: {
                           must: queries,
-                          should: [clojure_expression_code(query_string), clojure_expression_path(query_string)],
-                          "minimum-should-match" => 1
+                          should: [clojure_expression_path(query_string)],
+                          "minimum-should-match" => 0
                         }
                        } ,explain: true, page: @page)
       raise res["exception"] if res["exception"]
@@ -398,7 +398,7 @@ get '/' do
       res["hits"].each do |h|
         first_score ||= h["_score"]
         row = {
-          score_percent: 100 - ((h["_score"].to_f / first_score) * 100.0),
+          score_percent: [100 - ((h["_score"].to_f / first_score) * 100.0),85].min,
           score: h["_score"],
           explain: h["_explain"],
           id: h[ID_FIELD],

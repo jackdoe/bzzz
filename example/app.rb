@@ -530,7 +530,7 @@ __END__
     .footer {
       padding: 5px 5px 5px 5px;
     }
-    ul a {
+    .first ul a {
       display: inline-block;
       padding: 2px 6px 2px 8px;
       color: #fff;
@@ -538,7 +538,7 @@ __END__
       position: relative;
       border-radius: 0 0 0 10px ;
     }
-    ul a:nth-child(2) {
+    .first ul a:nth-child(2) {
        background: #aaa;
        margin-right: 5px;
        margin-left: -5px;
@@ -654,7 +654,7 @@ __END__
   %div.first
     #{haml :form}
 
-%div.first
+%div.td
   - if @results.count == 0 && @q.empty?
     %ul
       <b>case sensitive</b> indexed the following repositories (date of pull / name / indexed sha):

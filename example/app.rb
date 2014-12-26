@@ -288,18 +288,13 @@ def clojure_expression_code(search_string)
                               (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0))
 
              ;; translates to matches[line] |= current token position bit
-             uniq-tokens-seen-on-this-line (bit-or (.local-state-get ctx line-key 0) (.token_bit_position ctx))]
-
-         ;; TODO(bnikolov):
-         ;; some tokens have matches on every line, so for 10k lines it will actually
-         ;; do 10k sets, the easiest thing to do is just link those tokens to something
-         ;; because they are pointless by themselves.
-         ;; for example "int" or "."
-         ;; so we can tokenize 'int main void' as 'int$main main void'
-         ;; if searched with 'int main void' we look for 'int$main void'
-         ;; but this line wont be findable with 'int' only
-         ;; which greatly improves this case
-         (.local-state-set ctx line-key uniq-tokens-seen-on-this-line)
+             uniq-tokens-seen-on-this-line (if (= 1 (.token_count ctx) )
+                                             1
+                                             (bit-or (.local-state-get ctx line-key 0) (.token_bit_position ctx)))]
+         ;; TODO(bnikolov): fix this to work with tokens occuring 1000~ times per document
+         ;; maybe move the whole thing to one continous payload and use one bit per line
+         (when-not (= 1 (.token_count ctx))
+           (.local-state-set ctx line-key uniq-tokens-seen-on-this-line))
 
          (if (= uniq-tokens-seen-on-this-line (.token_count_mask ctx))
            (do
@@ -308,9 +303,7 @@ def clojure_expression_code(search_string)
              (when (.explanation ctx)
                (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: " (.token_count_mask ctx)))
                (.result-state-append ctx line-no))
-             (when (and (> (bit-and payload #{F_IMPORTANT_LINE}) 0) (not (.local-state-get ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}))))
-               ;; score important lines only once
-               (.local-state-set ctx (bit-or line-key #{EXPR_IMPORTANT_BIT}) 1)
+             (when (> (bit-and payload #{F_IMPORTANT_LINE}) 0)
                (when (.explanation ctx)
                  (.explanation-add ctx #{IMPORTANT_LINE_SCORE} (str "line: (" line-no ") considered important")))
                (.current-score-add ctx #{IMPORTANT_LINE_SCORE})))))
@@ -542,9 +535,14 @@ __END__
       padding: 2px 6px 2px 8px;
       color: #fff;
       background: #666;
-      margin-right: 5px;
       position: relative;
       border-radius: 0 0 0 10px ;
+    }
+    ul a:nth-child(2) {
+       background: #aaa;
+       margin-right: 5px;
+       margin-left: -5px;
+       border-radius: 0;
     }
     a[href*="explain"] {
       position: absolute;
@@ -581,7 +579,7 @@ __END__
       position: absolute;
       border-width: 11px 5px;
       border-style: solid;
-      border-color: transparent transparent transparent #666;
+      border-color: transparent transparent transparent #aaa;
       right: -10px;
       top: 50%;
       margin-top: -11px;

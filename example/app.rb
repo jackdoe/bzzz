@@ -332,7 +332,7 @@ def clojure_expression_path(search_string)
         field: FILENAME_FIELD,
         value: search_string,
         tokenize: true,
-        "tokenize-occur-should" => true,
+        "tokenize-occur" => "SHOULD",
         "match-all-if-empty" => true,
         "no-zero" => false,
         "clj-eval" => %{

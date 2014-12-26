@@ -24,8 +24,8 @@
 
 (defn parse
   [generic input analyzer]
-  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty tokenize-occur-should]
-         :or {field-cache [] tokenize false tokenize-occur-should false no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input
+  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty tokenize-occur]
+         :or {field-cache [] tokenize false tokenize-occur nil no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input
          generator (fn [value n cnt]
                      (let [q ^TermPayloadClojureScoreQuery (TermPayloadClojureScoreQuery. (Term. ^String field ^String value)
                                                                                           clj-eval
@@ -33,7 +33,8 @@
                                                                                           fixed-bucket-aggregation)
                            clj_context ^ExpressionContext (.clj_context q)]
                        (.set_token_position clj_context n cnt)
-                       q))]
+                       q))
+         tokenize-occur (if tokenize-occur (BooleanClause$Occur/valueOf tokenize-occur) BooleanClause$Occur/MUST)]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
     (if tokenize
@@ -43,8 +44,8 @@
           (MatchAllDocsQuery.)
           (do
             (doseq [[index token] (indexed tokens)]
-              (.add top (generator token index (count tokens)) (if tokenize-occur-should BooleanClause$Occur/SHOULD BooleanClause$Occur/MUST)))
-            (when tokenize-occur-should
+              (.add top (generator token index (count tokens)) tokenize-occur))
+            (when (= tokenize-occur BooleanClause$Occur/SHOULD)
               (.setMinimumNumberShouldMatch top 1))
             (if no-zero
               (NoZeroQuery. top)

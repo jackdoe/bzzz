@@ -484,16 +484,20 @@ __END__
   &nbsp;
   - if @pages > 0
     - if @page - 1 > -1
-      %a(href= "?q=#{@q.escapeCGI}&page=#{@page - 1}")> prev
+      %a{href: "?q=#{@q.escapeCGI}&page=#{@page - 1}"}
+        prev
     - else
-      <strike>prev</strike>
+      %strike
+        prev
     &nbsp;
     - if @page < @pages
-      %a(href= "?q=#{@q.escapeCGI}&page=#{@page + 1}")> next
+      %a{href: "?q=#{@q.escapeCGI}&page=#{@page + 1}"}
+        next
     -else
-      <strike>next</strike>
-  &nbsp;took: #{@took}ms, matching documents: #{@total}, pages: #{@pages}, page: #{@page}
+      %strike
+        next
 
+  &nbsp;took: #{@took}ms, matching documents: #{@total}, pages: #{@pages}, page: #{@page}
 @@ css
 %style
   :plain
@@ -526,15 +530,11 @@ __END__
     pre {
       overflow-y: auto;
     }
-    table {
-      border-collapse: collapse;
-      border-style: hidden;
-    }
-    table ul {
+    .td ul {
       list-style: none;
       padding: 0;
     }
-    table ul a {
+    .td ul a {
       display: inline-block;
       padding: 2px 6px 2px 8px;
       color: #fff;
@@ -572,10 +572,10 @@ __END__
       margin-top: -8px;
     }
 
-    table ul li {
+    .td ul li {
       margin-bottom: 2px;
     }
-    table ul a:after {
+    .td ul a:after {
       content: "";
       position: absolute;
       border-width: 11px 5px;
@@ -585,20 +585,17 @@ __END__
       top: 50%;
       margin-top: -11px;
     }
-    table td, table th {
+    .td {
       border: none;
-      padding: 30px 10px 10px;
+      padding: 10px 10px 10px;
       position: relative;
     }
-    table tr:nth-child(odd) td {
+    div:nth-child(odd) td {
       background: #fafafa;
     }
     a {
       text-decoration: none;
-    color: gray;
-    }
-    tr:nth-child(1) td, tr:nth-child(2) td {
-      padding: 5px;
+      color: gray;
     }
 
 
@@ -613,69 +610,64 @@ __END__
     = yield
 
 @@ index
-%table{ border: 1, width: "100%", height: "100%" }
-  %tr
-    %td{id: "top"}
-      #{haml :form}
-  - if @err
-    %tr
-      %td
-        <pre>#{@err}</pre>
+%div.td{id: "top"}
+  #{haml :form}
+- if @err
+  %div.td
+    <pre>#{@err}</pre>
 
-  - if @params[:id].empty? && @results.count > 0
-    %tr
-      %td
-        %ul
-          current page:
-          - @results.each do |r|
-            %li
-              %a{ href: "?q=#{@q.escapeCGI}&id=#{r[:id]}#line_#{r[:first_match]}"}
-                #{r[:id]}
-              %a{ href: "##{r[:id]}"}
-                #{r[:n_matches]}
-              <small>lines matching, updated #{r[:updated]}</small>
-
-  - @results.each_with_index do |r,r_index|
-    %tr
-      %td{id: r[:id]}
-        %div{id: "menu_#{r_index}"}
-          -if @params[:id].empty?
-            %a{ href: "#menu_#{r_index - 1}"} &#9668;
-            %a{ href: "#top"} &#9650;
-            %a{ href: "#menu_#{r_index + 1}"} &#9658;
-          - else
-            %a{ href: "?q=#{@q.escapeCGI}"} &#9650;
-
-          %a{ style: "right: #{r[:score_percent]}%", href: "#explain_#{r_index}"} explain score: #{r[:score]}
-          file: <a href="?q=#{@q.escapeCGI}&id=#{r[:id]}#line_#{r[:first_match]}">#{r[:id]}</a>
-
-        %pre.section{id: "explain_#{r_index}"}
-          <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}
-
-        = preserve do
-          <pre id="highlighted_#{r_index}">#{r[:highlight]}</pre>
-
-  -if @results.count > 0
-    %tr
-      %td
-        #{haml :form}
-
-  %tr
-    %td
-      - if @results.count == 0 && @q.empty?
-        %ul <b>case sensitive</b> indexed the following repositories (date of pull / name / indexed sha):
-        =preserve do
-          <pre>#{dump_git_status}</pre>
-        some examples:
+- if @params[:id].empty? && @results.count > 0
+  %div.td
+    %ul
+      current page:
+      - @results.each do |r|
         %li
-          %a{ href: "?q=struct+rtl8169_private"} struct rtl8169_private
-        %li
-          %a{ href: "?q=%40glibc+%40malloc+realloc"} @glibc @malloc realloc
-        %li
-          %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
-        %li
-          %a{ href: "?q=IndexSearcher"} IndexSearcher
-        %li
-          %a{ href: "?q=postings+nextPosition"} postings nextPosition
+          %a{ href: "?q=#{@q.escapeCGI}&id=#{r[:id]}#line_#{r[:first_match]}"}
+            #{r[:id]}
+          %a{ href: "##{r[:id]}"}
+            #{r[:n_matches]}
+          %small
+            lines matching, updated #{r[:updated]}
 
-      using <a href="https://github.com/jackdoe/bzzz">github.com/jackdoe/bzzz</a> lucene wrapper, __FILE__ lives at: <a href="https://github.com/jackdoe/bzzz/blob/master/example/app.rb">https://github.com/jackdoe/bzzz/blob/master/example/app.rb</a> <b>patches/issues welcome</b>
+- @results.each_with_index do |r,r_index|
+  %div.td{id: r[:id]}
+    %div{id: "menu_#{r_index}"}
+      -if @params[:id].empty?
+        %a{ href: "#menu_#{r_index - 1}"} &#9668;
+        %a{ href: "#top"} &#9650;
+        %a{ href: "#menu_#{r_index + 1}"} &#9658;
+      - else
+        %a{ href: "?q=#{@q.escapeCGI}"} &#9650;
+      %a{ style: "right: #{r[:score_percent]}%", href: "#explain_#{r_index}"} explain score: #{r[:score]}
+      file:
+      %a{ href: "?q=#{@q.escapeCGI}&id=#{r[:id]}#line_#{r[:first_match]}" }
+        #{r[:id]}
+
+    %pre.section{id: "explain_#{r_index}"}
+      <br><a href="##{r[:id]}">hide explain #{r[:id]}</a><br><font color="red">---</font><br>#{r[:explain]}
+
+    = preserve do
+      <pre id="highlighted_#{r_index}">#{r[:highlight]}</pre>
+
+-if @results.count > 0
+  %div.td
+    #{haml :form}
+
+%div.td
+  - if @results.count == 0 && @q.empty?
+    %ul <b>case sensitive</b> indexed the following repositories (date of pull / name / indexed sha):
+    =preserve do
+      <pre>#{dump_git_status}</pre>
+    some examples:
+    %li
+      %a{ href: "?q=struct+rtl8169_private"} struct rtl8169_private
+    %li
+      %a{ href: "?q=%40glibc+%40malloc+realloc"} @glibc @malloc realloc
+    %li
+      %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
+    %li
+      %a{ href: "?q=IndexSearcher"} IndexSearcher
+    %li
+      %a{ href: "?q=postings+nextPosition"} postings nextPosition
+
+  using <a href="https://github.com/jackdoe/bzzz">github.com/jackdoe/bzzz</a> lucene wrapper, __FILE__ lives at: <a href="https://github.com/jackdoe/bzzz/blob/master/example/app.rb">https://github.com/jackdoe/bzzz/blob/master/example/app.rb</a> <b>patches/issues welcome</b>

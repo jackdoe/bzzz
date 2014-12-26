@@ -260,7 +260,7 @@ end
 EXPR_EXPLAIN_BIT = 4
 EXPR_IMPORTANT_BIT = 1
 EXPR_SUM_SCORE_BIT = 8
-def clojure_expression_terms(search_string)
+def clojure_expression_code(search_string)
   return {
     "term-payload-clj-score" => {
       field: SEARCH_FIELD,
@@ -325,6 +325,25 @@ def clojure_expression_terms(search_string)
   }
 end
 
+def clojure_expression_path(search_string)
+    boost_file_path_match = {
+      "term-payload-clj-score" => {
+        field: FILENAME_FIELD,
+        value: search_string,
+        tokenize: true,
+        "tokenize-occur-should" => true,
+        "match-all-if-empty" => true,
+        "no-zero" => false,
+        "clj-eval" => %{
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (when (.explanation ctx)
+    (.explanation-add ctx 1000 "token matching in file path"))
+  (float 1000))
+}
+      }
+    }
+end
+
 get '/:page' do |page|
   status 404
   "not found"
@@ -360,10 +379,9 @@ get '/' do
     end
 
     query_string = @q.gsub(REQUEST_FILE_RE,"")
-    queries << clojure_expression_terms(query_string)
 
     begin
-      res = Store.find({bool: { must: queries } } ,explain: true, page: @page)
+      res = Store.find({bool: { must: queries, should: [clojure_expression_code(query_string), clojure_expression_path(query_string)] } } ,explain: true, page: @page)
       raise res["exception"] if res["exception"]
 
       @err = nil

@@ -530,11 +530,14 @@ __END__
     pre {
       overflow-y: auto;
     }
-    .td ul {
+    ul {
       list-style: none;
       padding: 0;
     }
-    .td ul a {
+    .footer {
+      padding: 5px 5px 5px 5px;
+    }
+    ul a {
       display: inline-block;
       padding: 2px 6px 2px 8px;
       color: #fff;
@@ -552,7 +555,6 @@ __END__
       padding: 8px 0 0 0;
       line-height: 1;
     }
-
     a[href*="explain"]:before {
       content:"";
       position: absolute;
@@ -571,11 +573,10 @@ __END__
       top: 11px;
       margin-top: -8px;
     }
-
-    .td ul li {
+    ul li {
       margin-bottom: 2px;
     }
-    .td ul a:after {
+    ul a:after {
       content: "";
       position: absolute;
       border-width: 11px 5px;
@@ -590,8 +591,10 @@ __END__
       padding: 30px 10px 10px;
       position: relative;
     }
-    div:nth-child(odd) td {
-      background: #fafafa;
+    .first {
+      border: none;
+      padding: 5px 5px 5px;
+      position: relative;
     }
     a {
       text-decoration: none;
@@ -610,14 +613,14 @@ __END__
     = yield
 
 @@ index
-%div.td{id: "top"}
+%div.first{id: "top"}
   #{haml :form}
 - if @err
   %div.td
     <pre>#{@err}</pre>
 
 - if @params[:id].empty? && @results.count > 0
-  %div.td
+  %div.first
     %ul
       current page:
       - @results.each do |r|
@@ -650,24 +653,25 @@ __END__
       <pre id="highlighted_#{r_index}">#{r[:highlight]}</pre>
 
 -if @results.count > 0
-  %div.td
+  %div.first
     #{haml :form}
 
-%div.td
+%div.first
   - if @results.count == 0 && @q.empty?
-    %ul <b>case sensitive</b> indexed the following repositories (date of pull / name / indexed sha):
-    =preserve do
-      <pre>#{dump_git_status}</pre>
-    some examples:
-    %li
-      %a{ href: "?q=struct+rtl8169_private"} struct rtl8169_private
-    %li
-      %a{ href: "?q=%40glibc+%40malloc+realloc"} @glibc @malloc realloc
-    %li
-      %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
-    %li
-      %a{ href: "?q=IndexSearcher"} IndexSearcher
-    %li
-      %a{ href: "?q=postings+nextPosition"} postings nextPosition
-
+    %ul
+      <b>case sensitive</b> indexed the following repositories (date of pull / name / indexed sha):
+      =preserve do
+        <pre>#{dump_git_status}</pre>
+      some examples:
+      %li
+        %a{ href: "?q=struct+rtl8169_private"} struct rtl8169_private
+      %li
+        %a{ href: "?q=%40glibc+%40malloc+realloc"} @glibc @malloc realloc
+      %li
+        %a{ href: "?q=PayloadHelper+encodeFloat"} PayloadHelper encodeFloat
+      %li
+        %a{ href: "?q=IndexSearcher"} IndexSearcher
+      %li
+        %a{ href: "?q=postings+nextPosition"} postings nextPosition
+%div.footer
   using <a href="https://github.com/jackdoe/bzzz">github.com/jackdoe/bzzz</a> lucene wrapper, __FILE__ lives at: <a href="https://github.com/jackdoe/bzzz/blob/master/example/app.rb">https://github.com/jackdoe/bzzz/blob/master/example/app.rb</a> <b>patches/issues welcome</b>

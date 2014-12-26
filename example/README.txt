@@ -2,13 +2,14 @@ required:
     sinatra
     curb
     haml
-    some .c files in /usr/src/linux
 
 for the first time run:
-  $ ruby app.rb do-index # this will index /usr/src/linux
+  $ ruby app.rb source-init # this will create ../../SOURCE-TO-INDEX and git clone linux,glibc .. etc
 after that run:
   $ ruby app.rb
 
+to update it, every once in a while do:
+  $ ruby app.rb do-index # it will pull the cloned repositories in SOURCE-TO-INDEX and index the changed files
 open:
   http://localhost:4567/?q=void+foo
 

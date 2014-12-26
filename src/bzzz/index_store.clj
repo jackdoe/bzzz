@@ -91,25 +91,27 @@
     (add-facet-field-single doc dim val)))
 
 (defn store-on-shard [index documents facets analyzer force-merge]
-  (if (> (count documents) 0)
+  (let [t0 (time-ms)]
     (use-writer index
                 (parse-analyzer analyzer)
                 force-merge
                 (fn [^IndexWriter writer ^DirectoryTaxonomyWriter taxo]
                   (let [config (get-facet-config facets)
-                        spatial-strategy (new-spatial-strategy)]
+                        spatial-strategy (new-spatial-strategy)
+                        analyzer (.getAnalyzer writer)]
                     (doseq [m documents]
                       (let [doc (map->document m spatial-strategy)]
                         (doseq [[dim f-info] facets]
                           (if-let [f-val ((keyword dim) m)]
-                            (add-facet-field doc dim f-val f-info (.getAnalyzer writer))))
+                            (add-facet-field doc dim f-val f-info analyzer)))
                         (if (:id m)
                           (.updateDocument writer ^Term (Term. ^String id-field
                                                                (as-str (:id m)))
                                            (.build config taxo doc))
                           (.addDocument writer (.build config taxo doc))))))
-                  { index true }))
-    { index false }))
+                  { index {:done true
+                           :took-internal (time-took t0)
+                           :attempt-to-write (count documents)}}))))
 
 (defn store [input]
   (let [{:keys [index documents analyzer

@@ -197,35 +197,52 @@
       (swap! write-refresh-lock* assoc index obj)
       obj)))
 
+(defmacro locking-took
+  [x index stat-name & body]
+  `(let [t0# (time-ms)]
+     (locking ~x
+       (stat/update-took-count ~index
+                               (str ~stat-name "-to-lock")
+                               (time-took t0#))
+       (try
+         ~@body
+         (finally
+           (stat/update-took-count ~index
+                                   ~stat-name
+                                   (time-took t0#)))))))
+
 (defn use-writer [index analyzer force-merge callback]
-  (locking (get-write-refresh-lock index)
-    (let [writer (new-index-writer index analyzer)
-          taxo (new-taxo-writer index)
-          t0 (time-ms)]
-      (try
-        (do
-          (.prepareCommit writer)
-          (.prepareCommit taxo)
-          (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)
-                force-merge (int-or-parse force-merge)]
-            (.commit taxo)
-            (.commit writer)
-            (if (> force-merge 0)
-              (.forceMerge writer force-merge))
-            rc))
-        (catch Exception e
-          (do
-            (stat/update-error index "use-writer")
-            (if-not (instance? OutOfMemoryError e)
-              (do
-                (.rollback taxo)
-                (.rollback writer)))
-            (throw e)))
-        (finally
-          (do
-            (safe-close-taxo taxo)
-            (safe-close-writer writer)
-            (stat/update-took-count index "use-writer"(time-took t0))))))))
+  (locking-took (get-write-refresh-lock index)
+                index
+                "use-writer"
+                (let [writer (new-index-writer index analyzer)
+                      taxo (new-taxo-writer index)]
+                  (try
+                    (do
+                      (.prepareCommit writer)
+                      (.prepareCommit taxo)
+                      (let [rc (callback ^IndexWriter writer ^DirectoryTaxonomyWriter taxo)
+                            force-merge (int-or-parse force-merge)]
+                        (let [t0 (time-ms)]
+                          (.commit taxo)
+                          (.commit writer)
+                          (stat/update-took-count index "use-writer-commit" (time-took t0)))
+                        (if (> force-merge 0)
+                          (.forceMerge writer force-merge))
+                        rc))
+                    (catch Exception e
+                      (do
+                        (stat/update-error index "use-writer")
+                        (if-not (instance? OutOfMemoryError e)
+                          (do
+                            (.rollback taxo)
+                            (.rollback writer)))
+                        (throw e)))
+                    (finally
+                      (do
+                        (safe-close-taxo taxo)
+                        (safe-close-writer writer)))))))
+
 
 (defn use-writer-all [index callback]
   (doseq [name (index-name-matching index)]
@@ -264,17 +281,16 @@
 
 (defn refresh-single-searcher-manager [index ^SearcherTaxonomyManager manager]
   (log/debug "refreshing: " index " " manager)
-  (let [t0 (time-ms)]
-    (try
+  (try
+    (locking-took (get-write-refresh-lock index)
+                  index
+                  "refresh-search-managers"
+                  (.maybeRefresh manager))
+    (catch Throwable e
       (do
-        (locking (get-write-refresh-lock index)
-          (.maybeRefresh manager))
-        (stat/update-took-count index "refresh-search-managers" (time-took t0)))
-      (catch Throwable e
-        (do
-          (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
-          (try-close-manager manager)
-          (swap! name->manager* dissoc index))))))
+        (log/info (str index " refresh exception, closing it. Exception: " (ex-str e)))
+        (try-close-manager manager)
+        (swap! name->manager* dissoc index)))))
 
 (defn refresh-search-managers []
   (let [t0 (time-ms)]

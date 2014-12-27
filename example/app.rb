@@ -426,7 +426,7 @@ get '/' do
         if @params[:id].empty?
           row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| bold_and_color(x,max_line_digits,"?q=#{@q.escapeCGI}&id=#{row[:id]}") }.join()
         else
-          row[:highlight] = highlighted.map { |x| bold_and_color(x,max_line_digits) }.join("\n")
+          row[:highlight] = highlighted.map { |x| bold_and_color(x,max_line_digits) }.join("")
         end
 
         @results << row

@@ -118,7 +118,7 @@ public class TermPayloadClojureScoreQuery extends Query {
                 if (scorers.size() == 0)
                     return null;
                 clj_context.fill_field_cache(context.reader(),field_cache_req);
-                int docBase = context.docBase;
+                final int docBase = context.docBase;
 
                 return new Scorer(weight) {
                     public int doc_id = -1;

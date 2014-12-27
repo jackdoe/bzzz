@@ -279,7 +279,6 @@
               (into-array Collector
                           [score-collector
                            facet-collector]))]
-    (hack-share-local-state hackish-queries)
     (.search searcher
              query
              spatial-filter

@@ -11,6 +11,7 @@
   (testing "cleanup-before"
     (delete-all test-index-name))
 
+  ;; TODO(bnikolov) add tests for multi term queries
   (testing "query"
     (let [x (reset! allow-unsafe-queries* true)
           clj-eval "

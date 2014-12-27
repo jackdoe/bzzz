@@ -19,7 +19,7 @@ SHOW_AROUND_MATCHING_LINE = 2
 IMPORTANT_LINE_SCORE = 1
 ALL_TOKENS_MATCH_SCORE = 10
 FILEPATH_MATCH_SCORE = 2000
-
+SHOW_MATCHING_LINES_PER_ITEM = 50
 DEFAULT_SOURCE_ROOT = File.realpath(File.join(File.dirname(__FILE__),"..","..","SOURCE-TO-INDEX"))
 DEFAULT_SOURCE_ROOT_STATUS_NAME = "git.status"
 DEFAULT_SOURCE_ROOT_STATUS = File.join(DEFAULT_SOURCE_ROOT,DEFAULT_SOURCE_ROOT_STATUS_NAME)
@@ -82,7 +82,7 @@ class String
 end
 
 class Store
-  @index = "example-index"
+  @index = "example-index-bitmap"
   @host = "http://localhost:3000"
 
   def Store.save(docs = [])
@@ -261,6 +261,7 @@ end
 EXPR_EXPLAIN_BIT = 4
 EXPR_IMPORTANT_BIT = 1
 EXPR_SUM_SCORE_BIT = 8
+
 def clojure_expression_code(search_string)
   return {
     "term-payload-clj-score" => {
@@ -270,51 +271,20 @@ def clojure_expression_code(search_string)
       "match-all-if-empty" => true,
       "no-zero" => true,
       "clj-eval" => %{
-;; NOTE: user input here simply leads to RCE!
+;; NOTE: user input here simply leads to RCE
 (fn [^bzzz.java.query.ExpressionContext ctx]
-  (let [maxed-tf-idf (.maxed_tf_idf ctx)
-        sum-score-key (bit-or (bit-shift-left (.global_docID ctx) 32)
-                              #{EXPR_SUM_SCORE_BIT}
-                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0))
-        sum-score (+ maxed-tf-idf (.local-state-get ctx sum-score-key 0))]
-    (.local-state-set ctx sum-score-key sum-score)
-    (.invoke-for-each-int-payload
-     ctx
-     (fn [payload]
-       (let [line-no (bit-and payload 0xFFFFF)
-             ;; (doc-id << 32) | (line-no << 8) | (explanation ? explanation-bit : 0)
-             line-key (bit-or (bit-shift-left (.global_docID ctx) 32)
-                              (bit-shift-left line-no 8)
-                              (if (.explanation ctx) #{EXPR_EXPLAIN_BIT} 0))
-
-             ;; translates to matches[line] |= current token position bit
-             uniq-tokens-seen-on-this-line (if (= 1 (.token_count ctx) )
-                                             1
-                                             (bit-or (.local-state-get ctx line-key 0) (.token_bit_position ctx)))]
-         ;; TODO(bnikolov): fix this to work with tokens occuring 1000~ times per document
-         ;; maybe move the whole thing to one continous payload and use one bit per line
-         (when-not (= 1 (.token_count ctx))
-           (.local-state-set ctx line-key uniq-tokens-seen-on-this-line))
-
-         (if (= uniq-tokens-seen-on-this-line (.token_count_mask ctx))
-           (do
-             (.current-counter-set ctx 1)
-             (.current-score-add ctx #{ALL_TOKENS_MATCH_SCORE})
-             (when (.explanation ctx)
-               (.explanation-add ctx #{ALL_TOKENS_MATCH_SCORE} (str "line: (" line-no ") match mask: " (.token_count_mask ctx)))
-               (.result-state-append ctx line-no))
-             (when (> (bit-and payload #{F_IMPORTANT_LINE}) 0)
-               (when (.explanation ctx)
-                 (.explanation-add ctx #{IMPORTANT_LINE_SCORE} (str "line: (" line-no ") considered important")))
-               (.current-score-add ctx #{IMPORTANT_LINE_SCORE})))))
-       nil))
-
-    (if (= (.current-counter ctx) 1)
-      (do
-        (when (.explanation ctx)
-          (.explanation-add ctx sum-score "summed tf-idf scores"))
-        (float (+ (.local-state-get ctx sum-score-key 0) (.current-score ctx))))
-      (float 0))))}
+  (if (= (.missing ctx) 0)
+    (let [bitmap (.context_anded_bitmaps ctx)
+          cardinality (.cardinality bitmap)]
+      (if (= 0 cardinality)
+        (float 0)
+        (let [sum-maxed-tf-idf (.sum-maxed-tf-idf ctx)]
+          (when (.explanation ctx)
+            (.explanation-add ctx sum-maxed-tf-idf "sum maxed tf/idf")
+            (.explanation-add ctx (* #{ALL_TOKENS_MATCH_SCORE} cardinality) (str "#{ALL_TOKENS_MATCH_SCORE} * bitmap cardinality:" cardinality " (lines matching all terms)"))
+            (.result-state-append ctx (.toList bitmap)))
+          (float (+ sum-maxed-tf-idf (* 10 cardinality))))))
+    (float 0)))}
     }
   }
 end
@@ -325,7 +295,6 @@ def clojure_expression_path(search_string)
         field: FILENAME_FIELD,
         value: search_string,
         tokenize: true,
-        "tokenize-occur" => "SHOULD",
         "match-all-if-empty" => true,
         "no-zero" => false,
         "clj-eval" => %{
@@ -400,8 +369,10 @@ get '/' do
         }
 
         state = h["_result_state"] || []
+        state = state.flatten
         matching = {}
-        state.flatten.each do |line_no|
+        row[:n_matches] = state.count
+        state.each do |line_no|
           matching[line_no] = true
         end
 
@@ -409,16 +380,16 @@ get '/' do
         around = 0
         colors = ["#3B4043","#666699"]
         max_line_no = 0
-
-        h[SEARCH_FIELD].split(LINE_SPLITTER).each_with_index do |line,line_index|
+        left = SHOW_MATCHING_LINES_PER_ITEM
+        line_index = 0
+        h[SEARCH_FIELD].each_line do |line|
           item = { show: false, bold: false, line_no: line_index, line: line.escape }
           max_line_no = line_index if max_line_no < line_index
-
           if matching[line_index]
             item[:bold] = true
             item[:show] = true
             item[:color] = colors[0]
-            row[:n_matches] += 1
+            left -= 1
             row[:first_match] ||= line_index
             if @params[:id].empty? && item[:show]
               if @params[:id].empty? && highlighted.count > 1
@@ -443,14 +414,17 @@ get '/' do
               end
             end
           end
-
+          line_index += 1
           highlighted << item
+          if !@params[:id]
+            break if left < 0
+          end
         end
 
         max_line_digits = max_line_no.to_s.length
 
         if @params[:id].empty?
-          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| bold_and_color(x,max_line_digits,"?q=#{@q.escapeCGI}&id=#{row[:id]}") }.join("\n")
+          row[:highlight] = highlighted.select { |x| x[:show] }.map { |x| bold_and_color(x,max_line_digits,"?q=#{@q.escapeCGI}&id=#{row[:id]}") }.join()
         else
           row[:highlight] = highlighted.map { |x| bold_and_color(x,max_line_digits) }.join("\n")
         end
@@ -629,6 +603,10 @@ __END__
             #{r[:n_matches]}
           %small
             lines matching, updated #{r[:updated]}
+
+- if @params[:id]
+  %div.first
+    &nbsp;
 
 - @results.each_with_index do |r,r_index|
   %div.td{id: r[:id]}

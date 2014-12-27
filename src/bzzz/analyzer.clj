@@ -59,10 +59,7 @@
     (case (as-str name)
       "whitespace" (WhitespaceTokenizer. *version* char-filter)
       "letter" (LetterTokenizer. *version* char-filter)
-      "code" (CodeTokenizer. char-filter
-                             (int (get obj :line-offset 0))
-                             (int (get obj :flags 0)))
-
+      "code" (CodeTokenizer. char-filter)
       "keyword" (KeywordTokenizer. char-filter)
       "edge-ngram" (EdgeNGramTokenizer. *version*
                                         char-filter

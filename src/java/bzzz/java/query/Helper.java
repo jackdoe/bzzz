@@ -9,12 +9,21 @@ import org.apache.lucene.analysis.*;
 import org.apache.lucene.analysis.tokenattributes.*;
 import java.io.*;
 import java.util.*;
-
+import com.googlecode.javaewah.EWAHCompressedBitmap;
+import com.googlecode.javaewah.symmetric.*;
 public class Helper {
     public static int decode_int_payload(BytesRef p) {
         if (p == null)
             return 0;
         return PayloadHelper.decodeInt(p.bytes,p.offset);
+    }
+
+    public static byte[] serialize_compressed_bitmap(EWAHCompressedBitmap bitmap) throws IOException {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream oo = new ObjectOutputStream(bos);
+            bitmap.writeExternal(oo);
+            oo.close();
+            return bos.toByteArray();
     }
 
     public static int next_doc_and_next_position(DocsAndPositionsEnum postings) throws IOException {
@@ -23,6 +32,7 @@ public class Helper {
             postings.nextPosition();
         return n;
     }
+
     public static int advance_and_next_position(DocsAndPositionsEnum postings, int target) throws IOException {
         int n = postings.advance(target);
         if (n == target && n != DocsAndPositionsEnum.NO_MORE_DOCS)

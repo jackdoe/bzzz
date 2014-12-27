@@ -1,4 +1,5 @@
 package bzzz.java.query;
+
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.util.*;
@@ -9,8 +10,10 @@ import clojure.lang.Var;
 import clojure.lang.IFn;
 import clojure.lang.Compiler;
 import java.io.StringReader;
+import java.lang.StringBuilder;
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap.Builder;
 import bzzz.java.query.ExpressionContext;
+import bzzz.java.query.ExpressionContext.*;
 
 public class TermPayloadClojureScoreQuery extends Query {
     // THIS QUERY IS NOT THREAD SAFE! at the moment this is ok because of the way we create one (future) per shard
@@ -22,17 +25,18 @@ public class TermPayloadClojureScoreQuery extends Query {
 
     // the clj_context was moved to the query from the Weight easier access for dynamic facets
     public final ExpressionContext clj_context;
-    final public Term term;
+    final public List<Term> terms;
     public String expr;
     public String[] field_cache_req;
     public IFn clj_expr;
 
-    public TermPayloadClojureScoreQuery(Term term, String expr, String[] field_cache_req, List<Map<Object,Object>> fba_settings) throws Exception {
-        this.term = term;
+    public TermPayloadClojureScoreQuery(List <Term>terms, String expr, String[] field_cache_req, List<Map<Object,Object>> fba_settings) throws Exception {
+        this.terms = terms;
         this.expr = expr;
         this.field_cache_req = field_cache_req;
         this.clj_expr = eval_and_cache(expr);
         this.clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE,fba_settings);
+        this.clj_context.total_term_count = terms.size();
     }
 
     public IFn eval_and_cache(String raw) {
@@ -56,14 +60,27 @@ public class TermPayloadClojureScoreQuery extends Query {
     }
 
     @Override
-    public String toString(String field) { return term.toString() + "@" + expr; }
+    public String toString(String field) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        for (Term t : terms) {
+            sb.append("[");
+            sb.append(t.toString());
+            sb.append("]");
+        }
+        sb.append("}");
+        return sb.toString();
+    }
 
     @Override
     public Weight createWeight(final IndexSearcher searcher) throws IOException {
         final Query query = this;
-        clj_context.collection_statistics = searcher.collectionStatistics(term.field());
+
+        for (Term t : terms)
+            clj_context.collection_statistics.put(t,searcher.collectionStatistics(t.field()));
 
         return new Weight() {
+            public final Weight weight = this;
             @Override
             public String toString() { return "clojure-payload-score-weight(" + query.toString() + ")"; }
             @Override
@@ -84,13 +101,78 @@ public class TermPayloadClojureScoreQuery extends Query {
                     clj_context.explanation = new Explanation();
                     float score = s.score();
                     clj_context.explanation.setValue(score);
-                    clj_context.explanation.setDescription("result of: " + term.toString() + " @ " + expr);
+                    clj_context.explanation.setDescription("result of: " + query.toString() + " @ " + expr);
                     return clj_context.explanation;
                 }
-                return new Explanation(0f,"no matching term");
+                return new Explanation(0f,"no matching");
             }
 
             public Scorer createScorer(AtomicReaderContext context, Bits acceptDocs) throws IOException {
+                final List<Scorer> scorers = new ArrayList<Scorer>();
+                clj_context.per_term.clear();
+                for (int i = 0; i < terms.size(); i++) {
+                    Scorer s = createSubScorer(context,acceptDocs,terms.get(i),i);
+                    if (s != null)
+                        scorers.add(s);
+                }
+                if (scorers.size() == 0)
+                    return null;
+                clj_context.fill_field_cache(context.reader(),field_cache_req);
+                int docBase = context.docBase;
+
+                return new Scorer(weight) {
+                    public int doc_id = -1;
+                    @Override
+                    public String toString() { return "scorer(" + weight.getQuery().toString() + ")"; }
+                    @Override
+                    public int docID() { return doc_id; }
+                    @Override
+                    public int freq() throws IOException {
+                        int f = 0;
+                        for (Scorer s : scorers)
+                            f += s.freq();
+                        return f;
+                    }
+                    @Override
+                    public long cost() {
+                        int c = 0;
+                        for (Scorer s : scorers)
+                            c += s.cost();
+                        return c;
+                    }
+                    @Override
+                    public int nextDoc() throws IOException {
+                       int newDoc = NO_MORE_DOCS;
+                       for (Scorer sub : scorers) {
+                           int curDoc = sub.docID();
+                           if (curDoc==doc_id) curDoc = sub.nextDoc();
+                           if (curDoc < newDoc) newDoc = curDoc;
+                       }
+                       this.doc_id = newDoc;
+                       return newDoc;
+                    }
+                    @Override
+                    public int advance(int target) throws IOException {
+                        int newDoc = NO_MORE_DOCS;
+                        for (Scorer sub : scorers) {
+                            int curDoc = sub.docID();
+                            if (curDoc < target) curDoc = sub.advance(target);
+                            if (curDoc < newDoc) newDoc = curDoc;
+                        }
+                        this.doc_id = newDoc;
+                        return newDoc;
+                    }
+                    @Override
+                    public float score() throws IOException {
+                        clj_context.reset();
+                        clj_context.doc_id = doc_id;
+                        clj_context.global_doc_id = doc_id + docBase;
+                        return (float) clj_expr.invoke(clj_context);
+                    }
+                };
+            }
+
+            public Scorer createSubScorer(AtomicReaderContext context, Bits acceptDocs, Term term,int pos) throws IOException {
                 Terms terms = context.reader().terms(term.field());
                 if (terms == null)
                     return null;
@@ -106,28 +188,29 @@ public class TermPayloadClojureScoreQuery extends Query {
                 if (postings == null)
                     throw new IllegalStateException("field <" + term.field() + "> was indexed without position data");
 
-                clj_context.postings = postings;
-                clj_context.fill_field_cache(context.reader(),field_cache_req);
-                clj_context.doc_freq = termsEnum.docFreq(); // FIXME: wrong, poc
-                clj_context.docBase = context.docBase;
+                PerTerm pt = new PerTerm();
+                pt.postings = postings;
+                pt.doc_freq = termsEnum.docFreq(); // FIXME: the number here is completely wrong, it is just from the local segment. wrong, poc
+                pt.per_term_collection_statistics = clj_context.collection_statistics.get(term);
+                pt.token_position = pos;
+                clj_context.per_term.add(pt);
+
                 return new Scorer(weight) {
                     @Override
                     public int docID() { return postings.docID(); }
                     @Override
                     public int freq() throws IOException { return postings.freq(); }
                     @Override
-                    public int nextDoc() throws IOException { return postings.nextDoc(); }
+                    public int nextDoc() throws IOException { return Helper.next_doc_and_next_position(postings); }
                     @Override
-                    public int advance(int target) throws IOException { return postings.advance(target); }
+                    public int advance(int target) throws IOException { return Helper.advance_and_next_position(postings,target); }
                     @Override
                     public long cost() { return postings.cost(); }
                     @Override
                     public String toString() { return "scorer(" + weight.getQuery().toString() + ")"; }
                     @Override
                     public float score() throws IOException {
-                        clj_context.reset();
-                        clj_context.postings_next_position();
-                        return (float) clj_expr.invoke(clj_context);
+                        throw new IllegalStateException("nobody should use this score()");
                     }
                 };
             }

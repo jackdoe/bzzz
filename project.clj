@@ -26,6 +26,7 @@
                  [org.slf4j/slf4j-log4j12 "1.7.7"]
                  [log4j/log4j "1.2.17"]
                  [overtone/at-at "1.2.0"]
+                 [com.googlecode.javaewah/JavaEWAH "0.9.2"]
                  [http-kit "2.1.16"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [redis.clients/jedis "2.6.0"] ;; drop the redis support?

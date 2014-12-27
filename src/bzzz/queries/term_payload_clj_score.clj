@@ -1,7 +1,7 @@
 (ns bzzz.queries.term-payload-clj-score
   (use bzzz.util)
   (:import (org.apache.lucene.index Term)
-           (org.apache.lucene.search BooleanQuery BooleanClause$Occur MatchAllDocsQuery)
+           (org.apache.lucene.search MatchAllDocsQuery)
            (bzzz.java.query TermPayloadClojureScoreQuery NoZeroQuery ExpressionContext Helper)))
 
 (defn fixed-bucket-aggregation-result [^TermPayloadClojureScoreQuery query]
@@ -17,37 +17,23 @@
 (defn extract-result-state [^TermPayloadClojureScoreQuery query doc-id]
   (.result_state_get_for_doc ^ExpressionContext (.clj_context query) doc-id))
 
-(defn share-local-state [^TermPayloadClojureScoreQuery source ^TermPayloadClojureScoreQuery dest]
-  (.swap-local-state ^ExpressionContext (.clj_context dest)
-                     (.local-state ^ExpressionContext (.clj_context source))))
-
-
 (defn parse
   [generic input analyzer]
-  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty tokenize-occur]
-         :or {field-cache [] tokenize false tokenize-occur nil no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input
-         generator (fn [value n cnt]
-                     (let [q ^TermPayloadClojureScoreQuery (TermPayloadClojureScoreQuery. (Term. ^String field ^String value)
-                                                                                          clj-eval
-                                                                                          ^"[Ljava.lang.String;" (into-array String field-cache)
-                                                                                          fixed-bucket-aggregation)
-                           clj_context ^ExpressionContext (.clj_context q)]
-                       (.set_token_position clj_context n cnt)
-                       q))
-         tokenize-occur (if tokenize-occur (BooleanClause$Occur/valueOf tokenize-occur) BooleanClause$Occur/MUST)]
+  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty]
+         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
-    (if tokenize
-      (let [top (BooleanQuery. false)
-            tokens (Helper/tokenize field value analyzer)]
-        (if (and match-all-if-empty (= 0 (count tokens)))
-          (MatchAllDocsQuery.)
-          (do
-            (doseq [[index token] (indexed tokens)]
-              (.add top (generator token index (count tokens)) tokenize-occur))
-            (when (= tokenize-occur BooleanClause$Occur/SHOULD)
-              (.setMinimumNumberShouldMatch top 1))
-            (if no-zero
-              (NoZeroQuery. top)
-              top))))
-      (generator value 0 1))))
+    (let [tokens (if tokenize
+                   (Helper/tokenize field value analyzer)
+                   (if (seq? value) value [value]))]
+      (if (and match-all-if-empty (= 0 (count tokens)))
+        (MatchAllDocsQuery.)
+        (let [terms (into [] (for [token tokens]
+                               (Term. ^String field ^String token)))
+              query (TermPayloadClojureScoreQuery. terms
+                                                   clj-eval
+                                                   ^"[Ljava.lang.String;" (into-array String field-cache)
+                                                   fixed-bucket-aggregation)]
+          (if no-zero
+            (NoZeroQuery. query)
+              query))))))

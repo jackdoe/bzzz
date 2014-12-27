@@ -1,4 +1,5 @@
 package bzzz.java.analysis;
+import bzzz.java.query.*;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.*;
@@ -8,204 +9,101 @@ import org.apache.lucene.analysis.payloads.*;
 import org.apache.lucene.analysis.tokenattributes.*;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.AttributeFactory;
+import com.googlecode.javaewah.EWAHCompressedBitmap;
+import com.googlecode.javaewah.symmetric.*;
 
 public class CodeTokenizer extends Tokenizer {
-    public static int FLAG_IMPORTANT = 1 << 31;
     public static int MIN_TOKEN_LEN = 2;
-    public static int AGAIN = -2;
-
+    public static int MAX_TOKEN_LEN = 64;
     private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
     private final PayloadAttribute payAtt = addAttribute(PayloadAttribute.class);
-    private final CodeToken current_token = new CodeToken();
 
-    public final char[] IGNORE = new char[256];
+    Iterator<Map.Entry<String,EWAHCompressedBitmap>> iterator = null;
 
-    int line = 0;
-    int flags = 0;
-    int line_offset = 0;
-    int line_flags = 0;
-    int ch = 0;
-    int reuse = 0;
-
-    public CodeTokenizer(Reader input,int line_offset, int flags) {
+    public CodeTokenizer(Reader input) {
         super(input);
-        this.flags = flags;
-        this.line_offset = line_offset;
-        IGNORE['.'] = 1;
-        IGNORE['$'] = 1;
-        IGNORE[';'] = 1;
-        IGNORE['['] = 1;
-        IGNORE[']'] = 1;
-        IGNORE['('] = 1;
-        IGNORE[')'] = 1;
-        IGNORE['{'] = 1;
-        IGNORE['}'] = 1;
-        IGNORE[' '] = 1;
-    }
-
-    public boolean emmit(int ov) {
-
-        reuse = ov;
-        if (current_token.length >= MIN_TOKEN_LEN) {
-            clearAttributes();
-            current_token.copy_into_attributes(termAtt,payAtt,(line + line_offset) | flags | line_flags);
-
-            if (current_token.is_important())
-                line_flags |= FLAG_IMPORTANT;
-
-            current_token.reset();
-
-            return true;
-        }
-        current_token.reset();
-        return false;
     }
 
     @Override
     public boolean incrementToken() throws IOException {
-        int prev_symbol = -1;
+        // expect call to reset(), which will fill all the tokens for the current document
+        if (iterator == null)
+            throw new IllegalStateException("must call reset() before incrementToken()");
 
-        while ((reuse == AGAIN) || (ch = input.read()) != -1) {
-            if (ch == '\n' || ch == '\r') {
-                boolean emmitted = emmit(0);
-                line++;
-                if (emmitted) return true;
+        while (iterator.hasNext())
+        {
+            Map.Entry<String,EWAHCompressedBitmap> entry = iterator.next();
 
-                line_flags = 0;
+            clearAttributes();
+            termAtt.setEmpty().append(entry.getKey());
 
-                prev_symbol = -1;
-            } else {
+            byte[] serialized = Helper.serialize_compressed_bitmap(entry.getValue());
+            payAtt.setPayload(new BytesRef(serialized, 0, serialized.length));
 
-                if ((prev_symbol != -1 && prev_symbol != ch)) {
-                    if (emmit(AGAIN)) return true;
-                    prev_symbol = -1;
-                }
-
-                if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' || (ch >= '0' && ch <= '9')) {
-                    current_token.append(ch);
-                } else {
-                    if (prev_symbol == -1 || (prev_symbol != -1 && prev_symbol != ch)) {
-                        if (emmit(AGAIN)) return true;
-                        prev_symbol = -1;
-                    }
-
-                    if (IGNORE[(char) ch] == 0 && ((ch >= ':' && ch <= '@') || (ch >= '!' && ch <= '/'))) {
-                        current_token.append(ch);
-                        prev_symbol = ch;
-                    } else {
-                        // index only symbols that occur more than once, like ==, **
-                        if (emmit(0)) return true;
-                        prev_symbol = -1;
-                    }
-                }
-            }
-            reuse = 0;
+            return true;
         }
-
-        if (emmit(0)) return true;
-
         return false;
     }
 
     @Override
     public void reset() throws IOException {
         super.reset();
-        line = 0;
-        line_flags = 0;
-        ch = 0;
-        current_token.reset();
+        Map<String,EWAHCompressedBitmap> everything = processInput(input);
+        iterator = everything.entrySet().iterator();
     }
 
-    public static final class CodeToken {
-        public static final char[][] IMPORTANT = {{'s','u','b'},
-                                                  {'p','a','c','k','a','g','e'},
-                                                  {'p','u','b','l','i','c','p','r','i','v','a','t','e'}};
-        public static int min_important_token_len = 3;
+    public static void appendAndClearToken(Map<String,EWAHCompressedBitmap> into, StringBuilder token, int line) {
+        if (token.length() >= MIN_TOKEN_LEN && token.length() < MAX_TOKEN_LEN) {
+            String s = token.toString();
 
-        public static int MAX_TOKEN_LEN = 256;
-        public char[] buffer = new char[MAX_TOKEN_LEN];
-        public byte[] payload_buffer = new byte[4];
-
-        public int length = 0;
-
-        public void append(int c) {
-            if (this.length < buffer.length) {
-                buffer[this.length] = (char) c;
-                this.length++;
+            EWAHCompressedBitmap val = into.get(s);
+            if (val == null) {
+                val = EWAHCompressedBitmap.bitmapOf(line);
+                into.put(s,val);
+            } else {
+                val.set(line);
             }
         }
+        token.setLength(0);
+    }
 
-        public int fit_and_inc_len(int len) {
-            int to_write = Math.min(buffer.length - this.length, len);
-            this.length += to_write;
-            return to_write;
-        }
+    public static Map<String,EWAHCompressedBitmap> processInput(Reader input) throws IOException {
+        Map<String,EWAHCompressedBitmap> result = new HashMap<String,EWAHCompressedBitmap>();
+        int line = 0;
+        int ch;
+        int prev_symbol = -1;
+        StringBuilder sb = new StringBuilder();
+        while ((ch = input.read()) != -1) {
+            if (ch == '\n' || ch == '\r') {
+                appendAndClearToken(result,sb,line);
+                line++;
+                prev_symbol = -1;
+            } else {
+                if ((prev_symbol != -1 && prev_symbol != ch)) {
+                    appendAndClearToken(result,sb,line);
+                    prev_symbol = -1;
+                }
 
-        public void append(char[] b) {
-            int write_pos = length;
-            System.arraycopy(b, 0, buffer, write_pos, fit_and_inc_len(b.length));
-        }
-
-        public void append(String s) {
-            int write_pos = this.length;
-            s.getChars(0,fit_and_inc_len(s.length()),buffer, write_pos);
-        }
-
-        public void append(StringBuilder sb) {
-            int write_pos = this.length;
-            sb.getChars(0,fit_and_inc_len(sb.length()),buffer, write_pos);
-        }
-
-        public void reset() {
-            length = 0;
-        }
-
-        public void encodeInt(int payload){
-            payload_buffer[0] = (byte)(payload >> 24);
-            payload_buffer[1] = (byte)(payload >> 16);
-            payload_buffer[2] = (byte)(payload >>  8);
-            payload_buffer[3] = (byte) payload;
-        }
-        public void copy_into_attributes(CharTermAttribute catt, PayloadAttribute patt,int payload) {
-            encodeInt(payload);
-            patt.setPayload(new BytesRef(payload_buffer));
-            catt.resizeBuffer(length);
-            catt.setLength(length);
-            catt.copyBuffer(buffer,0,this.length);
-        }
-
-        public boolean is_important() {
-            if (this.length < min_important_token_len)
-                return false;
-
-            for (int i = 0; i < IMPORTANT.length; i++) {
-                if (IMPORTANT[i].length == this.length) {
-                    boolean mismatch = false;
-                    for (int j = 0; j < IMPORTANT[i].length; j++) {
-                        if (IMPORTANT[i][j] != buffer[j]) {
-                            mismatch = true;
-                            break;
-                        }
+                if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_' || (ch >= '0' && ch <= '9')) {
+                    sb.append((char) ch);
+                } else {
+                    if (prev_symbol == -1 || (prev_symbol != -1 && prev_symbol != ch)) {
+                        appendAndClearToken(result,sb,line);
+                        prev_symbol = -1;
                     }
-                    if (!mismatch)
-                        return true;
+                    if (ch != ' ' && ((ch >= ':' && ch <= '@') || (ch >= '!' && ch <= '/'))) {
+                        sb.append((char) ch);
+                        prev_symbol = ch;
+                    } else {
+                        // index only symbols that occur more than once, like ==, **
+                        appendAndClearToken(result,sb,line);
+                        prev_symbol = -1;
+                    }
                 }
             }
-            return false;
         }
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < buffer.length; i++) {
+        appendAndClearToken(result,sb,line);
 
-                if (i < this.length) {
-                    sb.append(buffer[i]);
-                } else if (buffer[i] != 0) {
-                    sb.append("[");
-                    sb.append(buffer[i]);
-                    sb.append("]");
-                }
-            }
-            return sb.toString();
-        }
+        return result;
     }
 }

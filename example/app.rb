@@ -268,7 +268,7 @@ def clojure_expression_code(search_string)
       field: SEARCH_FIELD,
       value: search_string,
       tokenize: true,
-      "match-all-if-empty" => true,
+      "match-all-if-empty" => false,
       "no-zero" => true,
       "clj-eval" => %{
 ;; NOTE: user input here simply leads to RCE
@@ -295,7 +295,7 @@ def clojure_expression_path(search_string)
         field: FILENAME_FIELD,
         value: search_string,
         tokenize: true,
-        "match-all-if-empty" => true,
+        "match-all-if-empty" => false,
         "no-zero" => false,
         "clj-eval" => %{
 (fn [^bzzz.java.query.ExpressionContext ctx]
@@ -414,11 +414,14 @@ get '/' do
               end
             end
           end
+
           line_index += 1
           highlighted << item
+
           if !@params[:id]
             break if left < 0
           end
+
         end
 
         max_line_digits = max_line_no.to_s.length

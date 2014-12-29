@@ -3,7 +3,7 @@
   (use bzzz.const)
   (:import (java.io StringReader File Reader)
            (java.util.regex Pattern)
-           (bzzz.java.analysis CodeTokenizer)
+           (bzzz.java.analysis CodeTokenizer BytePayloadTokenizer)
            (org.apache.lucene.analysis.pattern PatternReplaceCharFilter)
            (org.apache.lucene.analysis.position PositionFilter)
            (org.apache.lucene.analysis.miscellaneous LengthFilter LimitTokenCountFilter)
@@ -60,6 +60,7 @@
       "whitespace" (WhitespaceTokenizer. *version* char-filter)
       "letter" (LetterTokenizer. *version* char-filter)
       "code" (CodeTokenizer. char-filter)
+      "byte-payload" (BytePayloadTokenizer. char-filter)
       "keyword" (KeywordTokenizer. char-filter)
       "edge-ngram" (EdgeNGramTokenizer. *version*
                                         char-filter

@@ -84,4 +84,29 @@ public class Helper {
 
         return out;
     }
+
+    public static List<TermPayload> tokenize_into_term_payload(String fieldName, String text, Analyzer analyzer) throws IOException {
+        List<TermPayload> out = new ArrayList<TermPayload>();
+
+        TokenStream stream = analyzer.tokenStream(fieldName, new StringReader(text));
+        stream.reset();
+        while (stream.incrementToken()) {
+            TermPayload tp = new TermPayload();
+            tp.term = stream.getAttribute(CharTermAttribute.class).toString();
+            tp.payload = BytesRef.deepCopyOf(stream.getAttribute(PayloadAttribute.class).getPayload());
+            out.add(tp);
+        }
+        stream.end();
+        stream.close();
+
+        return out;
+    }
+
+    public static final class TermPayload {
+        public String term;
+        public BytesRef payload;
+        public String toString() {
+            return term + " - " + payload.toString();
+        }
+    }
 }

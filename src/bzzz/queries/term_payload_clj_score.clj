@@ -19,8 +19,8 @@
 
 (defn parse
   [generic input analyzer]
-  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty]
-         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false}} input]
+  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty init-state]
+         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false init-state nil}} input]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
     (let [tokens (if tokenize
@@ -33,6 +33,7 @@
               query (TermPayloadClojureScoreQuery. terms
                                                    clj-eval
                                                    ^"[Ljava.lang.String;" (into-array String field-cache)
+                                                   init-state
                                                    fixed-bucket-aggregation)]
           (if no-zero
             (NoZeroQuery. query)

@@ -30,13 +30,16 @@ public class TermPayloadClojureScoreQuery extends Query {
     public String[] field_cache_req;
     public IFn clj_expr;
 
-    public TermPayloadClojureScoreQuery(List <Term>terms, String expr, String[] field_cache_req, List<Map<Object,Object>> fba_settings) throws Exception {
+    public TermPayloadClojureScoreQuery(List <Term>terms, String expr, String[] field_cache_req, Map<Object,Object> init_state,List<Map<Object,Object>> fba_settings) throws Exception {
         this.terms = terms;
         this.expr = expr;
         this.field_cache_req = field_cache_req;
         this.clj_expr = eval_and_cache(expr);
         this.clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE,fba_settings);
         this.clj_context.total_term_count = terms.size();
+        if (init_state != null) {
+            this.clj_context.local_state = init_state;
+        }
     }
 
     public IFn eval_and_cache(String raw) {

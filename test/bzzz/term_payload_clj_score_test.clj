@@ -26,35 +26,35 @@
         some_double (.fc_get_double ctx \"some_double\")
         existed (.local_state_get ctx some_integer)
         payload (.payload_get_int ctx)]
+    (.payload_get_long ctx 5 6)
     (.fba_aggregate_into_bucket ctx 0 some_integer 1)
     (.fba_aggregate_into_bucket ctx 1 some_long 1)
     (float 1)))"
           stored (store {:index test-index-name
                          :must-refresh true
-                         :documents [{:name_payload (str "zzzxxx|" 8)
+                         :documents [{:name_payload "zzzxxx|ffffffffffAABBCCDDEEFF zzzxxx|AAAAAAAA"
                                       :some_integer 1
                                       :some_float 10.0
                                       :some_double 20.0
                                       :some_long 30},
-                                     {:name_payload (str "zzzxxx|" 8)
+                                     {:name_payload "zzzxxx|88"
                                       :some_integer 2
                                       :some_float 10.0
                                       :some_double 20.0
                                       :some_long 30},
-                                     {:name_payload (str "zzzxxx|"7)
+                                     {:name_payload "zzzxxx|88"
                                       :some_integer 2
                                       :some_float 10.0
                                       :some_double 20.0
                                       :some_long 30}
-                                     {:name_payload (str "zzzxxx|"7)
+                                     {:name_payload "zzzxxx|99"
                                       :some_integer 2
                                       :some_float 10.0
                                       :some_double 20.0
                                       :some_long 30}]
                          :facets {:name_payload {:use-analyzer "name_payload"}}
                          :analyzer {:name_payload {:type "custom"
-                                                   :tokenizer "whitespace"
-                                                   :filter [{:type "delimited-payload"}]}}})
+                                                   :tokenizer "byte-payload"}}})
 
           r-no-zero (search {:index test-index-name
                              :explain true

@@ -84,6 +84,26 @@ public class ExpressionContext {
         return Helper.decode_int_payload(per_term.get(0).payload());
     }
 
+    public long payload_get_long(int len) throws IOException {
+        return payload_get_long(0, 0, len);
+    }
+    public long payload_get_long(int offset, int len) throws IOException {
+        return payload_get_long(0, offset, len);
+    }
+    public long payload_get_long(int term_index, int offset, int len) throws IOException {
+        BytesRef p = per_term.get(term_index).payload();
+        if (p == null)
+            return 0L;
+        long result = 0;
+        byte[] buf = p.bytes;
+        int internal_offset = p.offset;
+        len = Math.min(p.length - offset, len);
+        for (int i = 0; i < len; i++) {
+            result <<= 8;
+            result |= (buf[internal_offset + offset + i] & 0xFF);
+        }
+        return result;
+    }
 
     public float sum_maxed_tf_idf() throws IOException {
         float s = 0f;

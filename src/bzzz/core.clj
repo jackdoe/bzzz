@@ -100,6 +100,10 @@
    :discover-hosts @discover-hosts*
    :peers @peers*
    :timer @timer*
+   :mem {:heap-size (.totalMemory (Runtime/getRuntime))
+         :heap-free (.freeMemory (Runtime/getRuntime))
+         :heap-used (- (.totalMemory (Runtime/getRuntime)) (.freeMemory (Runtime/getRuntime)))
+         :heap-max-size (.maxMemory (Runtime/getRuntime))}
    :stat (index-stat/get-statistics)
    :next-gc @next-gc*})
 

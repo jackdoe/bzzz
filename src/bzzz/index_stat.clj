@@ -22,6 +22,9 @@
   (update index (str key "-took") took)
   (update index (str key "-count") 1))
 
+(defn update-count [index key n]
+  (update index (str key "-count") n))
+
 (defn update-error [index key]
   (update index (str key "-error") 1))
 

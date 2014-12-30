@@ -6,6 +6,7 @@
   (use bzzz.index-directory)
   (use bzzz.index-facet-common)
   (use bzzz.index-spatial)
+  (:require [bzzz.index-stat :as stat])
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)
            (java.lang OutOfMemoryError)
@@ -109,6 +110,7 @@
                                                                (as-str (:id m)))
                                            (.build config taxo doc))
                           (.addDocument writer (.build config taxo doc))))))
+                  (stat/update-count index "store-on-shard-documents" (count documents))
                   { index {:done true
                            :took-internal (time-took t0)
                            :attempt-to-write (count documents)}}))))

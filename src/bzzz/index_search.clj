@@ -7,6 +7,7 @@
   (use bzzz.index-facet-common)
   (use bzzz.index-directory)
   (use bzzz.index-spatial)
+  (:require [bzzz.index-stat :as stat])
   (:require [clojure.tools.logging :as log])
   (:import (java.io StringReader)
            (org.apache.lucene.spatial.query SpatialOperation SpatialArgs)
@@ -262,7 +263,7 @@
 
 (defn shard-search
   [& {:keys [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader query analyzer
-             page size explain highlight facets fields facet-config sort spatial-filter]}]
+             page size explain highlight facets fields facet-config sort spatial-filter shard]}]
   (let [ms-start (time-ms)
         analyzer ^Analyzer (parse-analyzer analyzer)
         query ^Query (parse-query query analyzer)
@@ -283,6 +284,7 @@
              query
              spatial-filter
              wrap)
+    (stat/update-count shard "shard-search-collect-total" (.getTotalHits score-collector))
     {:total (.getTotalHits score-collector)
      ;; facets:
      ;; do not send the error back,
@@ -327,6 +329,7 @@
                                            (get input :must-refresh false)
                                            (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
                                              (shard-search :searcher searcher
+                                                           :shard shard
                                                            :taxo-reader taxo-reader
                                                            :analyzer (:analyzer input)
                                                            :query (:query input)

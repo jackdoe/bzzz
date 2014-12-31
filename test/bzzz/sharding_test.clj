@@ -17,20 +17,24 @@
     (dotimes [x 100]
       (let [doc-generator (fn [n]
                             {:name "jack"
-                             :id (str "id-" (* 100 n))})
+                             :id (str n)})
             list-generator (fn [n]
                              (into []
                                    (for [i (range n)]
                                      (doc-generator i))))
             docs (list-generator 1000)]
+        (delete-all test-index-name)
         (let [r (store {:index test-index-name
-                        :must-refresh true
                         :documents docs
                         :number-of-shards 3})
               r1 (store {:index test-index-name
-                         :must-refresh true
+                         :force-merge 1
                          :documents docs
-                         :number-of-shards 3})]
+                         :number-of-shards 3})
+              q (search {:index test-index-name
+                         :must-refresh true
+                         :query {:term {:field "name", :value "jack"}}})]
+          (is (= 1000 (:total q)))
           (is (= 3 (count r)))
           (let [rc0 (into [] (for [item r]
                                (for [[k v] item]

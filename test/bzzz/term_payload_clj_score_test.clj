@@ -141,7 +141,7 @@
                                                                       :fixed-bucket-aggregation-typo [{:name "some_integer"
                                                                                                        :buckets 3},
                                                                                                       {:name "some_other"
-                                                                                                :buckets 31}]}}})))
+                                                                                                       :buckets 31}]}}})))
       (doseq [r [r0 r-no-facet r-no-zero]]
         (is (= 3 (:count (first (:some_integer (:facets r))))))
         (is (= 2 (:label (first (:some_integer (:facets r))))))
@@ -183,6 +183,52 @@
 
       (is (= "hello" (.term t0)))
       (is (= "hello3" (.term t1)))))
+
+  (testing "nextPosition"
+    (let [x (reset! allow-unsafe-queries* true)
+          stored (store {:index test-index-name
+                         :force-merge 1
+                         :documents [
+                                     {:advance "advance|000000cc000000cc000000cc", :name "bbb"}
+                                     {:advance "advance|000000cc000000cc00000000", :name "aaa"}
+                                     {:name "bbb"}
+                                     ;; there was a bug in Helper.java, not calling nextPosition
+                                     ;; when advance() succeeds, but does not return the requested target
+                                     ;; this led to returning score 0xCC instead of 0xBB, while
+                                     ;; on expain it properly returns 0xBB (due to the nature of explain
+                                     ;; advances)
+                                     ;; the bug was fixed in 4dbb021dc929bb95c0e401e5e5708ed89214398c
+                                     {:advance "advance|000000cc000000cc000000bb", :name "bbb"}
+                                     {:advance "advance|000000cc000000cc00000000", :name "bbb"}
+                                     {:advance "advance|000000cc000000cc00000000", :name "aaa"}
+                                     {:advance "advance|000000cc000000cc00000000", :name "aaa"}
+                                     {:advance "advance|000000cc000000cc00000000", :name "aaa"}
+                                     {:advance "advance|000000cc000000cc00000000", :name "aaa"}]
+                         :analyzer {:advance {:type "custom" :tokenizer "byte-payload"}}})
+          r-no-zero (search {:index test-index-name
+                             :must-refresh true
+                             :explain true
+                             :size 1000
+                             :query {:bool
+                                     {:must [{:term-payload-clj-score {
+                                                                       :field "advance", :value "advance"
+                                                                       :no-zero true
+                                                                       :clj-eval "
+(fn [^bzzz.java.query.ExpressionContext ctx]
+  (let [val (.payload_get_long ctx 8 4)]
+    (.result-state-append ctx val)
+    (float val)))"
+                                                                       }}
+                                             {:constant-score {:query
+                                                               {:bool {:must [{:term {:field "name" :value "bbb"}}]}}
+                                                               :boost 0}}]}}})
+          x (reset! allow-unsafe-queries* false)]
+      (is (> (count (:hits r-no-zero)) 0))
+      (is (= 204.0 (:_score (first (:hits r-no-zero)))))
+      (is (= 187.0 (:_score (last (:hits r-no-zero)))))
+      (doseq [hit (:hits r-no-zero)]
+        (is (= (int (:_score hit)) (int (.get ^java.util.List (first (:_result_state hit)) 0)))))))
+
 
   (testing "cleanup-after"
     (delete-all test-index-name)))

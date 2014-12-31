@@ -35,7 +35,7 @@ public class Helper {
 
     public static int advance_and_next_position(DocsAndPositionsEnum postings, int target) throws IOException {
         int n = postings.advance(target);
-        if (n == target && n != DocsAndPositionsEnum.NO_MORE_DOCS)
+        if (n != DocsAndPositionsEnum.NO_MORE_DOCS)
             postings.nextPosition();
         return n;
     }

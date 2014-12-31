@@ -133,6 +133,7 @@
                                (future
                                  (store-on-shard (sharded (resolve-alias index) n)
                                                  (filter (fn [doc]
+                                                           ;; FIXME: use consistent hashing
                                                            (let [hashCode (if-let [id (:id doc)]
                                                                             (hash id)
                                                                             (hash doc))]

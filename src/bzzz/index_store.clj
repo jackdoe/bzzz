@@ -135,8 +135,8 @@
                                                  (filter (fn [doc]
                                                            ;; FIXME: use consistent hashing
                                                            (let [hashCode (if-let [id (:id doc)]
-                                                                            (hash id)
-                                                                            (hash doc))]
+                                                                            (.hashCode id)
+                                                                            (.hashCode doc))]
                                                              (= n (mod hashCode number-of-shards))))
                                                          documents)
                                                  facets

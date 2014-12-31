@@ -114,7 +114,6 @@
                   { index {:done true
                            :took-internal (time-took t0)
                            :attempt-to-write (count documents)}}))))
-
 (defn store [input]
   (let [{:keys [index documents analyzer
                 facets shard alias-set alias-del
@@ -135,8 +134,8 @@
                                                  (filter (fn [doc]
                                                            ;; FIXME: use consistent hashing
                                                            (let [hashCode (if-let [id (:id doc)]
-                                                                            (.hashCode id)
-                                                                            (.hashCode doc))]
+                                                                            (hash id)
+                                                                            (hash doc))]
                                                              (= n (mod hashCode number-of-shards))))
                                                          documents)
                                                  facets

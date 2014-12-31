@@ -268,7 +268,7 @@
 
   (testing "search-random-score-query"
     (let [ret (search {:index test-index-name
-                       :explain true
+                       :explain false
                        :query {:bool {:must [{:match-all {}}
                                              {:random-score {:base 100
                                                              :query {:match-all {}}}}]}}})
@@ -353,7 +353,7 @@
     (let [ret (search {:index test-index-name
                        :analyzer {:name {:type "standard"} }
                        :highlight {:fields ["name"]}
-                       :explain true
+                       :explain false
                        :query {:query-parser {:query "john@doe"
                                               :default-operator "or"
                                               :default-field "name"}}})]
@@ -478,7 +478,7 @@
           r-test-syntax (s ["priority_integer"
                             {:expression "sqrt(_score) + priority_double + priority_float"
                              :reverse false
-                             :explain true
+                             :explain false
                              :bindings ["priority_float"
                                         {:field :priority_double}]}
                             {:field :priority_long
@@ -575,7 +575,7 @@
 
   (testing "custom-score"
     (let [r (search {:index test-index-name
-                     :explain true
+                     :explain false
                      :query {:custom-score {:query {:range {:field "lat_double"}}
                                             :expression {:expression "-haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                                                          :bindings ["lat_double"
@@ -588,7 +588,7 @@
 
   (testing "expr-score"
     (let [r (search {:index test-index-name
-                     :explain true
+                     :explain false
                      :query {:expr-score {:query {:term {:field "find", :value "zzz"}}
                                           :expression {:expression "(_score * 100) - haversin(40.7143528,-74.0059731,lat_double,lon_double)"
                                                        :bindings ["lat_double"
@@ -743,7 +743,7 @@
                    (refresh-search-managers))
           searcher (fn [spatial reverse]
                      (search {:index test-index-name
-                              :explain true
+                              :explain false
                               :sort [{:field "__location",
                                       :reverse reverse
                                       :point "POINT(10 -10)"},
@@ -795,7 +795,7 @@
                    (refresh-search-managers))
           searcher (fn []
                      (search {:index test-index-name
-                              :explain true
+                              :explain false
                               :facets {:name_payload {}}
                               :query {:term-payload-clj-score {:field "name_payload", :value "zzzxxx"
                                                                :field-cache ["some_integer","some_float","some_double","some_long"]
@@ -847,11 +847,11 @@
         (+ 10 payload)))))
                         "}}
             r (search {:index test-index-name
-                       :explain true
+                       :explain false
                        :facets {:name_payload {}}
                        :query {:no-zero-score {:query clj-score}}})
             r1 (search {:index test-index-name
-                        :explain true
+                        :explain false
                         :facets {:name_payload {}}
                         :query {:bool {:must [{:no-norm {:query {:constant-score {:query {:term {:field "name_payload"
                                                                                                  :value "zzzxxx"}}
@@ -865,7 +865,7 @@
         (is (= 2 (:total r)))))
     (let [gs (fn [q]
                (search {:index test-index-name
-                        :explain true
+                        :explain false
                         :facets {:name_payload {}}
                         :query q}))
           update (gs {:term-payload-clj-score
@@ -898,7 +898,7 @@
                                                         :filter [{:type "delimited-payload"}]}}}))
           searcher (fn [mr]
                      (search {:index test-index-name
-                              :explain true
+                              :explain false
                               :must-refresh mr
                               :query {:term {:field "name_mr_payload" :value "mr_zzzxxx"}}}))]
       (storer "255")

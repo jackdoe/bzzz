@@ -6,6 +6,7 @@
 (def default-root "/tmp/BZZZ")
 (def default-port 3000)
 (def default-size 20)
+(def default-http-threads 24)
 (def default-allow-unsafe-queries false)
 (def default-identifier :__global_partition_0)
 (def default-acceptable-discover-time-diff 20)

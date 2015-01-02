@@ -7,7 +7,7 @@
         bzzz.core
         bzzz.const
         bzzz.util
-        ring.adapter.jetty
+        org.httpkit.server
         bzzz.index-directory
         bzzz.index-search))
 
@@ -19,6 +19,13 @@
 (def hosts-bad [id host id "bzzz-testing-foofoo" id [id id [id id "bzzz-testing-foobar" id host [host host "bzzz-testing-barfoo" id host] [host] [host id] [id host] id id id id id id [id] [id id [id "bzzz-testing-barbar"]]]]])
 (def query {:term {:field "name"
                    :value "doe"}})
+
+(defonce server (atom nil))
+
+(defn stop-server []
+  (when-not (nil? @server)
+    (@server :timeout 100)
+    (reset! server nil)))
 
 (def store-request
   {:index test-index-name
@@ -69,13 +76,10 @@
         @(http-client/delete host {:body (json/write-str delete-request)})]
     (jr body)))
 
-(defonce server
-  (run-jetty handler {:port 3000
-                      :join? false}))
-
 (deftest handle-test
-  (testing "start"
-    (.start server))
+  (testing "start-server"
+    (reset! server (run-server handler {:port 3000 :thread 100}))
+    (println @server))
 
   (testing "discover"
     (discover))
@@ -232,4 +236,4 @@
 
 
   (testing "stop"
-    (.stop server)))
+    (stop-server)))

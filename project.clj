@@ -30,8 +30,7 @@
                  [http-kit "2.1.16"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [redis.clients/jedis "2.6.0"] ;; drop the redis support?
-                 [ring/ring-core "1.3.2"]
-                 [ring/ring-jetty-adapter "1.3.2"]]
+                 [ring/ring-core "1.3.2"]]
   :java-source-paths ["src/java"]
   :main bzzz.core
   :aot [bzzz.core])

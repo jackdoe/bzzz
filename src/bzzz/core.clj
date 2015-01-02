@@ -297,7 +297,7 @@
     (every 10000 #(log/trace "up:" @timer* @index-directory/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
     (repeatedly
      (try
-       (run-server handler {:port @port* :threads @http-threads*})
+       (run-server handler {:port @port* :threads @http-threads* :ip (:bind options)})
        (catch Throwable e
          (do
            (log/warn (ex-str e))

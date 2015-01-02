@@ -19,9 +19,10 @@ public class TermPayloadClojureScoreQuery extends Query {
     // THIS QUERY IS NOT THREAD SAFE! at the moment this is ok because of the way we create one (future) per shard
     // and the query is created in the (future) thread itself.
 
+    public static int GLOBAL_STATE_CAPACITY = 100000; // TODO: make this a parameter
     public static int EXPR_CACHE_CAPACITY = 10000; // TODO: make this a parameter
     public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
-    public static Map<Object,Object> GLOBAL_EXPR_CACHE = new Builder<Object,Object>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
+    public static Map<Object,Object> EXPR_GLOBAL_STATE = new Builder<Object,Object>().maximumWeightedCapacity(GLOBAL_STATE_CAPACITY).build();
 
     // the clj_context was moved to the query from the Weight easier access for dynamic facets
     public final ExpressionContext clj_context;
@@ -30,15 +31,17 @@ public class TermPayloadClojureScoreQuery extends Query {
     public String[] field_cache_req;
     public IFn clj_expr;
 
-    public TermPayloadClojureScoreQuery(List <Term>terms, String expr, String[] field_cache_req, Map<Object,Object> init_state,List<Map<Object,Object>> fba_settings) throws Exception {
+    public TermPayloadClojureScoreQuery(List <Term>terms, String expr, String init_expr, String[] field_cache_req,List<Map<Object,Object>> fba_settings) throws Exception {
         this.terms = terms;
         this.expr = expr;
         this.field_cache_req = field_cache_req;
         this.clj_expr = eval_and_cache(expr);
-        this.clj_context = new ExpressionContext(GLOBAL_EXPR_CACHE,fba_settings);
+        this.clj_context = new ExpressionContext(EXPR_GLOBAL_STATE,fba_settings);
         this.clj_context.total_term_count = terms.size();
-        if (init_state != null) {
-            this.clj_context.local_state = init_state;
+        if (init_expr != null) {
+            IFn init = eval_and_cache(init_expr);
+            if (init != null)
+                init.invoke();
         }
     }
 

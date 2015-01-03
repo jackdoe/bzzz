@@ -393,6 +393,7 @@ depending on your application, tolerance of data loss, IO requirements and real-
 #### aliases
 
 #### facets
+when indexing send `{:facets {:field-name... {}}}` to the store request, by default it will be the whole content of the field that will be the value for aggregation, unless you sned {:facets {:field-name.. {:use-analyzer "some-analyzer-name"}}} in which case, each of the tokens produced will be value for aggregation
 
 #### sorting
 

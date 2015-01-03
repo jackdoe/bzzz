@@ -139,6 +139,10 @@
                                              (:query input))
       :get (case uri
              "/_stat" (stat)
+             "/_stack" (into {} (for [[^Thread t traces] (Thread/getAllStackTraces)]
+                                  [(str (.getName t) "@" (.getId t))
+                                   (into [] (for [^StackTraceElement s traces]
+                                              (.toString s)))]))
              "/favicon.ico" "" ;; XXX
              (index-search/search input))
       :put (search-many (:hosts input) (dissoc input :hosts))
@@ -297,7 +301,7 @@
     (every 10000 #(log/trace "up:" @timer* @index-directory/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
     (repeatedly
      (try
-       (run-server handler {:port @port* :threads @http-threads* :ip (:bind options)})
+       (run-server handler {:port @port* :threads @http-threads* :ip (:bind options) :worker-name-prefix "http-kit-worker"})
        (catch Throwable e
          (do
            (log/warn (ex-str e))

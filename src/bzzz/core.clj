@@ -140,7 +140,7 @@
       :get (case uri
              "/_stat" (stat)
              "/_stack" (into {} (for [[^Thread t traces] (Thread/getAllStackTraces)]
-                                  [(str (.getName t) "@" (.getId t) "-" (.toString ^Thread$State (.getState t)))
+                                  [(str (.toString t) "-" (.toString ^Thread$State (.getState t)))
                                    (into [] (for [^StackTraceElement s traces]
                                               (.toString s)))]))
              "/favicon.ico" "" ;; XXX

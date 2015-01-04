@@ -323,23 +323,26 @@
   (let [ms-start (time-ms)
         facets (:facets input)
         index (need :index input "need <index>")
-        futures (into [] (for [shard (index-name-matching (resolve-alias index))]
-                           (future
-                             (use-searcher shard
-                                           (get input :must-refresh false)
-                                           (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
-                                             (shard-search :searcher searcher
-                                                           :shard shard
-                                                           :taxo-reader taxo-reader
-                                                           :analyzer (:analyzer input)
-                                                           :query (:query input)
-                                                           :facet-config (get-facet-config facets)
-                                                           :facets facets
-                                                           :highlight (:highlight input)
-                                                           :page (get input :page 0)
-                                                           :size (get input :size default-size)
-                                                           :sort (:sort input)
-                                                           :spatial-filter (get input :spatial-filter nil)
-                                                           :explain (get input :explain false)
-                                                           :fields (:fields input)))))))]
+        shards (index-name-matching (resolve-alias index))
+        n-shards (count shards)
+        futures (into [] (for [shard shards]
+                           (future-if
+                            (cond-for-future-per-shard input true n-shards)
+                            (use-searcher shard
+                                          (get input :must-refresh false)
+                                          (fn [^IndexSearcher searcher ^DirectoryTaxonomyReader taxo-reader]
+                                            (shard-search :searcher searcher
+                                                          :shard shard
+                                                          :taxo-reader taxo-reader
+                                                          :analyzer (:analyzer input)
+                                                          :query (:query input)
+                                                          :facet-config (get-facet-config facets)
+                                                          :facets facets
+                                                          :highlight (:highlight input)
+                                                          :page (get input :page 0)
+                                                          :size (get input :size default-size)
+                                                          :sort (:sort input)
+                                                          :spatial-filter (get input :spatial-filter nil)
+                                                          :explain (get input :explain false)
+                                                          :fields (:fields input)))))))]
     (reduce-collection futures input ms-start)))

@@ -126,22 +126,22 @@
 
     (if (and shard number-of-shards)
       (throw (Throwable. "you can specify only one of <shard> or <number-of-shards>")))
-
     (if number-of-shards
       (let [futures (into [] (for [n (range number-of-shards)]
-                               (future
-                                 (store-on-shard (sharded (resolve-alias index) n)
-                                                 (filter (fn [doc]
-                                                           ;; FIXME: use consistent hashing
-                                                           (let [hashCode (if-let [id (:id doc)]
-                                                                            (hash id)
-                                                                            (hash doc))]
-                                                             (= n (mod hashCode number-of-shards))))
-                                                         documents)
-                                                 facets
-                                                 analyzer
-                                                 force-merge))))]
-        (into [] (for [f futures] @f)))
+                               (future-if
+                                (cond-for-future-per-shard input false number-of-shards)
+                                (store-on-shard (sharded (resolve-alias index) n)
+                                                (filter (fn [doc]
+                                                          ;; FIXME: use consistent hashing
+                                                          (let [hashCode (if-let [id (:id doc)]
+                                                                           (hash id)
+                                                                           (hash doc))]
+                                                            (= n (mod hashCode number-of-shards))))
+                                                        documents)
+                                                facets
+                                                analyzer
+                                                force-merge))))]
+        (into [] (for [f futures] (if (future? f) @f f))))
       (store-on-shard (sharded (resolve-alias index) (or shard 0))
                       documents
                       facets

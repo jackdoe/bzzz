@@ -201,3 +201,12 @@
 
 (defn sanitize ^String [s unacceptable-pattern]
   (clojure.string/replace (as-str s) unacceptable-pattern ""))
+
+(defmacro future-if
+  [condition & body]
+  `(if ~condition
+     (future ~@body)
+     ~@body))
+
+(defn cond-for-future-per-shard [input default n-shards]
+  (and (read-boolean-setting input :future default) (> n-shards 1)))

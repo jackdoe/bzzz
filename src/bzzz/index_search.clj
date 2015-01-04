@@ -321,7 +321,7 @@
 
 (defn search [input]
   (let [ms-start (time-ms)
-        facets (:facets input)
+        facets (get input :facets)
         index (need :index input "need <index>")
         shards (index-name-matching (resolve-alias index))
         n-shards (count shards)
@@ -334,15 +334,15 @@
                                             (shard-search :searcher searcher
                                                           :shard shard
                                                           :taxo-reader taxo-reader
-                                                          :analyzer (:analyzer input)
-                                                          :query (:query input)
+                                                          :analyzer (get input :analyzer)
+                                                          :query (get input :query)
                                                           :facet-config (get-facet-config facets)
                                                           :facets facets
-                                                          :highlight (:highlight input)
+                                                          :highlight (get input :highlight)
                                                           :page (get input :page 0)
                                                           :size (get input :size default-size)
-                                                          :sort (:sort input)
+                                                          :sort (get input :sort)
                                                           :spatial-filter (get input :spatial-filter nil)
                                                           :explain (get input :explain false)
-                                                          :fields (:fields input)))))))]
+                                                          :fields (get input :fields)))))))]
     (reduce-collection futures input ms-start)))

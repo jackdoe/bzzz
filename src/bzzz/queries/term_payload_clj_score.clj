@@ -18,8 +18,8 @@
 (defn extract-result-state [^TermPayloadClojureScoreQuery query doc-id]
   (.result_state_get_for_doc ^ExpressionContext (.clj_context query) doc-id))
 
-(def expr-cache
-  (let [b (ConcurrentLinkedHashMap$Builder.)]
+(def expr-cache ^java.util.Map
+  (let [b ^java.util.Map (ConcurrentLinkedHashMap$Builder.)]
     (.maximumWeightedCapacity b 1000)
     (.build b)))
 

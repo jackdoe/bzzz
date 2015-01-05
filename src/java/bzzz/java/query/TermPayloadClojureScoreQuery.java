@@ -20,8 +20,7 @@ public class TermPayloadClojureScoreQuery extends Query {
     // and the query is created in the (future) thread itself.
 
     public static int GLOBAL_STATE_CAPACITY = 100000; // TODO: make this a parameter
-    public static int EXPR_CACHE_CAPACITY = 10000; // TODO: make this a parameter
-    public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
+
     public static Map<Object,Object> EXPR_GLOBAL_STATE = new Builder<Object,Object>().maximumWeightedCapacity(GLOBAL_STATE_CAPACITY).build();
     public static Map<Object,Object> EXPR_GLOBAL_STATE_RO = new HashMap<Object,Object>();
     // the clj_context was moved to the query from the Weight easier access for dynamic facets
@@ -31,41 +30,15 @@ public class TermPayloadClojureScoreQuery extends Query {
     public String[] field_cache_req;
     public IFn clj_expr;
 
-    public TermPayloadClojureScoreQuery(List <Term>terms, String expr, String init_expr, String[] field_cache_req,List<Map<Object,Object>> fba_settings) throws Exception {
+    public TermPayloadClojureScoreQuery(List <Term>terms, IFn expr, String[] field_cache_req,List<Map<Object,Object>> fba_settings) throws Exception {
         this.terms = terms;
-        this.expr = expr;
         this.field_cache_req = field_cache_req;
-        this.clj_expr = eval_and_cache(expr);
+        this.clj_expr = expr;
         this.clj_context = new ExpressionContext(EXPR_GLOBAL_STATE,EXPR_GLOBAL_STATE_RO,fba_settings);
         this.clj_context.total_term_count = terms.size();
-        if (init_expr != null) {
-            IFn init = eval_and_cache(init_expr);
-            if (init != null)
-                init.invoke();
-        }
     }
     public static void replace_expr_global_state_ro(Map<Object,Object> replacement) {
         EXPR_GLOBAL_STATE_RO = replacement;
-    }
-    public IFn eval_and_cache(String raw) {
-        IFn e = EXPR_CACHE.get(raw);
-        if (e == null) {
-            // in case of multiple shards, dont compile this every time
-            // TODO(bnikolov): verify that <expr> is actually the same object
-            synchronized(expr) {
-                try {
-                    // since we are compiling only once, it makese sense to warn-on-reflection
-                    // it might be very costly for 5 million score() calls to do (.get local-state "key")
-                    // with reflection, when a simple hint might save you.
-                    Var.pushThreadBindings(RT.map(RT.var("clojure.core","*warn-on-reflection*"),RT.T));
-                    e = (IFn) clojure.lang.Compiler.load(new StringReader(raw));
-                } finally {
-                    Var.popThreadBindings();
-                }
-            }
-            EXPR_CACHE.put(raw,e);
-        }
-        return e;
     }
 
     @Override

@@ -1,20 +1,26 @@
 (ns bzzz.log)
 (def level* (atom 1))
+(def lock (Object.))
+
+(defn do-log [min-level args]
+  (when (>= @level* min-level)
+    (locking lock
+      (println "<" min-level ">" args))))
 
 (defn fatal [& args]
-  (when (>= @level* 0) (println args)))
+  (do-log 0 args))
 
 (defn error [& args]
-  (when (>= @level* 0) (println args)))
+  (do-log 0 args))
 
 (defn warn [& args]
-  (when (>= @level* 1) (println args)))
+  (do-log 1 args))
 
 (defn info [& args]
-  (when (>= @level* 2) (println args)))
+  (do-log 2 args))
 
 (defn debug [& args]
-  (when (>= @level* 3) (println args)))
+  (do-log 3 args))
 
 (defn trace [& args]
-  (when (>= @level* 4) (println args)))
+  (do-log 4 args))

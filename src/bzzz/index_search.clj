@@ -8,7 +8,7 @@
   (use bzzz.index-directory)
   (use bzzz.index-spatial)
   (:require [bzzz.index-stat :as stat])
-  (:require [clojure.tools.logging :as log])
+  (:require [bzzz.log :as log])
   (:import (java.io StringReader)
            (org.apache.lucene.spatial.query SpatialOperation SpatialArgs)
            (org.apache.lucene.expressions.js JavascriptCompiler)

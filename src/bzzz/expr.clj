@@ -2,7 +2,6 @@
   (use bzzz.util)
   (use bzzz.const)
   (use bzzz.index-spatial)
-  (:require [clojure.tools.logging :as log])
   (:import (org.apache.lucene.expressions.js JavascriptCompiler)
            (org.apache.lucene.spatial SpatialStrategy)
            (org.apache.lucene.expressions Expression SimpleBindings)

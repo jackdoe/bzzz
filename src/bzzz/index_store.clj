@@ -7,7 +7,7 @@
   (use bzzz.index-facet-common)
   (use bzzz.index-spatial)
   (:require [bzzz.index-stat :as stat])
-  (:require [clojure.tools.logging :as log])
+  (:require [bzzz.log :as log])
   (:import (java.io StringReader)
            (java.lang OutOfMemoryError)
            (org.apache.lucene.analysis.tokenattributes CharTermAttribute)

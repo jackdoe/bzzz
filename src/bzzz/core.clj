@@ -5,6 +5,7 @@
   (use [clojure.string :only (split join lower-case)])
   (use [overtone.at-at :only (every mk-pool)])
   (:require [bzzz.const :as const])
+  (:require [bzzz.log :as log])
   (:require [bzzz.index-search :as index-search])
   (:require [bzzz.index-directory :as index-directory])
   (:require [bzzz.index-store :as index-store])
@@ -15,7 +16,6 @@
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
   (:require [org.httpkit.client :as http-client])
-  (:require [clojure.tools.logging :as log])
   (:import (java.net URL))
   (:gen-class :main true))
 
@@ -256,6 +256,11 @@
     :default const/default-gc-interval
     :parse-fn #(Integer/parseInt %)
     :validate [ #(>= % 0) "Must be a number >= 0"]]
+   ["-v" "--verbose LEVEL" "set log level"
+    :id :verbose
+    :default 1
+    :parse-fn #(Integer/parseInt %)
+    :validate [ #(>= % 0) "Must be a number >= 0"]]
    ["-i" "--identifier 'string'" "identifier used for auto-discover and resolving"
     :id :identifier
     :default const/default-identifier]
@@ -287,6 +292,7 @@
     (reset! index-directory/identifier* (keyword (:identifier options)))
     (reset! query/allow-unsafe-queries* (:allow-unsafe-queries options))
     (reset! index-directory/root* (:directory options))
+    (reset! log/level* (:verbose options))
     (reset! port* (:port options))
     (index-directory/initial-read-alias-file)
     (index-stat/initial-setup)

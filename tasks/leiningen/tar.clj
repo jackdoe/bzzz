@@ -36,17 +36,14 @@
         tar-file (io/file (:root project) "binary" (str "bzzz-" build-version ".tar.gz"))
         usr-lib (str (io/file w "usr/lib/bzzz"))
         var-lib (str (io/file w "var/lib/bzzz"))
-        var-log (str (io/file w "var/log/bzzz"))
         etc (str (io/file w "etc/bzzz"))]
     (sh "mkdir" "-p"
         usr-lib
         etc
-        var-lib
-        var-log)
+        var-lib)
     (sh "cp" jar-file (str (io/file usr-lib "bzzz.jar")))
     (sh "cp" (str (io/file (:root project) "pkg" "rpm" "start.sh")) usr-lib)
     (sh "cp" (str (io/file (:root project) "pkg" "bzzz-0.config")) etc)
-    (sh "cp" (str (io/file (:root project) "pkg" "log4j.properties")) etc)
     (sh "tar" "vczf" (str tar-file) "-C" (str w) ".")))
 
 (defn tar

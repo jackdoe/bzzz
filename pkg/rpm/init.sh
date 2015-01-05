@@ -23,7 +23,7 @@ start() {
     ulimit -n $NFILES
     for i in `ls -1 /etc/bzzz/bzzz-*.config`; do
         echo -n "Starting $i"
-        runuser -s /bin/bash $BZZZ_USER -c "/usr/lib/bzzz/start.sh $i 2>&1 | logger -t 'bzzz unhandled exception' &"
+        runuser -s /bin/bash $BZZZ_USER -c "/usr/lib/bzzz/start.sh $i 2>&1 | logger -t 'bzzz' &"
         rc=$?
         if [ $rc -ne 0 ]; then
             echo "... failed"

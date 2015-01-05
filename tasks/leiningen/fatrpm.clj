@@ -113,14 +113,6 @@
          :groupname "bzzz"
          :directory-included? true}
 
-
-        {:directory "/var/log/bzzz/"
-         :filemode "755"
-         :username "bzzz"
-         :groupname "bzzz"
-         :directory-included? true}
-
-
         {:directory "/etc/bzzz"
          :filemode "755"
          :directory-included? true}
@@ -129,9 +121,7 @@
          :filemode "644"
          :configuration "noreplace"
          :sources [(source (file (:root project) "pkg" "bzzz-0.config")
-                           "bzzz-0.config")
-                   (source (file (:root project) "pkg" "log4j.properties")
-                           "log4j.properties")]}
+                           "bzzz-0.config")]}
 
         {:directory "/etc/init.d"
          :filemode "755"

@@ -82,7 +82,7 @@
         (http-client/put resolved args callback)
         (http-client/get resolved args callback))
       (catch Throwable e
-        (async/>!! c {:exception (ex-str e)})))))
+        (async/>!! c {:exception (str "host:" resolved "exception:" (ex-str e))})))))
 
 (defn search-many [hosts input]
   (let [c (async/chan)

@@ -16,6 +16,7 @@ else
     JAVA=`which java`
 fi
 JAVA_OPTS=""
+JAVA_OPTS="$JAVA_OPTS -XX:+PrintGCDetails"
 JAVA_OPTS="$JAVA_OPTS -XX:+UseParNewGC"
 JAVA_OPTS="$JAVA_OPTS -XX:+UseConcMarkSweepGC"
 JAVA_OPTS="$JAVA_OPTS -XX:CMSInitiatingOccupancyFraction=75"

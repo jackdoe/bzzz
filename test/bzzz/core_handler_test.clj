@@ -7,7 +7,7 @@
         bzzz.core
         bzzz.const
         bzzz.util
-        org.httpkit.server
+        ring.adapter.jetty
         bzzz.index-directory
         bzzz.index-search))
 
@@ -20,12 +20,9 @@
 (def query {:term {:field "name"
                    :value "doe"}})
 
-(defonce server (atom nil))
-
-(defn stop-server []
-  (when-not (nil? @server)
-    (@server :timeout 100)
-    (reset! server nil)))
+(defonce server
+  (run-jetty handler {:port 3000
+                      :join? false}))
 
 (def store-request
   {:index test-index-name
@@ -77,9 +74,8 @@
     (jr body)))
 
 (deftest handle-test
-  (testing "start-server"
-    (reset! server (run-server handler {:port 3000 :thread 100}))
-    (println @server))
+  (testing "start"
+    (.start server))
 
   (testing "discover"
     (discover))
@@ -234,6 +230,5 @@
         (is (= ra rb))
         (is (= 0 (get ra "total"))))))
 
-
   (testing "stop"
-    (stop-server)))
+    (.stop server)))

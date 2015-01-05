@@ -1,5 +1,5 @@
 (ns bzzz.core
-  (use org.httpkit.server)
+  (use ring.adapter.jetty)
   (use bzzz.util)
   (use bzzz.const)
   (use [clojure.string :only (split join lower-case)])
@@ -24,7 +24,6 @@
 (def acceptable-discover-time-diff* (atom const/default-acceptable-discover-time-diff))
 (def discover-interval* (atom const/default-discover-interval))
 (def gc-interval* (atom const/default-gc-interval))
-(def http-threads* (atom const/default-http-threads))
 (def next-gc* (atom 0))
 (def discover-hosts* (atom {}))
 (def peers* (atom {}))
@@ -233,11 +232,6 @@
     :default const/default-port
     :parse-fn #(Integer/parseInt %)
     :validate [ #(port-validator %) "Must be a number between 0 and 65536"]]
-   ["-t" "--http-threads NUM-THREADS" "number of http threads"
-    :id :http-threads
-    :default const/default-http-threads
-    :parse-fn #(Integer/parseInt %)
-    :validate [ #(> % 0) "Must be a number > 0"]]
    ["-x" "--acceptable-discover-time-diff NUM-IN-SECONDS" "only consider discovered hosts who refreshed witihin the last X seconds"
     :id :acceptable-discover-time-diff
     :default const/default-acceptable-discover-time-diff
@@ -288,7 +282,6 @@
     (reset! acceptable-discover-time-diff* (:acceptable-discover-time-diff options))
     (reset! discover-interval* (:discover-interval options))
     (reset! gc-interval* (:gc-interval options))
-    (reset! http-threads* (:http-threads options))
     (reset! index-directory/identifier* (keyword (:identifier options)))
     (reset! query/allow-unsafe-queries* (:allow-unsafe-queries options))
     (reset! index-directory/root* (:directory options))
@@ -297,7 +290,7 @@
     (index-directory/initial-read-alias-file)
     (index-stat/initial-setup)
     (.addShutdownHook (Runtime/getRuntime) (Thread. #(index-directory/shutdown)))
-    (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--allow-unsafe-queries" @query/allow-unsafe-queries* "--http-threads" @http-threads* " .. dumping the raw options: " options)
+    (log/info "starting bzzz --identifier" (as-str @index-directory/identifier*) "--port" @port* "--directory" @index-directory/root* "--hosts" @discover-hosts* "--acceptable-discover-time-diff" @acceptable-discover-time-diff* "--discover-interval" @discover-interval* "--gc-interval" @gc-interval* "--allow-unsafe-queries" @query/allow-unsafe-queries* " .. dumping the raw options: " options)
     (every 5000 #(index-directory/refresh-search-managers) (mk-pool) :desc "search refresher")
     (every 1000 #(swap! timer* inc) (mk-pool) :desc "timer")
     (every 1000 #(attempt-gc) (mk-pool) :desc "attempt-gc")
@@ -307,7 +300,7 @@
     (every 10000 #(log/trace "up:" @timer* @index-directory/identifier* @discover-hosts* @peers*) (mk-pool) :desc "dump")
     (repeatedly
      (try
-       (run-server handler {:port @port* :threads @http-threads* :ip (:bind options) :worker-name-prefix "http-kit-worker"})
+       (run-jetty handler {:port @port*, :host (:bind options)})
        (catch Throwable e
          (do
            (log/warn (ex-str e))

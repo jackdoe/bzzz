@@ -23,7 +23,7 @@ public class TermPayloadClojureScoreQuery extends Query {
     public static int EXPR_CACHE_CAPACITY = 10000; // TODO: make this a parameter
     public static Map<String,IFn> EXPR_CACHE = new Builder<String,IFn>().maximumWeightedCapacity(EXPR_CACHE_CAPACITY).build();
     public static Map<Object,Object> EXPR_GLOBAL_STATE = new Builder<Object,Object>().maximumWeightedCapacity(GLOBAL_STATE_CAPACITY).build();
-
+    public static Map<Object,Object> EXPR_GLOBAL_STATE_RO = new HashMap<Object,Object>();
     // the clj_context was moved to the query from the Weight easier access for dynamic facets
     public final ExpressionContext clj_context;
     final public List<Term> terms;
@@ -36,7 +36,7 @@ public class TermPayloadClojureScoreQuery extends Query {
         this.expr = expr;
         this.field_cache_req = field_cache_req;
         this.clj_expr = eval_and_cache(expr);
-        this.clj_context = new ExpressionContext(EXPR_GLOBAL_STATE,fba_settings);
+        this.clj_context = new ExpressionContext(EXPR_GLOBAL_STATE,EXPR_GLOBAL_STATE_RO,fba_settings);
         this.clj_context.total_term_count = terms.size();
         if (init_expr != null) {
             IFn init = eval_and_cache(init_expr);
@@ -44,7 +44,9 @@ public class TermPayloadClojureScoreQuery extends Query {
                 init.invoke();
         }
     }
-
+    public static void replace_expr_global_state_ro(Map<Object,Object> replacement) {
+        EXPR_GLOBAL_STATE_RO = replacement;
+    }
     public IFn eval_and_cache(String raw) {
         // there is of course a race condition between get/compile/put
         // but worst case few threads will do the eval, which

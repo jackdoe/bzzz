@@ -27,6 +27,7 @@ public class ExpressionContext {
     public Map<Integer,List<Object>> result_state = null;
 
     public Map<Object,Object> global_state;
+    public Map<Object,Object> global_state_ro;
 
     // "fixed_bucket_aggregations": [
     //   { "name": "distance", "buckets": 6 }
@@ -55,8 +56,9 @@ public class ExpressionContext {
         current_counter = 0;
     }
 
-    public ExpressionContext(Map<Object,Object> global_state,List<Map<Object,Object>> fba_settings) throws Exception {
+    public ExpressionContext(Map<Object,Object> global_state,Map<Object,Object> global_state_ro,List<Map<Object,Object>> fba_settings) throws Exception {
         this.global_state = global_state;
+        this.global_state_ro = global_state_ro;
         this.fba_settings = fba_settings;
         if (fba_settings != null)
             fba_initialize();
@@ -174,6 +176,16 @@ public class ExpressionContext {
     }
     public Object local_state_set(Object key, Object val) {
         return local_state.put(key,val);
+    }
+
+    public Object global_state_ro_get(Object key) {
+        return global_state_ro.get(key);
+    }
+    public Object global_state_ro_get(Object key, Object def) {
+        Object r = global_state_ro.get(key);
+        if (r == null)
+            return def;
+        return r;
     }
 
     public Object global_state_get(Object key) {

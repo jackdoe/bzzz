@@ -217,6 +217,7 @@
 (fn [^bzzz.java.query.ExpressionContext ctx]
   (let [val (.payload_get_long ctx 8 4)]
     (.result-state-append ctx val)
+    (.global_state_ro_get ctx 0 0)
     (float val)))"
                                                                        }}
                                              {:constant-score {:query

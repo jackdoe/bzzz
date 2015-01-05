@@ -15,12 +15,7 @@ if [ -x "$JAVA_HOME/bin/java" ]; then
 else
     JAVA=`which java`
 fi
-JAVA_OPTS=""
 JAVA_OPTS="$JAVA_OPTS -XX:+PrintGCDetails"
-JAVA_OPTS="$JAVA_OPTS -XX:+UseParNewGC"
-JAVA_OPTS="$JAVA_OPTS -XX:+UseConcMarkSweepGC"
-JAVA_OPTS="$JAVA_OPTS -XX:CMSInitiatingOccupancyFraction=75"
-JAVA_OPTS="$JAVA_OPTS -XX:+UseCMSInitiatingOccupancyOnly"
 
 if [ "x$BZZZ_OPTIONS" = "x" ]; then
     BZZZ_OPTIONS=""

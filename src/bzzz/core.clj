@@ -138,6 +138,7 @@
                                              (:query input))
       :get (case uri
              "/_stat" (stat)
+             "/_gc" (System/gc)
              "/_stack" (into {} (for [[^Thread t traces] (Thread/getAllStackTraces)]
                                   [(str (.toString t) "-" (.toString ^Thread$State (.getState t)))
                                    (into [] (for [^StackTraceElement s traces]

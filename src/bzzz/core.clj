@@ -57,7 +57,6 @@
                    ;; nothing matches the identifier, in the @peers* table
                    ;; just return it
                    identifier)]
-    (index-stat/update-took-count index-stat/total "peer-resolve" (time-took t0))
     resolved))
 
 ;; [ "a", ["b","c",["d","e"]]]

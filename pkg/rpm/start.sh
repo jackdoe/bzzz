@@ -17,8 +17,8 @@ else
 fi
 JAVA_OPTS="$JAVA_OPTS -XX:+PrintGCDetails"
 
-if [ "x$BZZZ_OPTIONS" = "x" ]; then
-    BZZZ_OPTIONS=""
+if [ "x$BZZZ_OPTS" = "x" ]; then
+    BZZZ_OPTS=""
 fi
 
 if [ "x$BZZZ_MIN_MEM" = "x" ]; then
@@ -54,8 +54,8 @@ if [ "x$BZZZ_DIRECTORY" = "x" ]; then
     echo "need to setup BZZZ_DIRECTORY"
     exit 1
 fi
-$JAVA -Dlog4j.configuration=file:/etc/bzzz/log4j.properties $JAVA_OPTS \
+$JAVA $JAVA_OPTS \
       -jar /usr/lib/bzzz/bzzz.jar \
       --directory $BZZZ_DIRECTORY \
       --port $BZZZ_PORT \
-      --identifier $BZZZ_IDENTIFIER $BZZZ_OPTIONS
+      --identifier $BZZZ_IDENTIFIER $BZZZ_OPTS

@@ -22,8 +22,6 @@
                  [org.apache.lucene/lucene-expressions "4.10.3"]
                  [org.clojure/data.json "0.2.5"]
                  [org.clojure/tools.cli "0.3.1"]
-                 [org.slf4j/slf4j-log4j12 "1.7.7"]
-                 [log4j/log4j "1.2.17"]
                  [overtone/at-at "1.2.0"]
                  [com.googlecode.javaewah/JavaEWAH "0.9.2"]
                  [http-kit "2.1.16"]

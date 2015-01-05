@@ -56,12 +56,10 @@ this will just do `lein uberjar` and will create tar archive containing it, plus
 
 ```
 jazz:bzzz jack$ tar -tf binary/bzzz-0.1.0.20141*.tar.gz
-./var/log/bzzz/
 ./var/lib/bzzz/
 ./usr/lib/bzzz/bzzz.jar
 ./usr/lib/bzzz/start.sh
 ./etc/bzzz/bzzz-0.config
-./etc/bzzz/log4j.properties
 ...
 ```
 

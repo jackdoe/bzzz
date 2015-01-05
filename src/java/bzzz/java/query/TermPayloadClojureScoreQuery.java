@@ -48,19 +48,20 @@ public class TermPayloadClojureScoreQuery extends Query {
         EXPR_GLOBAL_STATE_RO = replacement;
     }
     public IFn eval_and_cache(String raw) {
-        // there is of course a race condition between get/compile/put
-        // but worst case few threads will do the eval, which
-        // will just result in few ms extra to those calls
         IFn e = EXPR_CACHE.get(raw);
         if (e == null) {
-            try {
-                // since we are compiling only once, it makese sense to warn-on-reflection
-                // it might be very costly for 5 million score() calls to do (.get local-state "key")
-                // with reflection, when a simple hint might save you.
-                Var.pushThreadBindings(RT.map(RT.var("clojure.core","*warn-on-reflection*"),RT.T));
-                e = (IFn) clojure.lang.Compiler.load(new StringReader(raw));
-            } finally {
-                Var.popThreadBindings();
+            // in case of multiple shards, dont compile this every time
+            // TODO(bnikolov): verify that <expr> is actually the same object
+            synchronized(expr) {
+                try {
+                    // since we are compiling only once, it makese sense to warn-on-reflection
+                    // it might be very costly for 5 million score() calls to do (.get local-state "key")
+                    // with reflection, when a simple hint might save you.
+                    Var.pushThreadBindings(RT.map(RT.var("clojure.core","*warn-on-reflection*"),RT.T));
+                    e = (IFn) clojure.lang.Compiler.load(new StringReader(raw));
+                } finally {
+                    Var.popThreadBindings();
+                }
             }
             EXPR_CACHE.put(raw,e);
         }

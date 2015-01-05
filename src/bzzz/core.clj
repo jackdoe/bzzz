@@ -74,7 +74,7 @@
                      (try
                        (async/>!! c (jr body))
                        (catch Throwable e
-                         (async/>!! c {:exception (ex-str e)})))))
+                         (async/>!! c {:exception (str status headers error (ex-str e))})))))
         resolved (peer-resolve (first part))]
     (log/trace "<" input "> in part <" part "> to resolved <" resolved ">")
     (try

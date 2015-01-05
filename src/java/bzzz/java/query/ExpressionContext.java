@@ -179,6 +179,12 @@ public class ExpressionContext {
     public Object global_state_get(Object key) {
         return global_state.get(key);
     }
+    public Object global_state_get(Object key, Object def) {
+        Object r = global_state.get(key);
+        if (r == null)
+            return def;
+        return r;
+    }
     public Object global_state_set(Object key, Object val) {
         return global_state.put(key,val);
     }

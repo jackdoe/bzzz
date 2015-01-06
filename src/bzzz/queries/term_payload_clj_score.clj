@@ -1,5 +1,6 @@
 (ns bzzz.queries.term-payload-clj-score
   (use bzzz.util)
+  (:require [bzzz.index-stat :as index-stat])
   (:import (org.apache.lucene.index Term)
            (org.apache.lucene.search MatchAllDocsQuery)
            (com.googlecode.concurrentlinkedhashmap ConcurrentLinkedHashMap ConcurrentLinkedHashMap$Builder)
@@ -24,10 +25,14 @@
     (.build b)))
 
 (defn get-or-eval [expr]
-  (if-let [v (.get expr-cache expr)]
+  (if-let [v (.get ^java.util.Map expr-cache expr)]
     v
-    (let [evaluated-expr (eval (read-string expr))]
-      (.put expr-cache expr evaluated-expr)
+    (let [t0 (time-ms)
+          evaluated-expr (eval (read-string expr))]
+      (index-stat/update-took-count index-stat/total
+                                    "eval"
+                                    (time-took t0))
+      (.put ^java.util.Map expr-cache expr evaluated-expr)
       evaluated-expr)))
 
 (defn parse

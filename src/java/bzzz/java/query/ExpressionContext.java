@@ -93,6 +93,9 @@ public class ExpressionContext {
         return payload_get_long(0, offset, len);
     }
     public long payload_get_long(int term_index, int offset, int len) throws IOException {
+        if (per_term.get(term_index).postings.docID() != doc_id)
+            return 0L;
+
         BytesRef p = per_term.get(term_index).payload();
         if (p == null)
             return 0L;

@@ -155,6 +155,10 @@
                                            (file (:root project)
                                                  "pkg" "rpm" "preinst.sh")))
     (set-mojo! mojo "requires" (create-dependency ["java >= 1.7.0"]))
+    (set-mojo! mojo "defineStatements" ["_source_filedigest_algorithm 1",
+                                        "_binary_filedigest_algorithm 1",
+                                        "_source_payload w9.gzdio",
+                                        "_binary_payload w9.gzdio"])
     (.execute mojo)))
 
 (defn extract-rpm

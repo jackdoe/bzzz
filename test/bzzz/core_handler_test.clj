@@ -95,7 +95,7 @@
       (let [should-be (+ 1 n)
             r (send-put-request true should-be 10 hosts-bad true)
             cnt (* 4 (count (flatten hosts)))]
-        (is (not (= -1 (.indexOf ^String (:exception (send-put-request true should-be 10 hosts-bad false)) "Throwable java.lang.IllegalArgumentException: host is null"))))
+        (is (not (= -1 (.indexOf ^String (:exception (send-put-request true should-be 10 hosts-bad false)) "java.lang.IllegalArgumentException: host is null"))))
         (is (= (count (:failed r)) 4))
         (is (= cnt (:total r)))
         (is (= should-be (count (:hits r)))))))

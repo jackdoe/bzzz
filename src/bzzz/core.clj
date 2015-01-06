@@ -63,6 +63,7 @@
 (defn search-remote [hosts input c]
   (let [part (if (or (vector? hosts) (list? hosts)) hosts [hosts])
         is-multi (> (count part) 1)
+        resolved (peer-resolve (first part))
         args {:timeout (get input :timeout 1000)
               :as :text
               :body (json/write-str (if is-multi
@@ -70,19 +71,18 @@
                                       input))}
         callback (fn [{:keys [status headers body error]}]
                    (if error
-                     (async/>!! c {:exception error})
+                     (async/>!! c {:exception (str resolved " " error)})
                      (try
                        (async/>!! c (jr body))
                        (catch Throwable e
-                         (async/>!! c {:exception (str status headers error (ex-str e))})))))
-        resolved (peer-resolve (first part))]
+                         (async/>!! c {:exception (str resolved " " (ex-str e))})))))]
     (log/trace "<" input "> in part <" part "> to resolved <" resolved ">")
     (try
       (if is-multi
         (http-client/put resolved args callback)
         (http-client/get resolved args callback))
       (catch Throwable e
-        (async/>!! c {:exception (str "host:" resolved "exception:" (ex-str e))})))))
+        (async/>!! c {:exception (str resolved " " (ex-str e))})))))
 
 (defn search-many [hosts input]
   (let [c (async/chan)

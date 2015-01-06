@@ -24,16 +24,21 @@
     (.maximumWeightedCapacity b 1000)
     (.build b)))
 
+(def giant (Object.))
+
 (defn get-or-eval [expr]
   (if-let [v (.get ^java.util.Map expr-cache expr)]
     v
-    (let [t0 (time-ms)
-          evaluated-expr (eval (read-string expr))]
-      (index-stat/update-took-count index-stat/total
-                                    "eval"
-                                    (time-took t0))
-      (.put ^java.util.Map expr-cache expr evaluated-expr)
-      evaluated-expr)))
+    (locking giant
+      (if-let [v (.get ^java.util.Map expr-cache expr)]
+        v
+        (let [t0 (time-ms)
+              evaluated-expr (eval (read-string expr))]
+          (index-stat/update-took-count index-stat/total
+                                        "eval"
+                                        (time-took t0))
+          (.put ^java.util.Map expr-cache expr evaluated-expr)
+          evaluated-expr)))))
 
 (defn parse
   [generic input analyzer]

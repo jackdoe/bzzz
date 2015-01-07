@@ -29,11 +29,13 @@ public class TermPayloadClojureScoreQuery extends Query {
     public String expr;
     public String[] field_cache_req;
     public IFn clj_expr;
+    public Object args;
 
-    public TermPayloadClojureScoreQuery(List <Term>terms, IFn expr, String[] field_cache_req,List<Map<Object,Object>> fba_settings) throws Exception {
+    public TermPayloadClojureScoreQuery(List <Term>terms, IFn expr, Object args,String[] field_cache_req,List<Map<Object,Object>> fba_settings) throws Exception {
         this.terms = terms;
         this.field_cache_req = field_cache_req;
         this.clj_expr = expr;
+        this.args = args;
         this.clj_context = new ExpressionContext(EXPR_GLOBAL_STATE,EXPR_GLOBAL_STATE_RO,fba_settings);
         this.clj_context.total_term_count = terms.size();
     }
@@ -149,7 +151,9 @@ public class TermPayloadClojureScoreQuery extends Query {
                         clj_context.reset();
                         clj_context.doc_id = doc_id;
                         clj_context.global_doc_id = doc_id + docBase;
-                        return (float) clj_expr.invoke(clj_context);
+                        if (args == null)
+                            return (float) clj_expr.invoke(clj_context);
+                        return (float) clj_expr.invoke(clj_context,args);
                     }
                 };
             }

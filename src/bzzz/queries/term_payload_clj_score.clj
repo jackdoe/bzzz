@@ -42,23 +42,28 @@
 
 (defn parse
   [generic input analyzer]
-  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty init-clj-eval]
-         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false init-expr nil}} input]
+  (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty init-clj-eval args args-init-expr]
+         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false init-expr nil args nil argx-init-expr nil}} input]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
+
     (when init-clj-eval
       ((get-or-eval init-clj-eval)))
 
     (let [tokens (if tokenize
                    (Helper/tokenize field value analyzer)
                    (if (seq? value) value [value]))
-          expr (get-or-eval clj-eval)]
+          expr (get-or-eval clj-eval)
+          arguments (if args-init-expr
+                      ((get-or-eval args-init-expr) args)
+                       nil)]
       (if (and match-all-if-empty (= 0 (count tokens)))
         (MatchAllDocsQuery.)
         (let [terms (into [] (for [token tokens]
                                (Term. ^String field ^String token)))
               query (TermPayloadClojureScoreQuery. terms
                                                    expr
+                                                   arguments
                                                    ^"[Ljava.lang.String;" (into-array String field-cache)
                                                    fixed-bucket-aggregation)]
           (if no-zero

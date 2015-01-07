@@ -213,10 +213,13 @@
                                      {:must [{:term-payload-clj-score {
                                                                        :field "advance", :value "advance"
                                                                        :no-zero true
+                                                                       :args [1,2,3]
+                                                                       :args-init-expr "(fn [^java.util.List args] (reverse args))"
                                                                        :clj-eval "
-(fn [^bzzz.java.query.ExpressionContext ctx]
+(fn [^bzzz.java.query.ExpressionContext ctx ^java.util.List args]
   (let [val (.payload_get_long ctx 8 4)]
     (.result-state-append ctx val)
+    (.result-state-append ctx (.get args 0))
     (.global_state_ro_get ctx 0 0)
     (float val)))"
                                                                        }}
@@ -228,6 +231,7 @@
       (is (= 204.0 (:_score (first (:hits r-no-zero)))))
       (is (= 187.0 (:_score (last (:hits r-no-zero)))))
       (doseq [hit (:hits r-no-zero)]
+        (is (= (int 3) (int (.get ^java.util.List (last (:_result_state hit)) 1))))
         (is (= (int (:_score hit)) (int (.get ^java.util.List (first (:_result_state hit)) 0)))))))
 
 

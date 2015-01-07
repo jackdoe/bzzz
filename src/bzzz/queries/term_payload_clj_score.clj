@@ -7,7 +7,7 @@
            (bzzz.java.query TermPayloadClojureScoreQuery NoZeroQuery ExpressionContext Helper)))
 
 (defn fixed-bucket-aggregation-result [^TermPayloadClojureScoreQuery query]
-  (let [fba (.fba_get_results ^ExpressionContext (.clj_context query))]
+  (let [fba (.fba_get_results query)]
     (zipmap (.keySet fba)
             (map (fn [f]
                    (map (fn [^java.util.HashMap v]
@@ -17,7 +17,7 @@
                  (.values fba)))))
 
 (defn extract-result-state [^TermPayloadClojureScoreQuery query doc-id]
-  (.result_state_get_for_doc ^ExpressionContext (.clj_context query) doc-id))
+  (.result_state_get_for_doc query doc-id))
 
 (def expr-cache ^java.util.Map
   (let [b ^java.util.Map (ConcurrentLinkedHashMap$Builder.)]
@@ -43,7 +43,7 @@
 (defn parse
   [generic input analyzer]
   (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty init-clj-eval args args-init-expr]
-         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false init-expr nil args nil argx-init-expr nil}} input]
+         :or {field-cache [] tokenize false no-zero true fixed-bucket-aggregation nil match-all-if-empty false init-expr nil args nil args-init-expr nil}} input]
     (need field "need <field>")
     (need clj-eval "need <clj-eval>")
 

@@ -22,22 +22,13 @@ public class ExpressionContext {
     public float current_score = 0f;
     public long current_counter = 0;
     public int total_term_count = 0;
-    public Map<Object,Object> local_state = new HashMap<Object,Object>(1000);
+    public int[] fba_counts = null;
+    public int fba_max_buckets_per_aggregation = 0;
     public Map<String,Object> fc = new HashMap<String,Object>();
     public Map<Integer,List<Object>> result_state = null;
-
+    public Map<Object,Object> local_state;
     public Map<Object,Object> global_state;
     public Map<Object,Object> global_state_ro;
-
-    // "fixed_bucket_aggregations": [
-    //   { "name": "distance", "buckets": 6 }
-    //   { "name": "rating", "buckets": 10 }
-    // ]
-    public List<Map<Object,Object>> fba_settings = null;
-    public int[] fba_counts = null;
-    int fba_max_buckets_per_aggregation = 0;
-    public static final Keyword FBA_KW_NAME = Keyword.intern(null, "name");
-    public static final Keyword FBA_KW_BUCKETS = Keyword.intern(null, "buckets");
 
     public EWAHCompressedBitmap[] context_collect_bitmaps() throws IOException {
         EWAHCompressedBitmap[] maps = new EWAHCompressedBitmap[per_term.size()];
@@ -56,12 +47,9 @@ public class ExpressionContext {
         current_counter = 0;
     }
 
-    public ExpressionContext(Map<Object,Object> global_state,Map<Object,Object> global_state_ro,List<Map<Object,Object>> fba_settings) throws Exception {
+    public ExpressionContext(Map<Object,Object> global_state,Map<Object,Object> global_state_ro) throws Exception {
         this.global_state = global_state;
         this.global_state_ro = global_state_ro;
-        this.fba_settings = fba_settings;
-        if (fba_settings != null)
-            fba_initialize();
     }
 
     public void fill_field_cache(AtomicReader r, String[] field_cache_req) throws IOException {
@@ -204,18 +192,9 @@ public class ExpressionContext {
         return global_state.put(key,val);
     }
 
-    public List<Object> result_state_get_for_doc(Integer doc) {
-        if (result_state != null && explanation != null)
-            return result_state.get(doc);
-        return null;
-    }
-
     public void result_state_append(Object val) {
         if (explanation == null)
             return;
-
-        if (result_state == null)
-            result_state = new HashMap<Integer,List<Object>>();
 
         List<Object> values = result_state.get(global_doc_id);
         if (values == null) {
@@ -262,34 +241,6 @@ public class ExpressionContext {
     public void current_counter_inc() { current_counter++; }
     public void current_counter_set(long s) { current_counter = (int) s; }
 
-    // FIXED_BUCKET_AGGREGATION
-    public Object fba_read_key(Map<Object,Object> item, String x, Keyword fallback) {
-        Object result = item.get(x);
-        if (result != null)
-            return result;
-        return item.get(fallback);
-    }
-
-    public void fba_initialize() throws Exception {
-        for (Map<Object,Object> item : fba_settings) {
-            String name = (String) fba_read_key(item,"name",FBA_KW_NAME);
-            Object buckets_raw = fba_read_key(item,"buckets",FBA_KW_BUCKETS);
-            int buckets = 0;
-            if (buckets_raw instanceof String)
-                buckets = Integer.parseInt((String) buckets_raw);
-            else if (buckets_raw instanceof Integer)
-                buckets = (Integer) buckets_raw;
-            else if (buckets_raw instanceof Long)
-                buckets = ((Long) buckets_raw).intValue();
-            else
-                throw new Exception("unknown object type, expecting string/integer" + item);
-
-            if (buckets > fba_max_buckets_per_aggregation)
-                fba_max_buckets_per_aggregation = buckets;
-        }
-        if (fba_max_buckets_per_aggregation > 0)
-            fba_counts = new int[fba_max_buckets_per_aggregation * fba_settings.size()];
-    }
 
     public void fba_aggregate_into_bucket(int aggregation_index, int bucket) {
         fba_aggregate_into_bucket(aggregation_index,bucket,1);
@@ -300,43 +251,6 @@ public class ExpressionContext {
             throw new IllegalStateException("<fixed-bucket-aggregation> parameter was not sent, and yet there is an attempt to fba_aggregate_into_bucket");
         fba_counts[(aggregation_index * fba_max_buckets_per_aggregation) + bucket] += increment;
     }
-
-    public Map<String,List<Map<String,Integer>>> fba_get_results() {
-        Map<String,List<Map<String,Integer>>> result = new HashMap<String,List<Map<String,Integer>>>();
-        int aggregation_index = 0;
-        if (fba_counts != null) {
-            for (Map<Object,Object> item : fba_settings) {
-                List<Map<String,Integer>> value = new ArrayList<Map<String,Integer>>();
-                for (int j = 0; j < fba_max_buckets_per_aggregation; j++) {
-                    int n = fba_counts[(aggregation_index * fba_max_buckets_per_aggregation) + j];
-                    if (n > 0) {
-                        Map<String,Integer> label_and_value = new HashMap<String,Integer>();
-                        label_and_value.put("label",j);
-                        label_and_value.put("count",n);
-                        value.add(label_and_value);
-                    }
-                }
-                if (value.size() > 0) {
-                    Collections.sort(value, new Comparator<Map<String,Integer>>() {
-                            @Override
-                            public int compare(Map<String,Integer> a, Map<String,Integer> b) {
-                                Integer aa = a.get("count");
-                                Integer bb = b.get("count");
-                                if (aa == null)
-                                    aa = 0;
-                                if (bb == null)
-                                    bb = 0;
-                                return bb.compareTo(aa);
-                            }
-                        });
-                    result.put((String) fba_read_key(item,"name",FBA_KW_NAME), value);
-                }
-                aggregation_index++;
-            }
-        }
-        return result;
-    }
-    // \FIXED_BUCKET_AGGREGATION
 
     public static final class PerTerm {
         public DocsAndPositionsEnum postings;

@@ -66,6 +66,6 @@
                                                    arguments
                                                    ^"[Ljava.lang.String;" (into-array String field-cache)
                                                    fixed-bucket-aggregation)]
-          (if (bool-or-parse no-zero)
+          (if no-zero
             (NoZeroQuery. query)
               query))))))

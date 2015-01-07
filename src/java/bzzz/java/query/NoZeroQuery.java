@@ -40,10 +40,8 @@ public class NoZeroQuery extends Query {
                 final Scorer scorer = weight.scorer(context,acceptDocs);
                 if (scorer == null)
                     return scorer;
-
                 return new Scorer(weight) {
                     float current_score = -1f;
-                    boolean computed = false;
                     @Override
                     public int docID() { return scorer.docID(); }
 
@@ -52,42 +50,29 @@ public class NoZeroQuery extends Query {
 
                     @Override
                     public int nextDoc() throws IOException {
-                        computed = false;
                         while(true) {
                             int n = scorer.nextDoc();
                             if (n == DocIdSetIterator.NO_MORE_DOCS)
                                 return n;
-
                             current_score = scorer.score();
-                            if (current_score != 0) {
-                                computed = true;
+                            if (current_score != 0)
                                 return n;
-                            }
                         }
                     }
-
                     @Override
                     public int advance(int target) throws IOException {
-                        computed = false;
                         int n = scorer.advance(target);
                         if (n == DocIdSetIterator.NO_MORE_DOCS)
                             return n;
-
-                        if (n == target) {
-                            current_score = scorer.score();
-                            if (current_score != 0) {
-                                computed = true;
-                                return n;
-                            }
-                            // if the score is 0, we just return the next non-zero next doc
-                            return nextDoc();
-                        } else {
+                        current_score = scorer.score();
+                        if (current_score != 0)
                             return n;
-                        }
+                        // if the score is 0, we just return the next non-zero next doc
+                        return nextDoc();
                     }
 
                     @Override
-                    public float score() throws IOException { return computed ? current_score : scorer.score(); }
+                    public float score() throws IOException { return current_score; }
 
                     @Override
                     public long cost() { return scorer.cost(); }

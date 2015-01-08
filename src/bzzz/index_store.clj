@@ -6,6 +6,7 @@
   (use bzzz.index-directory)
   (use bzzz.index-facet-common)
   (use bzzz.index-spatial)
+  (:require [bzzz.cached-eval :as cached-eval])
   (:require [bzzz.index-stat :as stat])
   (:require [bzzz.log :as log])
   (:import (java.io StringReader)
@@ -114,29 +115,36 @@
                   { index {:done true
                            :took-internal (time-took t0)
                            :attempt-to-write (count documents)}}))))
+
+(defn default-hash-fn [doc]
+  (if-let [id (:id doc)]
+    (hash id)
+    (hash doc)))
+
 (defn store [input]
   (let [{:keys [index documents analyzer
                 facets shard alias-set alias-del
-                force-merge number-of-shards]
+                force-merge number-of-shards hash-fn]
          :or {documents [] analyzer nil facets {}
               shard nil alias-set nil alias-del nil
-              force-merge 0 number-of-shards nil}} input]
+              force-merge 0 number-of-shards nil
+              hash-fn nil}} input]
     (if (or alias-set alias-del)
       (update-alias index alias-del alias-set))
 
     (if (and shard number-of-shards)
       (throw (Throwable. "you can specify only one of <shard> or <number-of-shards>")))
+
     (if number-of-shards
-      (let [futures (into [] (for [n (range number-of-shards)]
+      (let [compiled-hash-fn (if hash-fn
+                               (cached-eval/get-or-eval hash-fn)
+                               default-hash-fn)
+            futures (into [] (for [n (range number-of-shards)]
                                (future-if
                                 (cond-for-future-per-shard input false number-of-shards)
                                 (store-on-shard (sharded (resolve-alias index) n)
                                                 (filter (fn [doc]
-                                                          ;; FIXME: use consistent hashing
-                                                          (let [hashCode (if-let [id (:id doc)]
-                                                                           (hash id)
-                                                                           (hash doc))]
-                                                            (= n (mod hashCode number-of-shards))))
+                                                          (= n (mod (compiled-hash-fn doc) number-of-shards)))
                                                         documents)
                                                 facets
                                                 analyzer

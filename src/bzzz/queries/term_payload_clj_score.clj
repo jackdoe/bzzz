@@ -1,9 +1,10 @@
 (ns bzzz.queries.term-payload-clj-score
+  (use bzzz.cached-eval)
   (use bzzz.util)
+  (:require [bzzz.cached-eval :as cached-eval])
   (:require [bzzz.index-stat :as index-stat])
   (:import (org.apache.lucene.index Term)
            (org.apache.lucene.search MatchAllDocsQuery)
-           (com.googlecode.concurrentlinkedhashmap ConcurrentLinkedHashMap ConcurrentLinkedHashMap$Builder)
            (bzzz.java.query TermPayloadClojureScoreQuery NoZeroQuery ExpressionContext Helper)))
 
 (defn fixed-bucket-aggregation-result [^TermPayloadClojureScoreQuery query]
@@ -19,27 +20,6 @@
 (defn extract-result-state [^TermPayloadClojureScoreQuery query doc-id]
   (.result_state_get_for_doc query doc-id))
 
-(def expr-cache ^java.util.Map
-  (let [b ^java.util.Map (ConcurrentLinkedHashMap$Builder.)]
-    (.maximumWeightedCapacity b 1000)
-    (.build b)))
-
-(def giant (Object.))
-
-(defn get-or-eval [expr]
-  (if-let [v (.get ^java.util.Map expr-cache expr)]
-    v
-    (locking giant
-      (if-let [v (.get ^java.util.Map expr-cache expr)]
-        v
-        (let [t0 (time-ms)
-              evaluated-expr (eval (read-string expr))]
-          (index-stat/update-took-count index-stat/total
-                                        "eval"
-                                        (time-took t0))
-          (.put ^java.util.Map expr-cache expr evaluated-expr)
-          evaluated-expr)))))
-
 (defn parse
   [generic input analyzer]
   (let [{:keys [field value tokenize no-zero clj-eval field-cache fixed-bucket-aggregation match-all-if-empty init-clj-eval args args-init-expr]
@@ -48,14 +28,14 @@
     (need clj-eval "need <clj-eval>")
 
     (when init-clj-eval
-      ((get-or-eval init-clj-eval)))
+      ((cached-eval/get-or-eval init-clj-eval)))
 
     (let [tokens (if tokenize
                    (Helper/tokenize field value analyzer)
                    (if (seq? value) value [value]))
-          expr (get-or-eval clj-eval)
+          expr (cached-eval/get-or-eval clj-eval)
           arguments (if args-init-expr
-                      ((get-or-eval args-init-expr) args)
+                      ((cached-eval/get-or-eval args-init-expr) args)
                        nil)]
       (if (and match-all-if-empty (= 0 (count tokens)))
         (MatchAllDocsQuery.)

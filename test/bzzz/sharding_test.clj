@@ -49,6 +49,34 @@
           (doseq [item r]
             (doseq [[k v] item]
               (is (> (:attempt-to-write v) 300))))))))
+
+  (testing "sharding-custom"
+    (dotimes [x 10]
+      (let [doc-generator (fn [n]
+                            {:name "jack"
+                             :id (str n)})
+            list-generator (fn [n]
+                             (into []
+                                   (for [i (range n)]
+                                     (doc-generator i))))
+            docs (list-generator 1000)]
+        (delete-all test-index-name)
+        (let [r (store {:index test-index-name
+                        :documents docs
+                        :hash-fn "(fn [doc] 2)"
+                        :number-of-shards 3})
+              r1 (store {:index test-index-name
+                         :force-merge 1
+                         :documents docs
+                         :hash-fn "(fn [doc] (bzzz.util/int-or-parse (:id doc)))"
+                         :number-of-shards 3})]
+          (doseq [item r1]
+            (doseq [[k v] item]
+              (is (> (:attempt-to-write v) 300))))
+          (is (= 0 (:attempt-to-write (last (last (first r))))))
+          (is (= 1000 (:attempt-to-write (last (last (last r))))))
+          (is (= 3 (count r)))))))
+
     
   (testing "cleanup-after"
     (delete-all test-index-name)))

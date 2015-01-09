@@ -3,6 +3,7 @@
   (:require [clojure.data.json :as json])
   (:require [org.httpkit.client :as http-client])
   (:require [bzzz.query :as query])
+  (:require [bzzz.discover :as discover])
   (:use clojure.test
         bzzz.core
         bzzz.const
@@ -78,7 +79,7 @@
     (.start server))
 
   (testing "discover"
-    (discover))
+    (discover/periodic 3000 nil))
 
   (testing "delete"
     (is (= (send-delete-request)

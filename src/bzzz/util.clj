@@ -210,3 +210,15 @@
 
 (defn cond-for-future-per-shard [input default n-shards]
   (and (read-boolean-setting input :future default) (> n-shards 1)))
+
+; Ref: https://github.com/puppetlabs/clj-kitchensink/commit/32a1a3a98ad08d521e58ccf88062eb7209992973
+(defn deep-merge
+  "Deeply merges maps so that nested maps are combined rather than replaced.
+
+  For example:
+  (deep-merge {:foo {:bar :baz}} {:foo {:fuzz :buzz}})
+  ;;=> {:foo {:bar :baz, :fuzz :buzz}}"
+  [& vs]
+  (if (every? map? vs)
+    (apply merge-with deep-merge vs)
+    (last vs)))

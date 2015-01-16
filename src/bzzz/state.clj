@@ -59,4 +59,4 @@
   (let [ro-state (into {} TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO)]
     (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
       (java.util.HashMap. ^java.util.Map
-        (rename-keys ro-state { from_key to_key })))))
+        (rename-keys ro-state { (keyword from_key) (keyword to_key) })))))

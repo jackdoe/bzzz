@@ -40,4 +40,8 @@
       (is (= (ro-get-in [:after-key]) test-data))
 
       (testing "and makes sure the old key doesn't exist anymore"
-        (is (nil? (ro-get-in [:before-key])))))))
+        (is (nil? (ro-get-in [:before-key]))))
+
+      (testing "and lets me be lousy rename using a string instead of a keyword. sigh."
+        (state/ro-rename-key "after-key" "before-key")
+        (ro-get-in-equals-to [:before-key] test-data)))))

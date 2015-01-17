@@ -94,7 +94,11 @@
                                               (.toString s)))]))
              "/favicon.ico" "" ;; XXX
 
-             ;; FIXME use post instead?
+             "/_state/temp_assoc_in"           (state/temp-assoc-in (:data input))
+             "/_state/temp_empty"              (state/temp-empty)
+             "/_state/ro_replace_with_temp"    (state/ro-replace-with-temp)
+             "/_state/ro_merge_with_temp"      (state/ro-merge-with-temp)
+             "/_state/ro_deep_merge_with_temp" (state/ro-deep-merge-with-temp)
              "/_state/ro_merge"      (state/ro-merge input)
              "/_state/ro_deep_merge" (state/ro-deep-merge input)
              "/_state/ro_rename_key" (state/ro-rename-key (:from_key input) (:to_key input))

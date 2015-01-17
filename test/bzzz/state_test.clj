@@ -1,7 +1,6 @@
 (ns bzzz.state-test
   (:use clojure.test
         [bzzz.state :as state])
-  (:import (java.util HashMap Map))
   (:import (bzzz.java.query TermPayloadClojureScoreQuery)))
 
 (defn ro-get-in [k & [default]]
@@ -12,9 +11,10 @@
       (str "Global State: " TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO)))
 
 (deftest test-state
+
   (testing "cleanup the global RO state leaves no key behind"
     (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
-      (new java.util.HashMap))
+      (hash-map))
     (is (= TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO {})))
 
   (testing "merge overwrites keys with their values"

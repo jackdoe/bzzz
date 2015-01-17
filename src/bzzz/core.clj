@@ -95,8 +95,8 @@
              "/favicon.ico" "" ;; XXX
 
              ;; FIXME use post instead?
-             "/_state/ro_merge"      (state/ro-merge (:data input))
-             "/_state/ro_deep_merge" (state/ro-deep-merge (:data input))
+             "/_state/ro_merge"      (state/ro-merge input)
+             "/_state/ro_deep_merge" (state/ro-deep-merge input)
              "/_state/ro_rename_key" (state/ro-rename-key (:from_key input) (:to_key input))
 
              (index-search/search input))

@@ -61,7 +61,8 @@
   ;;=> { :foo { :bar 1, :baz 2 } }
   "
   [data]
-  (doseq [[k v] data] (swap! temporary-state assoc-in k v)))
+  (locking temporary-state
+    (doseq [[k v] data] (swap! temporary-state assoc-in k v))))
 
 (defn temp-empty
   "Erases the data saved in the temporary state."

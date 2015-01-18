@@ -4,6 +4,7 @@
   :maintainer {:email "jack@sofialondonmoskva.com"}
   :global-vars {*warn-on-reflection* true}
   :jvm-opts ["-Xmx2g"]
+  :javac-options ["-Xlint:unchecked"]
   :plugins [[lein-rpm "0.0.5"]] ;; .. used only because I couldnt find
                                 ;; good way to add dependencies to
                                 ;; '.lein-classpath' type tasks

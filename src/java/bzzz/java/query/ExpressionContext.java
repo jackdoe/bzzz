@@ -11,6 +11,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import com.googlecode.javaewah.EWAHCompressedBitmap;
 import com.googlecode.javaewah.symmetric.*;
+import clojure.lang.APersistentMap;
 
 public class ExpressionContext {
     public Explanation explanation = null;
@@ -28,7 +29,7 @@ public class ExpressionContext {
     public Map<Integer,List<Object>> result_state = null;
     public Map<Object,Object> local_state;
     public Map<Object,Object> global_state;
-    public Map<Object,Object> global_state_ro;
+    public APersistentMap global_state_ro;
 
     public EWAHCompressedBitmap[] context_collect_bitmaps() throws IOException {
         EWAHCompressedBitmap[] maps = new EWAHCompressedBitmap[per_term.size()];
@@ -47,7 +48,7 @@ public class ExpressionContext {
         current_counter = 0;
     }
 
-    public ExpressionContext(Map<Object,Object> global_state,Map<Object,Object> global_state_ro) throws Exception {
+    public ExpressionContext(Map<Object,Object> global_state,APersistentMap global_state_ro) throws Exception {
         this.global_state = global_state;
         this.global_state_ro = global_state_ro;
     }

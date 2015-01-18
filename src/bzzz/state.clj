@@ -20,7 +20,7 @@
   The behavior is exactly the same as clojure.core/merge"
   [data]
   (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
-    (merge {} TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO data)))
+   (merge TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO data)))
 
 (defn ro-deep-merge
   "Deeply merge given data map into the global read-only state.

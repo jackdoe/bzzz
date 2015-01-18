@@ -10,6 +10,7 @@ import clojure.lang.Var;
 import clojure.lang.IFn;
 import clojure.lang.Compiler;
 import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
 import java.io.StringReader;
 import java.lang.StringBuilder;
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap.Builder;
@@ -23,7 +24,7 @@ public class TermPayloadClojureScoreQuery extends Query {
     public static int GLOBAL_STATE_CAPACITY = 100000; // TODO: make this a parameter
 
     public static Map<Object,Object> EXPR_GLOBAL_STATE = new Builder<Object,Object>().maximumWeightedCapacity(GLOBAL_STATE_CAPACITY).build();
-    public static Map<Object,Object> EXPR_GLOBAL_STATE_RO = new HashMap<Object,Object>();
+    public static Map<Object,Object> EXPR_GLOBAL_STATE_RO = PersistentArrayMap.EMPTY;
     final public List<Term> terms;
     public String expr;
     public String[] field_cache_req;

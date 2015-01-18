@@ -16,6 +16,9 @@
 
 (deftest test-state
 
+  (testing "rename in the initial state don't fail"
+    (state/ro-rename-key :a :b))
+
   (testing "cleanup the global RO state leaves no key behind"
     (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
       (hash-map))

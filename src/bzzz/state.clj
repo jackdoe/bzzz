@@ -35,7 +35,7 @@
   Refer to bzzz.util/deep-merge for more details"
   [data]
   (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
-    (deep-merge (into {} TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO) data)))
+    (deep-merge TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO data)))
 
 (defn ro-rename-key
   "Rename a top-level key in the global read-only state.
@@ -49,9 +49,9 @@
   (ro-deep-merge { :tmp-dataset { :bar 5 }})
   (ro-rename :tmp-dataset :dataset)"
   [from_key to_key]
-  (let [ro-state (into {} TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO)]
-    (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
-      (rename-keys ro-state { (keyword from_key) (keyword to_key) }))))
+  (TermPayloadClojureScoreQuery/replace_expr_global_state_ro
+    (rename-keys TermPayloadClojureScoreQuery/EXPR_GLOBAL_STATE_RO
+                 { (keyword from_key) (keyword to_key) })))
 
 (defn temp-assoc-in
   "Associates input data into the temporary map.

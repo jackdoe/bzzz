@@ -14,6 +14,7 @@
   (:require [bzzz.index-stat :as index-stat])
   (:require [bzzz.analyzer :as analyzer])
   (:require [bzzz.query :as query])
+  (:require [bzzz.state :as state])
   (:require [clojure.core.async :as async])
   (:require [clojure.tools.cli :refer [parse-opts]])
   (:require [clojure.data.json :as json])
@@ -92,6 +93,16 @@
                                    (into [] (for [^StackTraceElement s traces]
                                               (.toString s)))]))
              "/favicon.ico" "" ;; XXX
+
+             "/_state/temp_assoc_in"           (state/temp-assoc-in (:data input))
+             "/_state/temp_empty"              (state/temp-empty)
+             "/_state/ro_replace_with_temp"    (state/ro-replace-with-temp)
+             "/_state/ro_merge_with_temp"      (state/ro-merge-with-temp)
+             "/_state/ro_deep_merge_with_temp" (state/ro-deep-merge-with-temp)
+             "/_state/ro_merge"      (state/ro-merge input)
+             "/_state/ro_deep_merge" (state/ro-deep-merge input)
+             "/_state/ro_rename_key" (state/ro-rename-key (:from_key input) (:to_key input))
+
              (index-search/search input))
       :put (search-many (:hosts input) (dissoc input :hosts))
       :patch (discover/merge-discover-hosts (get input :discover-hosts {}))

@@ -26,11 +26,15 @@
   (let [{:keys [file-name obj-name clj-eval]
          :or [clj-eval nil obj-name nil]} input
          db (open-db file-name)]
+
     (when (not (or clj-eval obj-name))
       (throw (Throwable. "need clj-eval or obj-name")))
 
     (if clj-eval
-      ((get-or-eval clj-eval) db)
+      (let [expr (get-or-eval clj-eval)]
+        (if obj-name
+          (expr db (.getHashMap db obj-name))
+          (expr db)))
       (.getHashMap db obj-name))))
 
 (defn store [input]

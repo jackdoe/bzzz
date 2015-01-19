@@ -18,7 +18,7 @@
               path (index-directory/root-identifier-path)
               x (index-directory/try-create-prefix path)
               file (io/file (index-directory/root-identifier-path) acceptable-name)
-              db (.make (DBMaker/newFileDB file))]
+              db (.make (.compressionEnable (DBMaker/newFileDB file)))]
           (swap! db* assoc-in [file-name] db)
           db)))))
 
@@ -38,11 +38,14 @@
       (.getHashMap db obj-name))))
 
 (defn store [input]
-  (let [{:keys [file-name lock-name clj-eval args args-init-expr]} input
+  (let [{:keys [file-name lock-name clj-eval args]
+         :or [lock-name nil args nil]} input
         expr (get-or-eval clj-eval)
-        lock (get-lock-obj locks* lock-name)
+        lock (if lock-name
+               (get-lock-obj locks* lock-name)
+               nil)
         db (open-db file-name)]
-    (locking lock
-      (if args
-        (expr db args)
-        (expr db)))))
+    (if lock
+      (locking lock
+        (expr db args))
+      (expr db args))))

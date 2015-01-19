@@ -5,7 +5,7 @@
 (deftest test-kv
   (testing "store"
     (let [v (kv/store {:file-name "test-db" :lock-name "test-db-lock" :clj-eval "
-(fn [^org.mapdb.DB db]
+(fn [^org.mapdb.DB db args]
   (let [m (.getHashMap db \"hello\")]
     (.remove m \"hello\")
     (.put m \"hello\" \"world\")

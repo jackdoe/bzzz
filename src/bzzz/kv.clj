@@ -23,14 +23,24 @@
           db)))))
 
 (defn search [input]
-  (let [{:keys [file-name obj-name]} input
-        db (open-db file-name)]
-    (.getHashMap db obj-name)))
+  (let [{:keys [file-name obj-name clj-eval]
+         :or [clj-eval nil obj-name nil]} input
+         db (open-db file-name)]
+    (when (not (or clj-eval obj-name))
+      (throw (Throwable. "need clj-eval or obj-name")))
+
+    (if clj-eval
+      ((get-or-eval clj-eval) db)
+      (.getHashMap db obj-name))))
 
 (defn store [input]
-  (let [{:keys [file-name lock-name clj-eval]} input
+  (let [{:keys [file-name lock-name clj-eval args args-init-expr]} input
         expr (get-or-eval clj-eval)
         lock (get-lock-obj locks* lock-name)
         db (open-db file-name)]
     (locking lock
-      (expr db))))
+      (if args
+        (if args-init-expr
+          (expr db ((get-or-eval args-init-expr) args))
+          (expr db args))
+        (expr db)))))

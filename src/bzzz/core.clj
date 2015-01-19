@@ -7,6 +7,7 @@
   (:require [bzzz.discover :as discover])
   (:require [bzzz.timer :as timer])
   (:require [bzzz.const :as const])
+  (:require [bzzz.kv :as kv])
   (:require [bzzz.log :as log])
   (:require [bzzz.index-search :as index-search])
   (:require [bzzz.index-directory :as index-directory])
@@ -93,6 +94,9 @@
                                    (into [] (for [^StackTraceElement s traces]
                                               (.toString s)))]))
              "/favicon.ico" "" ;; XXX
+
+             "/_kv/store"  (kv/store input)
+             "/_kv/search" (kv/search input)
 
              "/_state/temp_assoc_in"           (state/temp-assoc-in (:data input))
              "/_state/temp_empty"              (state/temp-empty)

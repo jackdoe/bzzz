@@ -191,11 +191,7 @@
       (log/warn (as-str e)))))
 
 (defn get-write-refresh-lock [index]
-  (if-let [obj (get @write-refresh-lock* index)]
-    obj
-    (let [obj (Object.)]
-      (swap! write-refresh-lock* assoc index obj)
-      obj)))
+  (get-lock-obj write-refresh-lock* index))
 
 (defmacro locking-took
   [x index stat-name & body]

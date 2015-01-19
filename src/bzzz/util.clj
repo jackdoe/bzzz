@@ -222,3 +222,13 @@
   (if (every? map? vs)
     (apply merge-with deep-merge vs)
     (last vs)))
+
+(defn get-lock-obj [container* key]
+  (if-let [obj (get @container* key)]
+    obj
+    (locking container*
+      (if-let [obj (get @container* key)]
+        obj
+        (let [obj (Object.)]
+          (swap! container* assoc key obj)
+          obj)))))

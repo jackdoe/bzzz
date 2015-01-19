@@ -24,6 +24,7 @@
                  [org.clojure/data.json "0.2.5"]
                  [org.clojure/tools.cli "0.3.1"]
                  [overtone/at-at "1.2.0"]
+                 [org.mapdb/mapdb "1.0.6"]
                  [com.googlecode.javaewah/JavaEWAH "0.9.2"]
                  [http-kit "2.1.16"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]

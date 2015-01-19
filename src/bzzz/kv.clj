@@ -44,7 +44,5 @@
         db (open-db file-name)]
     (locking lock
       (if args
-        (if args-init-expr
-          (expr db ((get-or-eval args-init-expr) args))
-          (expr db args))
+        (expr db args)
         (expr db)))))

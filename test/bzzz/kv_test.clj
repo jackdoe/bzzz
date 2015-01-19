@@ -15,7 +15,7 @@
       (is (= v true))))
 
   (testing "store-eval"
-    (let [v (kv/store {:file-name "test-db" :lock-name "test-db-lock" :args [1,2,3] :args-init-expr "(fn [a] a)" :clj-eval "
+    (let [v (kv/store {:file-name "test-db" :lock-name "test-db-lock" :args [1,2,3] :clj-eval "
 (fn [^org.mapdb.DB db args]
   (let [m (.getHashMap db \"hello\")]
     (.remove m \"hello\")

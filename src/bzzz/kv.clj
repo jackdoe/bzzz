@@ -18,7 +18,7 @@
               path (index-directory/root-identifier-path)
               x (index-directory/try-create-prefix path)
               file (io/file (index-directory/root-identifier-path) acceptable-name)
-              db (.make (.compressionEnable (DBMaker/newFileDB file)))]
+              db (.make (DBMaker/newFileDB file))]
           (swap! db* assoc-in [file-name] db)
           db)))))
 
